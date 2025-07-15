@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install Dependencies
+        run: go mod tidy
+
+      - name: Generate templ files
+        run: go run github.com/a-h/templ/cmd/templ generate
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          go build -o dist/askfrank main.go
+
+      - name: Package binary
+        run: |
+          tar -czvf askfrank_${{ github.ref_name }}_linux_amd64.tar.gz -C dist askfrank
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: askfrank_${{ github.ref_name }}_linux_amd64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

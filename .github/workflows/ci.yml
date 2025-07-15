@@ -1,4 +1,4 @@
-name: Go CI Pipeline
+name: Go CI
 
 on:
   push:
@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
-    name: Build and Test
+  lint-test:
+    name: Lint and Test
     runs-on: ubuntu-latest
 
     steps:
@@ -33,24 +36,15 @@ jobs:
       - name: Install Dependencies
         run: go mod tidy
 
+      - name: Generate templ files
+        run: go run github.com/a-h/templ/cmd/templ generate
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.1.6
-          args: ./src
 
       - name: Run Unit Tests
         run: |
           mkdir -p test-results
-          go test -race -v ./src
-
-      - name: Build Binary
-        run: |
-          mkdir -p bin
-          go build -o bin/askfrank ./src
-
-      - name: Archive Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: microservice-binary
-          path: bin/askfrank
+          go test -race -v ./...
