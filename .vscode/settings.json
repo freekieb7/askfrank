@@ -1,3 +1,10 @@
 {
+    "editor.formatOnSave": true,
+    "[templ]": {
+        "editor.defaultFormatter": "a-h.templ"
+    },
+    "tailwindCSS.includeLanguages": {
+        "templ": "html",
+    },
     "makefile.configureOnOpen": false
 }

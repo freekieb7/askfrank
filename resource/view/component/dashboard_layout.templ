@@ -1,0 +1,200 @@
+package component
+
+import (
+	"askfrank/internal/middleware"
+	"askfrank/internal/model"
+	"github.com/gofiber/fiber/v2"
+)
+
+templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ.Component) {
+	<html lang={ middleware.GetLang(c) }>
+		<head>
+			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm" crossorigin="anonymous"></script>
+			<script src="https://cdn.tailwindcss.com"></script>
+			<link
+				rel="stylesheet"
+				href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+				integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+				crossorigin="anonymous"
+				referrerpolicy="no-referrer"
+			/>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<link
+				href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;800&family=Source+Sans+Pro:wght@400;600&display=swap"
+				rel="stylesheet"
+			/>
+			<style>
+                body {
+                    font-family: 'Source Sans Pro', Calibri, Arial, sans-serif;
+                    color: #464646;
+                }
+
+                h1, h2, h3, h4, h5, h6, .heading {
+                    font-family: 'Poppins', Scandia, Arial, sans-serif;
+                    color: #05668D;
+                }
+
+                .sidebar-link {
+                    color: #464646;
+                    font-weight: 500;
+                    transition: all 0.2s;
+                }
+
+                .sidebar-link:hover, .sidebar-link.active {
+                    background-color: #EAF2EF;
+                    color: #05668D;
+                }
+
+                .notification-badge {
+                    background-color: #02C39A;
+                    color: white;
+                    font-size: 10px;
+                    font-weight: 600;
+                }
+            </style>
+		</head>
+		<body class="bg-gradient-to-br from-white to-[#EAF2EF] min-h-screen">
+			<div class="flex h-screen overflow-hidden">
+				<!-- Sidebar -->
+				<aside class="w-56 bg-white shadow-lg border-r border-gray-200 flex flex-col">
+					<!-- Logo/Brand -->
+					<div class="p-4 border-b border-gray-200">
+						<a href="/" class="flex items-center hover:opacity-80 transition-opacity duration-200">
+							<div class="w-7 h-7 bg-[#05668D] rounded-lg flex items-center justify-center mr-2">
+								<i class="fas fa-stethoscope text-white text-xs"></i>
+							</div>
+							<h1 class="text-base font-bold text-[#05668D] heading">{ middleware.T(c, "nav.brand") }</h1>
+						</a>
+					</div>
+					<!-- Navigation Menu -->
+					<nav class="flex-1 p-3 space-y-1">
+						<a href="/dashboard" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-tachometer-alt w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.overview") }
+						</a>
+						<a href="/dashboard/patients" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-users w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.patients") }
+						</a>
+						<a href="/dashboard/appointments" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-calendar-alt w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.appointments") }
+						</a>
+						<a href="/dashboard/reports" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-chart-bar w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.reports") }
+						</a>
+						<a href="/dashboard/settings" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-cog w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.settings") }
+						</a>
+						<!-- Divider -->
+						<div class="border-t border-gray-200 my-2"></div>
+						<!-- Secondary Menu -->
+						<a href="/dashboard/help" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-question-circle w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.help") }
+						</a>
+						<a href="/dashboard/support" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-headset w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.support") }
+						</a>
+					</nav>
+					<!-- User Profile Section -->
+					<div class="p-3 border-t border-gray-200">
+						<div class="flex items-center">
+							<div class="w-8 h-8 bg-[#02C39A] rounded-full flex items-center justify-center mr-2">
+								<i class="fas fa-user text-white text-xs"></i>
+							</div>
+							<div class="flex-1 min-w-0">
+								<p class="text-xs font-medium text-[#05668D] truncate">{ user.Name }</p>
+								<p class="text-xs text-gray-500 truncate">{ user.Email }</p>
+							</div>
+						</div>
+						<a
+							href="/logout"
+							class="mt-2 w-full flex items-center justify-center px-2 py-1.5 border border-transparent text-xs font-medium rounded-lg text-[#05668D] bg-[#EAF2EF] hover:bg-[#028090] hover:text-white transition-colors duration-200"
+						>
+							<i class="fas fa-sign-out-alt mr-1 text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.logout") }
+						</a>
+					</div>
+				</aside>
+				<!-- Main Content Area -->
+				<div class="flex-1 flex flex-col overflow-hidden">
+					<!-- Top Navigation Bar -->
+					<header class="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
+						<div class="flex items-center justify-between">
+							<!-- Page Title -->
+							<div>
+								<h1 class="text-xl font-bold text-[#05668D] heading">{ title }</h1>
+								<p class="text-xs text-gray-500">{ middleware.T(c, "dashboard.welcome_back") }, { user.Name }</p>
+							</div>
+							<!-- Top Right Actions -->
+							<div class="flex items-center space-x-2">
+								<!-- Search -->
+								<div class="relative hidden md:block">
+									<input
+										type="text"
+										placeholder={ middleware.T(c, "dashboard.search_placeholder") }
+										class="w-48 pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#02C39A] focus:border-transparent"
+									/>
+									<i class="fas fa-search absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+								</div>
+								<!-- Notifications -->
+								<div class="relative">
+									<button class="p-1.5 text-gray-400 hover:text-[#05668D] transition-colors duration-200">
+										<i class="fas fa-bell text-sm"></i>
+										<!-- Notification Badge -->
+										<span class="notification-badge absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full flex items-center justify-center text-xs">
+											3
+										</span>
+									</button>
+								</div>
+								<!-- Language Switcher -->
+								@LanguageSwitcher(c)
+							</div>
+						</div>
+					</header>
+					<!-- Content Area -->
+					<main class="flex-1 overflow-auto p-4">
+						@content
+					</main>
+				</div>
+			</div>
+			<!-- JavaScript for interactivity -->
+			<script>
+				// Add any dashboard-specific JavaScript here
+				function toggleMobileMenu() {
+					const menu = document.getElementById('mobile-menu');
+					menu.classList.toggle('hidden');
+				}
+				
+				// Language dropdown toggle
+				function toggleLanguageDropdown() {
+					const dropdown = document.getElementById('language-dropdown');
+					if (dropdown.classList.contains('opacity-0')) {
+						dropdown.classList.remove('opacity-0', 'pointer-events-none');
+						dropdown.classList.add('opacity-100', 'pointer-events-auto');
+					} else {
+						dropdown.classList.add('opacity-0', 'pointer-events-none');
+						dropdown.classList.remove('opacity-100', 'pointer-events-auto');
+					}
+				}
+				
+				// Close dropdown when clicking outside
+				document.addEventListener('click', function(event) {
+					const dropdown = document.getElementById('language-dropdown');
+					const button = event.target.closest('button[onclick="toggleLanguageDropdown()"]');
+					
+					if (!button && !dropdown.contains(event.target)) {
+						dropdown.classList.add('opacity-0', 'pointer-events-none');
+						dropdown.classList.remove('opacity-100', 'pointer-events-auto');
+					}
+				});
+			</script>
+		</body>
+	</html>
+}
