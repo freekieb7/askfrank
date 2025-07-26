@@ -2,14 +2,20 @@ package main
 
 import (
 	"askfrank/internal/api"
+	"askfrank/internal/config"
 	"askfrank/internal/database"
 	"askfrank/internal/i18n"
 	"askfrank/internal/middleware"
 	"askfrank/internal/repository"
+	"askfrank/internal/telemetry"
+	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
+	"os/signal"
 	"slices"
+	"syscall"
 	"time"
 
 	"github.com/a-h/templ"
@@ -22,29 +28,46 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "postgres"
-	password = "postgres"
-	dbname   = "postgres"
-)
-
 func main() {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Initialize telemetry
+	tel, err := telemetry.New(cfg.Telemetry)
+	if err != nil {
+		log.Fatalf("Failed to initialize telemetry: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tel.Shutdown(ctx); err != nil {
+			slog.Error("Failed to shutdown telemetry", "error", err)
+		}
+	}()
+
+	slog.Info("AskFrank Healthcare IT Platform starting",
+		"version", os.Getenv("VERSION"),
+		"environment", cfg.Server.Environment,
+		"telemetry_enabled", cfg.Telemetry.Enabled,
+	)
+
 	// Initialize internationalization
 	i18nInstance := i18n.New("en")
-	err := i18nInstance.LoadTranslations("translations")
+	err = i18nInstance.LoadTranslations("translations")
 	if err != nil {
 		log.Fatalf("Failed to load translations: %v", err)
 	}
 
 	// Initialize session store
 	sessionStorage := postgres.New(postgres.Config{
-		Host:     host,
-		Port:     port,
-		Database: dbname,
-		Username: user,
-		Password: password,
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		Database: cfg.Database.Name,
+		Username: cfg.Database.User,
+		Password: cfg.Database.Password,
 		Table:    "sessions",
 		Reset:    false, // Don't reset the table on startup
 	})
@@ -54,14 +77,15 @@ func main() {
 		KeyLookup:      "cookie:session_id",
 		CookieDomain:   "",
 		CookiePath:     "/",
-		CookieSecure:   false,
+		CookieSecure:   cfg.Server.Environment == "production",
 		CookieHTTPOnly: true,
 		CookieSameSite: "Lax",
-		Expiration:     24 * 60 * 60, // 24 hours
+		Expiration:     cfg.Auth.SessionExpiration,
 	})
 
 	// Connect to the database
-	dataSourceName := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+	dataSourceName := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.Database.SSLMode)
 	db, err := database.NewDatabase(dataSourceName)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -76,23 +100,42 @@ func main() {
 	}
 
 	// Initialize security middleware
-	securityConfig := middleware.DefaultSecurityConfig()
+	securityConfig := middleware.SecurityConfig{
+		RecaptchaSecretKey: cfg.Security.ReCaptchaSecretKey,
+		MaxSignupAttempts:  cfg.Security.MaxSignupAttempts,
+		RateLimitWindow:    15 * time.Minute,
+		BlockDuration:      cfg.Security.BlockDuration,
+	}
 	securityMiddleware := middleware.NewSecurityMiddleware(securityConfig)
 
 	handler := api.NewHandler(store, repo, securityMiddleware)
 
 	// Set up Fiber app
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+	})
 
-	// CSRF Protection
+	// Add telemetry middleware (first to capture all requests)
+	if cfg.Telemetry.Enabled {
+		app.Use(telemetry.FiberMiddleware(cfg.Telemetry.ServiceName))
+	}
+
+	// Add security headers middleware
+	// app.Use(middleware.SecurityHeadersMiddleware()) // todo enable after fixing script issues
+
+	// Add input sanitization middleware
+	app.Use(middleware.InputSanitizationMiddleware())
+
+	// CSRF Protection with enhanced security
 	app.Use(csrf.New(csrf.Config{
 		KeyLookup:      "form:csrf_token",
 		CookieName:     "csrf_",
 		CookieSameSite: "Lax",
-		CookieSecure:   false, // Set to true in production with HTTPS
+		CookieSecure:   cfg.Server.Environment == "production",
 		Expiration:     1 * time.Hour,
 		KeyGenerator:   utils.UUIDv4,
-		ContextKey:     "token", // This makes the token available in c.Locals("token")
+		ContextKey:     "token",
 	}))
 
 	// Middleware to expose CSRF token to all templates
@@ -104,10 +147,10 @@ func main() {
 	// Add i18n middleware
 	app.Use(middleware.I18nMiddleware(i18nInstance, store))
 
-	// Rate limiting for sign-up endpoints
+	// Rate limiting for sign-up endpoints with configuration
 	signupLimiter := limiter.New(limiter.Config{
-		Max:        5,                // 5 attempts
-		Expiration: 15 * time.Minute, // per 15 minutes
+		Max:        cfg.Security.MaxSignupAttempts,
+		Expiration: cfg.Security.BlockDuration,
 		KeyGenerator: func(c *fiber.Ctx) string {
 			return c.IP() // Limit by IP address
 		},
@@ -165,12 +208,36 @@ func main() {
 	// Dashboard routes
 	app.Get("/dashboard", handler.ShowDashboardPage)
 
-	port := os.Getenv("PORT")
+	port := cfg.Server.Port
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Starting server on :%s", port)
-	log.Panic(app.Listen(":" + port))
+
+	// Setup graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-c
+		slog.Info("Gracefully shutting down AskFrank...")
+		_ = app.Shutdown()
+	}()
+
+	slog.Info("AskFrank Healthcare IT Platform started",
+		"port", port,
+		"environment", cfg.Server.Environment,
+		"security_features", map[string]interface{}{
+			"rate_limiting":   cfg.Security.RateLimitEnabled,
+			"csrf_protection": true,
+			"telemetry":       cfg.Telemetry.Enabled,
+		},
+	)
+
+	if err := app.Listen(":" + port); err != nil {
+		slog.Error("Failed to start server", "error", err)
+	}
+
+	slog.Info("AskFrank Healthcare IT Platform stopped")
 }
 
 func Render(c *fiber.Ctx, component templ.Component) error {

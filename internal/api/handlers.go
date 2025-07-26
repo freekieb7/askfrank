@@ -21,11 +21,11 @@ import (
 
 type Handler struct {
 	store    *session.Store
-	repo     repository.Repository
+	repo     *repository.Repository
 	security *middleware.SecurityMiddleware
 }
 
-func NewHandler(store *session.Store, repository repository.Repository, security *middleware.SecurityMiddleware) Handler {
+func NewHandler(store *session.Store, repository *repository.Repository, security *middleware.SecurityMiddleware) Handler {
 	return Handler{store: store, repo: repository, security: security}
 }
 
