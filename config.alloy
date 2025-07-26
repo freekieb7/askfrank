@@ -14,10 +14,7 @@ otelcol.receiver.otlp "default" {
 	output {
 		metrics = [otelcol.processor.resourcedetection.default.input]
 		logs    = [otelcol.processor.resourcedetection.default.input]
-		traces  = [
-            otelcol.processor.resourcedetection.default.input,
-            otelcol.connector.servicegraph.default.input,
-        ]
+		traces  = [otelcol.processor.resourcedetection.default.input]
 	}
 }
 
@@ -34,13 +31,6 @@ otelcol.processor.resourcedetection "default" {
 		logs    = [otelcol.processor.transform.drop_unneeded_resource_attributes.input]
 		traces  = [otelcol.processor.transform.drop_unneeded_resource_attributes.input]
 	}
-}
-
-otelcol.connector.servicegraph "default" {
-  dimensions = ["http.method", "http.target"]
-  output {
-    metrics = [otelcol.processor.batch.default.input]
-  }
 }
 
 otelcol.processor.transform "drop_unneeded_resource_attributes" {

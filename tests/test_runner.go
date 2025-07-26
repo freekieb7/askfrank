@@ -67,7 +67,10 @@ func main() {
 	coverageCmd := exec.Command("go", "tool", "cover", "-func=coverage.out")
 	coverageCmd.Stdout = os.Stdout
 	coverageCmd.Stderr = os.Stderr
-	coverageCmd.Run()
+	if err := coverageCmd.Run(); err != nil {
+		fmt.Printf("❌ Coverage report failed: %v\n", err)
+		failed = true
+	}
 
 	// Summary
 	fmt.Println("\n📋 Test Summary")

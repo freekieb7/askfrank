@@ -5,6 +5,7 @@ package mocks
 
 import (
 	"askfrank/internal/model"
+	"context"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -107,4 +108,10 @@ func (m *MockEmailService) SendVerificationEmail(email, token string) error {
 func (m *MockEmailService) SendPasswordResetEmail(email, token string) error {
 	ret := m.Called(email, token)
 	return ret.Error(0)
+}
+
+// HealthCheck is a stub to satisfy the RepositoryInterface.
+func (m *MockRepository) HealthCheck(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
 }

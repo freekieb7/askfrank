@@ -383,6 +383,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 
 	// Log the signup attempt
 	slog.Info("New user signup", "email", email, "newsletter", newsletter != "", "ip", c.IP())
+	slog.Debug("Activation code generated", "code", codeStr)
 
 	// // Send confirmation email (in production, use a proper email service)
 	// go func() {
@@ -437,6 +438,23 @@ func (h *Handler) ConfirmUser(c *fiber.Ctx) error {
 
 	// Redirect to success page or login
 	return c.Redirect("/?activated=true")
+}
+
+// Health returns the health status of the application
+func (h *Handler) Health(c *fiber.Ctx) error {
+	// Check database connectivity
+	if err := h.repo.HealthCheck(c.Context()); err != nil {
+		return c.Status(503).JSON(fiber.Map{
+			"status": "unhealthy",
+			"error":  "database connection failed",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":    "healthy",
+		"timestamp": time.Now().Format(time.RFC3339),
+		"version":   os.Getenv("VERSION"),
+	})
 }
 
 func render(c *fiber.Ctx, component templ.Component) error {

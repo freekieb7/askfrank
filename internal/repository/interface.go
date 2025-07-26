@@ -2,6 +2,7 @@ package repository
 
 import (
 	"askfrank/internal/model"
+	"context"
 
 	"github.com/google/uuid"
 )
@@ -22,4 +23,5 @@ type RepositoryInterface interface {
 
 	// Database operations
 	Migrate() error
+	HealthCheck(ctx context.Context) error
 }

@@ -3,6 +3,7 @@ package repository
 import (
 	"askfrank/internal/database"
 	"askfrank/internal/model"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -141,4 +142,9 @@ func (r *Repository) DeleteUserRegistration(id uuid.UUID) error {
 		return err
 	}
 	return nil
+}
+
+// HealthCheck performs a simple health check on the database connection
+func (r *Repository) HealthCheck(ctx context.Context) error {
+	return r.db.PingContext(ctx)
 }

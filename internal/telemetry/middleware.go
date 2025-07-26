@@ -94,8 +94,9 @@ func (fc *fiberCarrier) Set(key, value string) {
 
 func (fc *fiberCarrier) Keys() []string {
 	keys := make([]string, 0)
-	fc.c.Request().Header.VisitAll(func(key, value []byte) {
+	fc.c.Request().Header.All()(func(key, value []byte) bool {
 		keys = append(keys, string(key))
+		return true
 	})
 	return keys
 }

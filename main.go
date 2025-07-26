@@ -190,6 +190,21 @@ func main() {
 
 	app.Get("/", handler.ShowHomePage)
 
+	app.Get("/health", func(c *fiber.Ctx) error {
+		if err := repo.HealthCheck(c.Context()); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"status": "unhealthy",
+				"error":  err.Error(),
+			})
+		}
+		return c.JSON(fiber.Map{
+			"status":            "healthy",
+			"version":           os.Getenv("VERSION"),
+			"environment":       cfg.Server.Environment,
+			"telemetry_enabled": cfg.Telemetry.Enabled,
+		})
+	})
+
 	// Login routes
 	app.Get("/auth/login", handler.ShowLoginPage)
 	app.Post("/auth/login", handler.Login)

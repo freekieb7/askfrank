@@ -1,4 +1,13 @@
-.PHONY: help build test test-unit test-integration test-watch test-coverage test-coverage-unit test-coverage-integration test-benchmark test-clean test-db-setup test-db-cleanup test-db-reset clean dev deps generate migrate lint format security audit docker health
+.PHONY: help build test clean dev deps generate migrate lint format security audit docker health
+.PHONY: test-unit test-integration test-coverage test-coverage-unit test-coverage-integration test-coverage-html test-watch test-benchmark test-clean test-db-setup test-db-cleanup test-db-reset
+.PHONY: docker-compose-up docker-compose-down docker-compose-restart docker-compose-logs docker-compose-logs-postgres docker-compose-logs-alloy docker-compose-status docker-build docker-run docker-stop
+.PHONY: security-fix security-report audit
+
+# Load environment variables from .env file if it exists
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
 
 # Colors for output
 RED    := \033[31m
@@ -21,7 +30,8 @@ GOBUILD := $(GOCMD) build
 GOTEST := $(GOCMD) test
 GOMOD := $(GOCMD) mod
 GOFMT := gofmt
-GOLINT := golangci-lint
+GOLINT := ~/go/bin/golangci-lint
+GOAIR :=  ~/go/bin/air
 
 # Database variables
 DB_HOST := localhost
@@ -37,11 +47,70 @@ BUILD_FLAGS := -ldflags "$(LDFLAGS)"
 
 ## help: Show this help message
 help:
-	@echo "$(BLUE)AskFrank Healthcare IT Platform$(RESET)"
-	@echo "$(BLUE)================================$(RESET)"
+	@echo "$(BLUE)╔════════════════════════════════════════════════════════════════════════╗$(RESET)"
+	@echo "$(BLUE)║                    AskFrank Healthcare IT Platform                     ║$(RESET)"
+	@echo "$(BLUE)╚════════════════════════════════════════════════════════════════════════╝$(RESET)"
 	@echo ""
-	@echo "$(GREEN)Available commands:$(RESET)"
-	@grep -E '^## .*:.*' $(MAKEFILE_LIST) | sed 's/## \(.*\): \(.*\)/  $(GREEN)\1$(RESET) - \2/'
+	@echo "$(GREEN)📋 Available Commands:$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)🏗️  Development & Build:$(RESET)"
+	@echo "  $(GREEN)deps$(RESET)               - Install dependencies"
+	@echo "  $(GREEN)generate$(RESET)           - Generate templ templates and other code"
+	@echo "  $(GREEN)format$(RESET)             - Format Go code"
+	@echo "  $(GREEN)lint$(RESET)               - Run linters"
+	@echo "  $(GREEN)build$(RESET)              - Build the application"
+	@echo "  $(GREEN)build-prod$(RESET)         - Build for production"
+	@echo "  $(GREEN)dev$(RESET)                - Run development server with hot reload"
+	@echo "  $(GREEN)run$(RESET)                - Run the application"
+	@echo "  $(GREEN)clean$(RESET)              - Clean build artifacts"
+	@echo ""
+	@echo "$(YELLOW)🧪 Testing:$(RESET)"
+	@echo "  $(GREEN)test$(RESET)               - Run all tests"
+	@echo "  $(GREEN)test-unit$(RESET)          - Run unit tests only"
+	@echo "  $(GREEN)test-integration$(RESET)   - Run integration tests only"
+	@echo "  $(GREEN)test-watch$(RESET)         - Run tests in watch mode"
+	@echo "  $(GREEN)test-coverage$(RESET)      - Run tests with coverage report"
+	@echo "  $(GREEN)test-coverage-unit$(RESET) - Generate unit test coverage report"
+	@echo "  $(GREEN)test-coverage-integration$(RESET) - Generate integration test coverage report"
+	@echo "  $(GREEN)test-benchmark$(RESET)     - Run benchmark tests"
+	@echo "  $(GREEN)test-clean$(RESET)         - Clean test artifacts"
+	@echo "  $(GREEN)test-db-setup$(RESET)      - Setup test database"
+	@echo "  $(GREEN)test-db-cleanup$(RESET)    - Cleanup test database"
+	@echo "  $(GREEN)test-db-reset$(RESET)      - Reset test database"
+	@echo ""
+	@echo "$(YELLOW)🐳 Docker & Compose:$(RESET)"
+	@echo "  $(GREEN)docker-compose-up$(RESET)  - Start all services (PostgreSQL + Grafana Alloy)"
+	@echo "  $(GREEN)docker-compose-down$(RESET) - Stop all services"
+	@echo "  $(GREEN)docker-compose-restart$(RESET) - Restart all services"
+	@echo "  $(GREEN)docker-compose-logs$(RESET) - Show logs from all services"
+	@echo "  $(GREEN)docker-compose-logs-postgres$(RESET) - Show PostgreSQL logs"
+	@echo "  $(GREEN)docker-compose-logs-alloy$(RESET) - Show Grafana Alloy logs"
+	@echo "  $(GREEN)docker-compose-status$(RESET) - Check status of all services"
+	@echo "  $(GREEN)docker-build$(RESET)       - Build Docker image"
+	@echo "  $(GREEN)docker-run$(RESET)         - Run Docker container"
+	@echo "  $(GREEN)docker-stop$(RESET)        - Stop Docker container"
+	@echo ""
+	@echo "$(YELLOW)🗄️  Database:$(RESET)"
+	@echo "  $(GREEN)migrate-up$(RESET)         - Run database migrations"
+	@echo "  $(GREEN)migrate-down$(RESET)       - Rollback database migrations"
+	@echo "  $(GREEN)migrate-create$(RESET)     - Create a new migration file"
+	@echo ""
+	@echo "$(YELLOW)🔒 Security & Monitoring:$(RESET)"
+	@echo "  $(GREEN)security$(RESET)           - Run security checks"
+	@echo "  $(GREEN)audit$(RESET)              - Run dependency audit"
+	@echo "  $(GREEN)health$(RESET)             - Check application health"
+	@echo ""
+	@echo "$(YELLOW)⚙️  Configuration & CI:$(RESET)"
+	@echo "  $(GREEN)setup$(RESET)              - Initial project setup"
+	@echo "  $(GREEN)ci$(RESET)                 - Continuous integration pipeline"
+	@echo "  $(GREEN)info$(RESET)               - Show project information"
+	@echo ""
+	@echo "$(BLUE)💡 Quick Start:$(RESET)"
+	@echo "  $(GREEN)make setup$(RESET)               - Initial project setup"
+	@echo "  $(GREEN)make docker-compose-up$(RESET)   - Start all services (PostgreSQL + Grafana Alloy)"
+	@echo "  $(GREEN)make dev$(RESET)                 - Start development server with hot reload"
+	@echo "  $(GREEN)make test$(RESET)                - Run all tests"
+	@echo ""
 
 ## deps: Install dependencies
 deps:
@@ -64,7 +133,7 @@ deps:
 ## generate: Generate templ templates and other code
 generate:
 	@echo "$(BLUE)Generating templates...$(RESET)"
-	templ generate
+	~/go/bin/templ generate
 	@echo "$(GREEN)Templates generated successfully$(RESET)"
 
 ## format: Format Go code
@@ -124,13 +193,15 @@ test-coverage-integration: test-integration
 ## test-benchmark: Run benchmark tests
 test-benchmark:
 	@echo "$(BLUE)Running benchmark tests...$(RESET)"
-	$(GOTEST) -bench=. -benchmem ./tests/...
+	$(GOTEST) -bench=. -benchmem -run=^$$ ./tests/... | tee benchmark.out
+	@echo "$(BLUE)Generating benchmark HTML report...$(RESET)"
+	$(GOCMD) tool pprof -http=localhost:0 -no_browser -output=benchmark.html ./tests/... 2>/dev/null || echo "$(YELLOW)HTML report generation skipped (requires pprof)$(RESET)"
 	@echo "$(GREEN)Benchmark tests completed$(RESET)"
 
 ## test-clean: Clean test artifacts
 test-clean:
 	@echo "$(BLUE)Cleaning test artifacts...$(RESET)"
-	rm -f coverage*.out coverage*.html
+	rm -f coverage*.out coverage*.html benchmark.out benchmark.html loadtest-results.json
 	@echo "$(GREEN)Test artifacts cleaned$(RESET)"
 
 ## test-db-setup: Setup test database
@@ -166,14 +237,19 @@ build-prod: generate format lint test
 	@echo "$(GREEN)Production build completed$(RESET)"
 
 ## dev: Run development server with hot reload
-dev: generate
+dev: generate docker-compose-up
 	@echo "$(BLUE)Starting development server...$(RESET)"
+	@if [ -f .env ]; then \
+		echo "$(GREEN)✓ Environment loaded from .env file$(RESET)"; \
+	else \
+		echo "$(YELLOW)⚠ No .env file found, using defaults$(RESET)"; \
+	fi
 	@if command -v air >/dev/null 2>&1; then \
-		hair; \
+		$(GOAIR); \
 	else \
 		echo "$(YELLOW)Air not found, installing...$(RESET)"; \
-		$(GOCMD) install github.com/cosmtrek/air@latest; \
-		air; \
+		$(GOCMD) install github.com/air-verse/air@latest; \
+		$(GOAIR); \
 	fi
 
 ## run: Run the application
@@ -199,25 +275,81 @@ migrate-create:
 	migrate create -ext sql -dir migrations $$name
 	@echo "$(GREEN)Migration files created$(RESET)"
 
-## security: Run security checks
+## audit: Run security audit with govulncheck
+audit:
+	@echo "$(BLUE)Running security audit...$(RESET)"
+	@if ! command -v govulncheck >/dev/null 2>&1; then \
+		echo "$(YELLOW)Installing govulncheck...$(RESET)"; \
+		$(GOCMD) install golang.org/x/vuln/cmd/govulncheck@latest; \
+	fi
+	govulncheck ./...
+	@echo "$(GREEN)Security audit completed$(RESET)"
+
+## security: Run comprehensive security checks
 security:
 	@echo "$(BLUE)Running security checks...$(RESET)"
 	@if ! command -v gosec >/dev/null 2>&1; then \
-		echo "$(YELLOW)Installing gosec...$(RESET)"; \
-		$(GOCMD) install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+	    echo "$(YELLOW)Installing gosec...$(RESET)"; \
+	    $(GOCMD) install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
 	fi
-	gosec ./...
+	gosec -fmt=json -out=gosec-report.json -stdout ./...
 	@echo "$(GREEN)Security checks completed$(RESET)"
 
-## audit: Run dependency audit
-audit:
-	@echo "$(BLUE)Running dependency audit...$(RESET)"
-	@if ! command -v nancy >/dev/null 2>&1; then \
-		echo "$(YELLOW)Nancy not found. Please install it manually: https://github.com/sonatype-nexus-community/nancy$(RESET)"; \
-		exit 1; \
+## security-fix: Fix security issues automatically where possible
+security-fix:
+	@echo "$(BLUE)Attempting to fix security issues...$(RESET)"
+	$(GOCMD) mod tidy
+	$(GOCMD) get -u all
+	@echo "$(GREEN)Security fixes applied$(RESET)"
+
+## security-report: Generate comprehensive security report
+security-report: security audit
+	@echo "$(BLUE)Generating security report...$(RESET)"
+	@echo "Security scan completed on $$(date)" > security-report.txt
+	@echo "=======================================" >> security-report.txt
+	@if [ -f gosec-report.json ]; then \
+	    echo "Gosec findings:" >> security-report.txt; \
+	    cat gosec-report.json >> security-report.txt; \
 	fi
-	$(GOCMD) list -json -deps ./... | nancy sleuth
-	@echo "$(GREEN)Dependency audit completed$(RESET)"
+	@echo "$(GREEN)Security report generated: security-report.txt$(RESET)"
+
+## docker-compose-up: Start all services (PostgreSQL + Grafana Alloy)
+docker-compose-up:
+	@echo "$(BLUE)Starting all services with Docker Compose...$(RESET)"
+	docker compose up -d
+	@echo "$(GREEN)All services started successfully$(RESET)"
+	@echo "$(YELLOW)PostgreSQL available on: localhost:5432$(RESET)"
+	@echo "$(YELLOW)Grafana Alloy UI: http://localhost:12345$(RESET)"
+
+## docker-compose-down: Stop all services
+docker-compose-down:
+	@echo "$(BLUE)Stopping all services...$(RESET)"
+	docker compose down
+	@echo "$(GREEN)All services stopped$(RESET)"
+
+## docker-compose-restart: Restart all services
+docker-compose-restart: docker-compose-down docker-compose-up
+	@echo "$(GREEN)All services restarted$(RESET)"
+
+## docker-compose-logs: Show logs from all services
+docker-compose-logs:
+	@echo "$(BLUE)Showing logs from all services...$(RESET)"
+	docker compose logs -f
+
+## docker-compose-logs-postgres: Show PostgreSQL logs
+docker-compose-logs-postgres:
+	@echo "$(BLUE)Showing PostgreSQL logs...$(RESET)"
+	docker compose logs -f postgres
+
+## docker-compose-logs-alloy: Show Grafana Alloy logs
+docker-compose-logs-alloy:
+	@echo "$(BLUE)Showing Grafana Alloy logs...$(RESET)"
+	docker compose logs -f alloy
+
+## docker-compose-status: Check status of all services
+docker-compose-status:
+	@echo "$(BLUE)Checking service status...$(RESET)"
+	docker compose ps
 
 ## docker-build: Build Docker image
 docker-build:
@@ -254,8 +386,14 @@ clean:
 	@echo "$(GREEN)Clean completed$(RESET)"
 
 ## setup: Initial project setup
-setup: deps generate migrate-up
+setup: deps generate docker-compose-up migrate-up
 	@echo "$(GREEN)Project setup completed$(RESET)"
+	@echo "$(YELLOW)Services running:$(RESET)"
+	@echo "  - PostgreSQL: localhost:5432"
+	@echo "  - Grafana Alloy: http://localhost:12345"
+	@echo "$(BLUE)Next steps:$(RESET)"
+	@echo "  1. Copy .env.example to .env and configure"
+	@echo "  2. Run 'make dev' to start development server"
 
 ## ci: Continuous integration pipeline
 ci: deps generate format lint test security build
@@ -273,3 +411,13 @@ info:
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Commit: $(COMMIT_HASH)"
 	@echo "Go Version: $(shell $(GOCMD) version)"
+
+## demo: Run telemetry demo
+demo:
+	@echo "$(BLUE)Running telemetry demo...$(RESET)"
+	@if [ -f .env ]; then \
+		echo "$(GREEN)✓ Environment loaded from .env file$(RESET)"; \
+	else \
+		echo "$(YELLOW)⚠ No .env file found$(RESET)"; \
+	fi
+	$(GOCMD) run cmd/demo/main.go

@@ -20,8 +20,12 @@ func New() *Validator {
 	v := validator.New()
 
 	// Custom validators
-	v.RegisterValidation("password_strength", validatePasswordStrength)
-	v.RegisterValidation("no_disposable_email", validateNoDisposableEmail)
+	if err := v.RegisterValidation("password_strength", validatePasswordStrength); err != nil {
+		panic("failed to register password_strength validation: " + err.Error())
+	}
+	if err := v.RegisterValidation("no_disposable_email", validateNoDisposableEmail); err != nil {
+		panic("failed to register no_disposable_email validation: " + err.Error())
+	}
 
 	return &Validator{validate: v}
 }
