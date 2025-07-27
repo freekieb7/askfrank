@@ -1,6 +1,6 @@
 package view
 
-import "askfrank/resource/view/component"
+import "askfrank/resources/view/component"
 import "askfrank/internal/middleware"
 
 import "github.com/gofiber/fiber/v2"
@@ -37,10 +37,6 @@ templ CheckInboxPage(c *fiber.Ctx, email string) {
 						</div>
 					</div>
 					<form id="verificationForm" class="space-y-4" action="/auth/sign-up/check-inbox" method="POST">
-						<!-- CSRF Token -->
-						if csrfToken, ok := c.Locals("token").(string); ok {
-							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						}
 						if email != "" {
 							<input type="hidden" name="email" value={ email }/>
 						}
@@ -158,6 +154,9 @@ templ CheckInboxPage(c *fiber.Ctx, email string) {
 				try {
 					const response = await fetch('/auth/sign-up/check-inbox', {
 						method: 'POST',
+						headers: {
+							'X-Csrf-Token': '{ c.Locals("token") }'
+						},
 						body: formData
 					});
 					

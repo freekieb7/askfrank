@@ -92,7 +92,7 @@ func main() {
 	}
 
 	// Initialize repository
-	repo := repository.NewRepository(db)
+	repo := repository.NewDatabaseRepository(db)
 
 	// Run database migrations
 	if err := repo.Migrate(); err != nil {
@@ -127,21 +127,22 @@ func main() {
 	// Add input sanitization middleware
 	app.Use(middleware.InputSanitizationMiddleware())
 
-	// CSRF Protection with enhanced security
+	// CSRF Protection with session-based configuration (recommended)
 	app.Use(csrf.New(csrf.Config{
-		KeyLookup:      "form:csrf_token",
-		CookieName:     "csrf_",
-		CookieSameSite: "Lax",
-		CookieSecure:   cfg.Server.Environment == "production",
-		Expiration:     1 * time.Hour,
-		KeyGenerator:   utils.UUIDv4,
-		ContextKey:     "token",
+		KeyLookup:         "header:X-Csrf-Token",
+		CookieName:        "askfrank-csrf_",
+		CookieSameSite:    "Lax",
+		CookieSecure:      cfg.Server.Environment == "production",
+		CookieSessionOnly: true,
+		CookieHTTPOnly:    true,
+		Expiration:        1 * time.Hour,
+		KeyGenerator:      utils.UUIDv4,
+		Session:           store,
+		SessionKey:        "fiber.csrf.token",
+		ContextKey:        "token",
 	}))
 
-	// Middleware to expose CSRF token to all templates
-	app.Use(func(c *fiber.Ctx) error {
-		return c.Next()
-	}) // Add IP blocking middleware globally
+	// Add IP blocking middleware globally
 	app.Use(securityMiddleware.IPBlockMiddleware())
 
 	// Add i18n middleware
@@ -222,6 +223,12 @@ func main() {
 
 	// Dashboard routes
 	app.Get("/dashboard", handler.ShowDashboardPage)
+
+	// Admin routes
+	app.Get("/admin", handler.ShowAdminPage)
+	app.Get("/admin/users/:id", handler.ShowAdminUserView)
+	app.Post("/admin/users/:id/activate", handler.AdminActivateUser)
+	app.Delete("/admin/users/:id", handler.AdminDeleteUser)
 
 	port := cfg.Server.Port
 	if port == "" {

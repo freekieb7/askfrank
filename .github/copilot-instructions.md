@@ -23,7 +23,7 @@ askfrank/
 │   ├── middleware/   # Security, i18n, and other middleware
 │   ├── model/        # Data models and structures
 │   └── repository/   # Database operations and queries
-├── resource/view/    # Templ templates
+├── resources/view/    # Templ templates
 │   ├── component/    # Reusable UI components
 │   └── *.templ      # Page templates
 ├── translations/     # JSON translation files (en.json, nl.json)
@@ -122,32 +122,138 @@ askfrank/
 - Session storage in dedicated `sessions` table
 - UUID primary keys for all entities
 
-## 🧪 Development Workflow
+## 🧪 Testing Philosophy & Framework
 
-### Building & Testing
-```bash
-# Generate templ files
-go run github.com/a-h/templ/cmd/templ generate
+### **Integration-First Testing Approach**
 
-# Build application
-go build -o askfrank
+**AskFrank uses integration testing as the primary testing strategy**, ensuring real compatibility between all system components. This approach provides confidence that the entire system works together correctly in production environments.
 
-# Run with environment variables
-RECAPTCHA_SITE_KEY=your_key RECAPTCHA_SECRET_KEY=your_secret ./askfrank
+#### Core Testing Principles
+1. **Real Database Integration**: All tests use PostgreSQL with actual database transactions
+2. **End-to-End Compatibility**: Services interact through real interfaces, not mocks
+3. **Production-Like Environment**: Tests run against the same stack used in production
+4. **Comprehensive Coverage**: Test entire user workflows and system interactions
+5. **Fast Feedback**: Optimized database setup/teardown for quick test cycles
+
+### **Testing Framework Structure**
+```
+tests/
+├── integration/          # Full system integration tests
+│   ├── auth_test.go     # Authentication workflows with real database
+│   ├── user_test.go     # User management with repository layer
+│   └── api_test.go      # HTTP API endpoints with real handlers
+├── testutil/            # Testing utilities and helpers
+│   ├── testutil.go      # Database setup, test data factories
+│   └── fixtures.go      # Test data and scenarios
+└── test_runner.go       # Test orchestration and database lifecycle
 ```
 
-### Common Patterns
+### **Integration Testing Best Practices**
+
+#### Database Testing
+- **Real PostgreSQL**: Every test uses actual PostgreSQL database
+- **Transaction Isolation**: Each test runs in isolated transactions
+- **Automatic Cleanup**: Database state reset between tests
+- **Migration Testing**: Verify schema changes work correctly
+
+#### Service Integration
+- **Real Dependencies**: Services use actual repository implementations
+- **Authentic Workflows**: Test complete user journeys (register → verify → login)
+- **Error Scenarios**: Test failure cases with real error propagation
+- **Concurrent Access**: Verify thread safety with actual database locks
+
+#### Test Data Management
+```go
+// Use real repository for authentic data creation
+func setupTestUser(t *testing.T, repo *repository.Repository) model.User {
+    user := model.User{
+        ID:    uuid.New(),
+        Email: testutil.UniqueEmail("test"),
+        // ... real user data
+    }
+    err := repo.CreateUser(user)
+    require.NoError(t, err)
+    return user
+}
+```
+
+### **Building & Testing Commands**
+```bash
+# Run full integration test suite
+make test
+
+# Run specific integration tests
+make test-integration
+
+# Test with coverage reporting
+make test-coverage
+
+# Setup test database
+make test-db-setup
+
+# Reset test environment
+make test-db-reset
+```
+
+### **Development Workflow**
+
+#### Testing New Features
+1. **Write Integration Tests First**: Create tests that verify complete workflows
+2. **Use Real Database**: Always test against PostgreSQL, never mock repository
+3. **Test User Journeys**: Verify entire use cases from start to finish
+4. **Include Error Cases**: Test failure scenarios with real error handling
+5. **Verify Compatibility**: Ensure new features work with existing system
+
+#### Creating New Tests
+```go
+func TestUserRegistrationWorkflow(t *testing.T) {
+    // Setup real database and services
+    db := testutil.SetupTestDB(t)
+    repo := repository.NewRepository(db)
+    authService := service.NewAuthService(repo, sessionStore, emailService)
+    
+    // Test complete workflow
+    user, err := authService.Register(ctx, request)
+    require.NoError(t, err)
+    
+    // Verify database state
+    stored, err := repo.GetUserByEmail(request.Email)
+    require.NoError(t, err)
+    assert.Equal(t, user.ID, stored.ID)
+}
+```
+
+### **Common Development Patterns**
 
 #### Creating New Pages
-1. Create template in `resource/view/`
+1. Create template in `resources/view/`
 2. Add translation keys to both language files
 3. Create handler in `internal/api/handlers.go`
 4. Add route in `main.go`
-5. Generate templates and test
+5. Write integration tests for the complete workflow
+6. Generate templates and test end-to-end
 
 #### Adding Security Features
 1. Update `internal/middleware/security.go`
 2. Add validation to handlers
+3. Write integration tests with real security scenarios
+4. Include CSRF tokens in forms
+5. Test with security validation suite
+
+#### Adding New Services
+1. Create service in `internal/service/`
+2. Add repository methods in `internal/repository/`
+3. Write integration tests for service workflows
+4. Test database interactions with real PostgreSQL
+5. Verify error handling with actual error scenarios
+
+#### Database Changes
+1. Update model in `internal/model/`
+2. Add migration in `repository.Migrate()`
+3. Create repository methods
+4. Write integration tests for new database operations
+5. Test migrations with real database schema changes
+6. Update handlers to use new data structures
 3. Include CSRF tokens in forms
 4. Test with security validation suite
 

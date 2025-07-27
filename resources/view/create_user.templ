@@ -1,6 +1,6 @@
 package view
 
-import "askfrank/resource/view/component"
+import "askfrank/resources/view/component"
 import "askfrank/internal/middleware"
 
 import "github.com/gofiber/fiber/v2"
@@ -21,10 +21,6 @@ templ CreateUserPage(c *fiber.Ctx) {
 				</div>
 				<div class="bg-white rounded-lg shadow-lg p-6">
 					<form id="signupForm" class="space-y-4" action="/auth/sign-up/create-user" method="POST">
-						<!-- CSRF Token -->
-						if csrfToken, ok := c.Locals("token").(string); ok {
-							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						}
 						<!-- Honeypot field (hidden from users, catches bots) -->
 						<div style="display: none;">
 							<label for="website">Website (leave blank):</label>
@@ -183,6 +179,9 @@ templ CreateUserPage(c *fiber.Ctx) {
 				try {
 					const response = await fetch('/auth/sign-up/create-user', {
 						method: 'POST',
+						headers: {
+							'X-Csrf-Token': '{ c.Locals("token") }'
+						},
 						body: formData
 					});
 					

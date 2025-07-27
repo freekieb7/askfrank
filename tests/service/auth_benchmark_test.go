@@ -12,10 +12,9 @@ import (
 func BenchmarkPasswordHashing(b *testing.B) {
 	password := "TestPassword123!"
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Simulate bcrypt hashing (without actual bcrypt dependency)
 		_ = hashPassword(password)
 	}
@@ -26,10 +25,9 @@ func BenchmarkTokenGeneration(b *testing.B) {
 	userID := "123e4567-e89b-12d3-a456-426614174000"
 	email := "test@example.com"
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Simulate JWT token generation
 		_ = generateToken(userID, email)
 	}
@@ -45,10 +43,9 @@ func BenchmarkEmailValidation(b *testing.B) {
 		"not_an_email",
 	}
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		email := emails[i%len(emails)]
 		_ = isValidEmail(email)
 	}
@@ -64,10 +61,9 @@ func BenchmarkPasswordValidation(b *testing.B) {
 		"AnotherValid123$",
 	}
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		password := passwords[i%len(passwords)]
 		_ = isValidPassword(password)
 	}

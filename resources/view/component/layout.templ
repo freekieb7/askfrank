@@ -6,6 +6,7 @@ import (
 )
 
 templ Layout(title string, c *fiber.Ctx) {
+	<!DOCTYPE html>
 	<html lang={ middleware.GetLang(c) }>
 		<head>
 			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm" crossorigin="anonymous"></script>
@@ -19,6 +20,10 @@ templ Layout(title string, c *fiber.Ctx) {
 			/>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<!-- Hidden CSRF token for JavaScript -->
+			if csrfToken, ok := c.Locals("token").(string); ok {
+				<meta name="csrf-token" content={ csrfToken }/>
+			}
 			<title>{ title }</title>
 			<link
 				href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;800&family=Source+Sans+Pro:wght@400;600&display=swap"

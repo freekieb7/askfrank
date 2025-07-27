@@ -1,0 +1,288 @@
+package view
+
+import (
+	"askfrank/internal/middleware"
+	"askfrank/internal/model"
+	"askfrank/resources/view/component"
+	"fmt"
+	"github.com/gofiber/fiber/v2"
+)
+
+type AdminPageData struct {
+	Stats       AdminStats
+	Users       []model.UserWithRegistration
+	CurrentPage int
+	TotalPages  int
+	TotalUsers  int
+}
+
+type AdminStats struct {
+	TotalUsers           int
+	ActiveUsers          int
+	PendingRegistrations int
+	TodayRegistrations   int
+}
+
+templ AdminPage(c *fiber.Ctx, data AdminPageData) {
+	@component.Layout(middleware.T(c, "admin.title"), c) {
+		<div class="min-h-screen bg-gray-50 py-8">
+			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+				<!-- Header -->
+				<div class="mb-8">
+					<h1 class="text-3xl font-bold text-gray-900">{ middleware.T(c, "admin.title") }</h1>
+					<p class="mt-2 text-gray-600">{ middleware.T(c, "admin.subtitle") }</p>
+				</div>
+				<!-- Stats Cards -->
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+					<!-- Total Users -->
+					<div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-500">
+						<div class="flex items-center">
+							<div class="flex-1">
+								<h3 class="text-sm font-medium text-gray-500">{ middleware.T(c, "admin.stats.total_users") }</h3>
+								<p class="text-2xl font-bold text-gray-900">{ fmt.Sprintf("%d", data.Stats.TotalUsers) }</p>
+							</div>
+							<div class="ml-4">
+								<div class="bg-blue-100 p-3 rounded-full">
+									<svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+									</svg>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- Active Users -->
+					<div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-green-500">
+						<div class="flex items-center">
+							<div class="flex-1">
+								<h3 class="text-sm font-medium text-gray-500">{ middleware.T(c, "admin.stats.active_users") }</h3>
+								<p class="text-2xl font-bold text-gray-900">{ fmt.Sprintf("%d", data.Stats.ActiveUsers) }</p>
+							</div>
+							<div class="ml-4">
+								<div class="bg-green-100 p-3 rounded-full">
+									<svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+									</svg>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- Pending Registrations -->
+					<div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-yellow-500">
+						<div class="flex items-center">
+							<div class="flex-1">
+								<h3 class="text-sm font-medium text-gray-500">{ middleware.T(c, "admin.stats.pending_registrations") }</h3>
+								<p class="text-2xl font-bold text-gray-900">{ fmt.Sprintf("%d", data.Stats.PendingRegistrations) }</p>
+							</div>
+							<div class="ml-4">
+								<div class="bg-yellow-100 p-3 rounded-full">
+									<svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+									</svg>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- Today's Registrations -->
+					<div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-purple-500">
+						<div class="flex items-center">
+							<div class="flex-1">
+								<h3 class="text-sm font-medium text-gray-500">{ middleware.T(c, "admin.stats.today_registrations") }</h3>
+								<p class="text-2xl font-bold text-gray-900">{ fmt.Sprintf("%d", data.Stats.TodayRegistrations) }</p>
+							</div>
+							<div class="ml-4">
+								<div class="bg-purple-100 p-3 rounded-full">
+									<svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+									</svg>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<!-- Users Table -->
+				<div class="bg-white rounded-lg shadow-lg overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200">
+						<h2 class="text-lg font-semibold text-gray-900">{ middleware.T(c, "admin.users.title") }</h2>
+						<p class="text-sm text-gray-600 mt-1">{ middleware.T(c, "admin.users.subtitle") }</p>
+					</div>
+					<div class="overflow-x-auto">
+						<table class="min-w-full divide-y divide-gray-200">
+							<thead class="bg-gray-50">
+								<tr>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+										{ middleware.T(c, "admin.users.email") }
+									</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+										{ middleware.T(c, "admin.users.name") }
+									</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+										{ middleware.T(c, "admin.users.role") }
+									</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+										{ middleware.T(c, "admin.users.status") }
+									</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+										{ middleware.T(c, "admin.users.joined") }
+									</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+										{ middleware.T(c, "admin.users.actions") }
+									</th>
+								</tr>
+							</thead>
+							<tbody class="bg-white divide-y divide-gray-200">
+								for _, user := range data.Users {
+									<tr class="hover:bg-gray-50">
+										<td class="px-6 py-4 whitespace-nowrap">
+											<div class="text-sm font-medium text-gray-900">{ user.User.Email }</div>
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap">
+											<div class="text-sm text-gray-900">{ user.User.Name }</div>
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap">
+											<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+												{ user.User.Role }
+											</span>
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap">
+											if user.User.IsEmailVerified {
+												<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+													{ middleware.T(c, "admin.users.verified") }
+												</span>
+											} else if user.Registration != nil {
+												<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+													{ middleware.T(c, "admin.users.pending") }
+												</span>
+											} else {
+												<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+													{ middleware.T(c, "admin.users.inactive") }
+												</span>
+											}
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+											{ user.User.CreatedAt.Format("2006-01-02 15:04") }
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+											<a
+												href={ fmt.Sprintf("/admin/users/%s", user.User.ID.String()) }
+												class="text-indigo-600 hover:text-indigo-900 mr-3 inline-flex items-center"
+											>
+												<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+												</svg>
+												{ middleware.T(c, "admin.users.view") }
+											</a>
+											if !user.User.IsEmailVerified && user.Registration != nil {
+												<button
+													class="text-green-600 hover:text-green-900 mr-3 inline-flex items-center"
+													hx-post={ fmt.Sprintf("/admin/users/%s/activate", user.User.ID.String()) }
+													hx-target="closest tr td:nth-child(4)"
+													hx-swap="innerHTML"
+													hx-headers='{"X-CSRF-Token": "{{ c.Locals("token") }}"}'
+													hx-confirm={ middleware.T(c, "admin.users.activate_confirm") }
+												>
+													<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+													</svg>
+													{ middleware.T(c, "admin.users.activate") }
+												</button>
+											}
+											<button
+												class="text-red-600 hover:text-red-900 inline-flex items-center"
+												hx-delete={ fmt.Sprintf("/admin/users/%s", user.User.ID.String()) }
+												hx-target="closest tr"
+												hx-swap="outerHTML"
+												hx-confirm={ middleware.T(c, "admin.users.delete_confirm") }
+											>
+												<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+												</svg>
+												{ middleware.T(c, "admin.users.delete") }
+											</button>
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+					<!-- Pagination -->
+					if data.TotalPages > 1 {
+						<div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+							<div class="flex-1 flex justify-between sm:hidden">
+								if data.CurrentPage > 1 {
+									<a
+										href={ templ.URL(fmt.Sprintf("/admin?page=%d", data.CurrentPage-1)) }
+										class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+									>
+										{ middleware.T(c, "admin.pagination.previous") }
+									</a>
+								}
+								if data.CurrentPage < data.TotalPages {
+									<a
+										href={ templ.URL(fmt.Sprintf("/admin?page=%d", data.CurrentPage+1)) }
+										class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+									>
+										{ middleware.T(c, "admin.pagination.next") }
+									</a>
+								}
+							</div>
+							<div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+								<div>
+									<p class="text-sm text-gray-700">
+										{ middleware.T(c, "admin.pagination.showing") }
+										<span class="font-medium">{ fmt.Sprintf("%d", (data.CurrentPage-1)*20+1) }</span>
+										{ middleware.T(c, "admin.pagination.to") }
+										<span class="font-medium">{ fmt.Sprintf("%d", min(data.CurrentPage*20, data.TotalUsers)) }</span>
+										{ middleware.T(c, "admin.pagination.of") }
+										<span class="font-medium">{ fmt.Sprintf("%d", data.TotalUsers) }</span>
+										{ middleware.T(c, "admin.pagination.results") }
+									</p>
+								</div>
+								<div>
+									<nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+										if data.CurrentPage > 1 {
+											<a
+												href={ templ.URL(fmt.Sprintf("/admin?page=%d", data.CurrentPage-1)) }
+												class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+											>
+												<span class="sr-only">{ middleware.T(c, "admin.pagination.previous") }</span>
+												<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+													<path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+												</svg>
+											</a>
+										}
+										for i := 1; i <= data.TotalPages; i++ {
+											if i == data.CurrentPage {
+												<span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">
+													{ fmt.Sprintf("%d", i) }
+												</span>
+											} else {
+												<a
+													href={ templ.URL(fmt.Sprintf("/admin?page=%d", i)) }
+													class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+												>
+													{ fmt.Sprintf("%d", i) }
+												</a>
+											}
+										}
+										if data.CurrentPage < data.TotalPages {
+											<a
+												href={ templ.URL(fmt.Sprintf("/admin?page=%d", data.CurrentPage+1)) }
+												class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+											>
+												<span class="sr-only">{ middleware.T(c, "admin.pagination.next") }</span>
+												<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+													<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+												</svg>
+											</a>
+										}
+									</nav>
+								</div>
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+		</div>
+	}
+}

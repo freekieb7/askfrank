@@ -27,7 +27,7 @@ var (
 )
 
 type AuthService struct {
-	repo         repository.RepositoryInterface
+	repo         repository.Repository
 	sessionStore SessionStore
 	emailService EmailService
 }
@@ -56,7 +56,7 @@ type RegisterRequest struct {
 	Newsletter      bool
 }
 
-func NewAuthService(repo repository.RepositoryInterface, sessionStore SessionStore, emailService EmailService) *AuthService {
+func NewAuthService(repo repository.Repository, sessionStore SessionStore, emailService EmailService) *AuthService {
 	return &AuthService{
 		repo:         repo,
 		sessionStore: sessionStore,

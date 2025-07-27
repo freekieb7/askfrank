@@ -1,6 +1,6 @@
 package view
 
-import "askfrank/resource/view/component"
+import "askfrank/resources/view/component"
 import "github.com/gofiber/fiber/v2"
 
 templ LoginPage(c *fiber.Ctx) {
@@ -23,10 +23,6 @@ templ LoginPage(c *fiber.Ctx) {
 				</div>
 				<div class="bg-white rounded-lg shadow-lg p-6">
 					<form id="loginForm" class="space-y-4" action="/auth/login" method="POST">
-						<!-- CSRF Token -->
-						if csrfToken, ok := c.Locals("token").(string); ok {
-							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						}
 						<input type="hidden" name="remember" value="true"/>
 						<!-- Error message display -->
 						<div id="error-message" class="hidden p-4 bg-red-50 border border-red-200 rounded-md">
@@ -143,9 +139,13 @@ templ LoginPage(c *fiber.Ctx) {
 				submitButton.textContent = 'Signing in...';
 				
 				try {
+					const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 					const response = await fetch('/auth/login', {
 						method: 'POST',
-						body: formData
+						body: formData,
+						headers: {
+							'X-Csrf-Token': csrfToken
+						}
 					});
 					
 					if (response.redirected) {

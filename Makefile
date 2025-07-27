@@ -31,7 +31,7 @@ GOTEST := $(GOCMD) test
 GOMOD := $(GOCMD) mod
 GOFMT := gofmt
 GOLINT := ~/go/bin/golangci-lint
-GOAIR :=  ~/go/bin/air
+GOAIR :=  ~/go/bin/air --build.cmd "go build -o bin/askfrank cmd/main.go" --build.bin "./bin/askfrank"
 
 # Database variables
 DB_HOST := localhost
@@ -227,7 +227,7 @@ test-db-reset: test-db-cleanup test-db-setup
 ## build: Build the application
 build: generate
 	@echo "$(BLUE)Building $(PROJECT_NAME)...$(RESET)"
-	$(GOBUILD) $(BUILD_FLAGS) -o bin/$(BINARY_NAME) .
+	$(GOBUILD) $(BUILD_FLAGS) -o bin/$(BINARY_NAME) ./cmd/main.go
 	@echo "$(GREEN)Build completed: bin/$(BINARY_NAME)$(RESET)"
 
 ## build-prod: Build for production
@@ -411,13 +411,3 @@ info:
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Commit: $(COMMIT_HASH)"
 	@echo "Go Version: $(shell $(GOCMD) version)"
-
-## demo: Run telemetry demo
-demo:
-	@echo "$(BLUE)Running telemetry demo...$(RESET)"
-	@if [ -f .env ]; then \
-		echo "$(GREEN)✓ Environment loaded from .env file$(RESET)"; \
-	else \
-		echo "$(YELLOW)⚠ No .env file found$(RESET)"; \
-	fi
-	$(GOCMD) run cmd/demo/main.go

@@ -33,3 +33,4 @@ go.work.sum
 
 # Templ
 *_templ.go
+bin/*

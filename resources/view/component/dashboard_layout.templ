@@ -7,6 +7,7 @@ import (
 )
 
 templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ.Component) {
+	<!DOCTYPE html>
 	<html lang={ middleware.GetLang(c) }>
 		<head>
 			<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm" crossorigin="anonymous"></script>
@@ -20,6 +21,10 @@ templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ
 			/>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<!-- Hidden CSRF token for JavaScript -->
+			if csrfToken, ok := c.Locals("token").(string); ok {
+				<meta name="csrf-token" content={ csrfToken }/>
+			}
 			<title>{ title }</title>
 			<link
 				href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;800&family=Source+Sans+Pro:wght@400;600&display=swap"
@@ -113,13 +118,10 @@ templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ
 								<p class="text-xs text-gray-500 truncate">{ user.Email }</p>
 							</div>
 						</div>
-						<a
-							href="/logout"
-							class="mt-2 w-full flex items-center justify-center px-2 py-1.5 border border-transparent text-xs font-medium rounded-lg text-[#05668D] bg-[#EAF2EF] hover:bg-[#028090] hover:text-white transition-colors duration-200"
-						>
+						<button onclick="confirmLogout()" class="mt-2 w-full flex items-center justify-center px-2 py-1.5 border border-transparent text-xs font-medium rounded-lg text-[#05668D] bg-[#EAF2EF] hover:bg-[#028090] hover:text-white transition-colors duration-200">
 							<i class="fas fa-sign-out-alt mr-1 text-xs"></i>
 							{ middleware.T(c, "dashboard.nav.logout") }
-						</a>
+						</button>
 					</div>
 				</aside>
 				<!-- Main Content Area -->
@@ -166,6 +168,27 @@ templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ
 			</div>
 			<!-- JavaScript for interactivity -->
 			<script>
+                function confirmLogout() {
+                    if (confirm('Are you sure you want to logout?')) {
+                        // Use fetch with CSRF header for logout
+                        fetch('/auth/logout', {
+                            method: 'POST',
+                            headers: {
+                                'X-Csrf-Token': '{ c.Locals("token") }'
+                            }
+                        }).then(response => {
+                            if (response.redirected) {
+                                window.location.href = response.url;
+                            } else {
+                                window.location.href = '/';
+                            }
+                        }).catch(error => {
+                            console.error('Logout error:', error);
+                            window.location.href = '/';
+                        });
+                    }
+                }
+
 				// Add any dashboard-specific JavaScript here
 				function toggleMobileMenu() {
 					const menu = document.getElementById('mobile-menu');
@@ -193,6 +216,12 @@ templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ
 						dropdown.classList.add('opacity-0', 'pointer-events-none');
 						dropdown.classList.remove('opacity-100', 'pointer-events-auto');
 					}
+				});
+
+				// Add CSRF token to HTMX requests
+				document.addEventListener("htmx:configRequest", (event) => {
+					const token = document.querySelector('meta[name="csrf-token"]').content;
+					event.detail.headers['X-CSRF-Token'] = token;
 				});
 			</script>
 		</body>

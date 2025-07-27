@@ -4,7 +4,7 @@ import (
 	"askfrank/internal/middleware"
 	"askfrank/internal/model"
 	"askfrank/internal/repository"
-	"askfrank/resource/view"
+	"askfrank/resources/view"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -15,17 +15,16 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/google/uuid"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Handler struct {
 	store    *session.Store
-	repo     *repository.Repository
+	repo     repository.Repository
 	security *middleware.SecurityMiddleware
 }
 
-func NewHandler(store *session.Store, repository *repository.Repository, security *middleware.SecurityMiddleware) Handler {
+func NewHandler(store *session.Store, repository repository.Repository, security *middleware.SecurityMiddleware) Handler {
 	return Handler{store: store, repo: repository, security: security}
 }
 
@@ -108,7 +107,7 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c)
 	if err != nil {
 		slog.Error("Failed to get session", "error", err)
-		return c.Status(500).SendString("Failed to get session")
+		return c.Status(500).SendString("Failed to get sessions")
 	}
 
 	// Get user ID for logging before deleting
@@ -438,6 +437,349 @@ func (h *Handler) ConfirmUser(c *fiber.Ctx) error {
 
 	// Redirect to success page or login
 	return c.Redirect("/?activated=true")
+}
+
+// ShowAdminPage displays the admin dashboard with user overview
+func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
+	// Check if user is authenticated
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return err
+	}
+
+	sessUserId := sess.Get("user_id")
+	if sessUserId == nil {
+		return c.Redirect("/auth/login")
+	}
+
+	userIdStr, ok := sessUserId.(string)
+	if !ok {
+		return c.Status(400).SendString("Invalid session user ID")
+	}
+
+	userId, err := uuid.Parse(userIdStr)
+	if err != nil {
+		return c.Status(400).SendString("Invalid user ID format")
+	}
+
+	// Get current user to check admin privileges
+	currentUser, err := h.repo.GetUserByID(userId)
+	if err != nil {
+		slog.Error("Failed to get current user", "error", err)
+		return c.Status(500).SendString("Failed to retrieve user information")
+	}
+
+	// Check if user is admin
+	if !isAdminUser(currentUser.Email) {
+		slog.Warn("Unauthorized admin access attempt", "user_id", userId, "email", currentUser.Email, "ip", c.IP())
+		return c.Status(403).SendString("Access denied: Admin privileges required")
+	}
+
+	// Get pagination parameters
+	// Parse pagination parameters
+	page := c.QueryInt("page", 1)
+	if page < 1 {
+		page = 1
+	}
+	limit := 20 // Users per page
+	offset := (page - 1) * limit
+
+	// Get user statistics
+	stats, err := h.repo.GetUserStats()
+	if err != nil {
+		slog.Error("Failed to get user statistics", "error", err)
+		return c.Status(500).SendString("Failed to retrieve user statistics")
+	}
+
+	// Get all users with pagination
+	users, totalUsers, err := h.repo.GetAllUsers(limit, offset)
+	if err != nil {
+		slog.Error("Failed to get users", "error", err)
+		return c.Status(500).SendString("Failed to retrieve users")
+	}
+
+	// Calculate total pages
+	totalPages := (totalUsers + limit - 1) / limit
+
+	// Prepare admin page data
+	adminData := view.AdminPageData{
+		Stats: view.AdminStats{
+			TotalUsers:           stats.TotalUsers,
+			ActiveUsers:          stats.ActiveUsers,
+			PendingRegistrations: stats.PendingRegistrations,
+			TodayRegistrations:   stats.TodayRegistrations,
+		},
+		Users:       users,
+		CurrentPage: page,
+		TotalPages:  totalPages,
+		TotalUsers:  totalUsers,
+	}
+
+	// Log admin access
+	slog.Info("Admin dashboard accessed",
+		"admin_user_id", userId,
+		"admin_email", currentUser.Email,
+		"total_users", stats.TotalUsers,
+		"page", page,
+		"ip", c.IP(),
+	)
+
+	return render(c, view.AdminPage(c, adminData))
+}
+
+// isAdminUser checks if the user has admin privileges
+// Replace this with your actual admin authorization logic
+func isAdminUser(email string) bool {
+	// For demo purposes, you can hardcode admin emails
+	// In production, use a proper role-based system
+	adminEmails := []string{
+		"admin@askfrank.com",
+		"freek@askfrank.com",
+		"freekieb6@hotmail.com", // Replace with your email
+		// Add more admin emails as needed
+	}
+
+	for _, adminEmail := range adminEmails {
+		if email == adminEmail {
+			return true
+		}
+	}
+
+	return false
+}
+
+// AdminActivateUser activates a user account (admin only)
+func (h *Handler) AdminActivateUser(c *fiber.Ctx) error {
+	// Check authentication
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).SendString("Session error")
+	}
+
+	userId, ok := sess.Get("user_id").(string)
+	if !ok || userId == "" {
+		return c.Status(401).SendString("Unauthorized")
+	}
+
+	// Get current user to check admin privileges
+	userUUID, err := uuid.Parse(userId)
+	if err != nil {
+		return c.Status(400).SendString("Invalid user ID")
+	}
+
+	currentUser, err := h.repo.GetUserByID(userUUID)
+	if err != nil {
+		return c.Status(500).SendString("Failed to get current user")
+	}
+
+	// Check if user is admin
+	if !isAdminUser(currentUser.Email) {
+		slog.Warn("Non-admin user attempted to access admin function",
+			"user_id", userId,
+			"email", currentUser.Email,
+			"action", "activate_user",
+			"ip", c.IP(),
+		)
+		return c.Status(403).SendString("Access denied")
+	}
+
+	// Get target user ID from URL params
+	targetUserID := c.Params("id")
+	if targetUserID == "" {
+		return c.Status(400).SendString("User ID required")
+	}
+
+	targetUUID, err := uuid.Parse(targetUserID)
+	if err != nil {
+		return c.Status(400).SendString("Invalid user ID format")
+	}
+
+	// Get target user to verify it exists and get info for logging
+	targetUser, err := h.repo.GetUserByIDForAdmin(targetUUID)
+	if err != nil {
+		if err == repository.ErrUserNotFound {
+			return c.Status(404).SendString("User not found")
+		}
+		return c.Status(500).SendString("Failed to get target user")
+	}
+
+	// Activate the user
+	err = h.repo.ActivateUser(targetUUID)
+	if err != nil {
+		slog.Error("Failed to activate user",
+			"error", err,
+			"admin_user_id", userId,
+			"target_user_id", targetUserID,
+		)
+		return c.Status(500).SendString("Failed to activate user")
+	}
+
+	// Log admin action
+	slog.Info("User activated by admin",
+		"admin_user_id", userId,
+		"admin_email", currentUser.Email,
+		"target_user_id", targetUserID,
+		"target_email", targetUser.Email,
+		"ip", c.IP(),
+	)
+
+	// Return success response for HTMX
+	return c.Status(200).SendString(`
+		<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+			Verified
+		</span>
+	`)
+}
+
+// AdminDeleteUser deletes a user account (admin only)
+func (h *Handler) AdminDeleteUser(c *fiber.Ctx) error {
+	// Check authentication
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).SendString("Session error")
+	}
+
+	userId, ok := sess.Get("user_id").(string)
+	if !ok || userId == "" {
+		return c.Status(401).SendString("Unauthorized")
+	}
+
+	// Get current user to check admin privileges
+	userUUID, err := uuid.Parse(userId)
+	if err != nil {
+		return c.Status(400).SendString("Invalid user ID")
+	}
+
+	currentUser, err := h.repo.GetUserByID(userUUID)
+	if err != nil {
+		return c.Status(500).SendString("Failed to get current user")
+	}
+
+	// Check if user is admin
+	if !isAdminUser(currentUser.Email) {
+		slog.Warn("Non-admin user attempted to access admin function",
+			"user_id", userId,
+			"email", currentUser.Email,
+			"action", "delete_user",
+			"ip", c.IP(),
+		)
+		return c.Status(403).SendString("Access denied")
+	}
+
+	// Get target user ID from URL params
+	targetUserID := c.Params("id")
+	if targetUserID == "" {
+		return c.Status(400).SendString("User ID required")
+	}
+
+	targetUUID, err := uuid.Parse(targetUserID)
+	if err != nil {
+		return c.Status(400).SendString("Invalid user ID format")
+	}
+
+	// Prevent admin from deleting themselves
+	if targetUUID == userUUID {
+		return c.Status(400).SendString("Cannot delete your own account")
+	}
+
+	// Get target user to verify it exists and get info for logging
+	targetUser, err := h.repo.GetUserByIDForAdmin(targetUUID)
+	if err != nil {
+		if err == repository.ErrUserNotFound {
+			return c.Status(404).SendString("User not found")
+		}
+		return c.Status(500).SendString("Failed to get target user")
+	}
+
+	// Delete the user
+	err = h.repo.DeleteUser(targetUUID)
+	if err != nil {
+		slog.Error("Failed to delete user",
+			"error", err,
+			"admin_user_id", userId,
+			"target_user_id", targetUserID,
+		)
+		return c.Status(500).SendString("Failed to delete user")
+	}
+
+	// Log admin action
+	slog.Info("User deleted by admin",
+		"admin_user_id", userId,
+		"admin_email", currentUser.Email,
+		"target_user_id", targetUserID,
+		"target_email", targetUser.Email,
+		"ip", c.IP(),
+	)
+
+	// Return success response for HTMX (remove the table row)
+	return c.Status(200).SendString("")
+}
+
+// ShowAdminUserView displays detailed view of a specific user for admins
+func (h *Handler) ShowAdminUserView(c *fiber.Ctx) error {
+	// Check if user is logged in and has admin privileges
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Redirect("/auth/login")
+	}
+
+	userId := sess.Get("user_id")
+	if userId == nil {
+		return c.Redirect("/auth/login")
+	}
+
+	// Get current user to verify admin role
+	currentUser, err := h.repo.GetUserByID(userId.(uuid.UUID))
+	if err != nil {
+		return c.Redirect("/auth/login")
+	}
+
+	if currentUser.Role != "admin" {
+		return c.Status(403).SendString("Access denied")
+	}
+
+	// Get user ID from URL parameter
+	targetUserIdStr := c.Params("id")
+	targetUserId, err := uuid.Parse(targetUserIdStr)
+	if err != nil {
+		return c.Status(400).SendString("Invalid user ID")
+	}
+
+	// Get target user details
+	targetUser, err := h.repo.GetUserByIDForAdmin(targetUserId)
+	if err != nil {
+		if err == repository.ErrUserNotFound {
+			return c.Status(404).SendString("User not found")
+		}
+		slog.Error("Failed to get user for admin view",
+			"error", err,
+			"admin_user_id", userId,
+			"target_user_id", targetUserId,
+		)
+		return c.Status(500).SendString("Failed to retrieve user")
+	}
+
+	// Get user registration if it exists (for pending users)
+	var registration *model.UserRegistration
+	if !targetUser.IsEmailVerified {
+		userRegistration, err := h.repo.GetUserRegistrationByEmail(targetUser.Email)
+		if err == nil {
+			registration = &userRegistration
+		}
+	}
+
+	// Determine available actions
+	canActivate := !targetUser.IsEmailVerified && registration != nil
+	canDelete := targetUser.Role != "admin" || targetUser.ID != currentUser.ID // Can't delete yourself or other admins
+
+	data := view.AdminUserViewData{
+		User:         targetUser,
+		Registration: registration,
+		CanActivate:  canActivate,
+		CanDelete:    canDelete,
+	}
+
+	return render(c, view.AdminUserView(c, data))
 }
 
 // Health returns the health status of the application
