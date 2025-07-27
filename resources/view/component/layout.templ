@@ -97,8 +97,8 @@ templ Layout(title string, c *fiber.Ctx) {
 						</div>
 						<!-- Navigation Links -->
 						<nav class="hidden md:flex items-center space-x-6">
-							<a href="/products" class="nav-link transition-colors duration-200">
-								{ middleware.T(c, "nav.products") }
+							<a href="/solutions" class="nav-link transition-colors duration-200">
+								{ middleware.T(c, "nav.solutions") }
 							</a>
 							<a href="/learn" class="nav-link transition-colors duration-200">
 								{ middleware.T(c, "nav.learn") }
@@ -136,8 +136,8 @@ templ Layout(title string, c *fiber.Ctx) {
 				<!-- Mobile Navigation Menu -->
 				<div id="mobile-menu" class="md:hidden hidden">
 					<div class="px-2 pt-1 pb-2 space-y-1 bg-white border-t border-[#eaeaea]">
-						<a href="/products" class="nav-link block px-2 py-1.5 transition-colors duration-200">
-							{ middleware.T(c, "nav.products") }
+						<a href="/solutions" class="nav-link block px-2 py-1.5 transition-colors duration-200">
+							{ middleware.T(c, "nav.solutions") }
 						</a>
 						<a href="/learn" class="nav-link block px-2 py-1.5 transition-colors duration-200">
 							{ middleware.T(c, "nav.learn") }

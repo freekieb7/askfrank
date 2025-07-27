@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -234,6 +235,14 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 // Tracer returns a tracer for the given name
 func (t *Telemetry) Tracer(name string) oteltrace.Tracer {
 	return otel.Tracer(name)
+}
+
+// Logger returns a slog.Logger configured to send logs to OpenTelemetry if enabled, otherwise to stderr.
+func (t *Telemetry) Logger() *slog.Logger {
+	if t.IsEnabled() {
+		return slog.New(NewOTelHandler(&slog.HandlerOptions{AddSource: true}))
+	}
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: true}))
 }
 
 // IsEnabled returns whether telemetry is enabled

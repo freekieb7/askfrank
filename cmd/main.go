@@ -92,7 +92,7 @@ func main() {
 	}
 
 	// Initialize repository
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 
 	// Run database migrations
 	if err := repo.Migrate(); err != nil {
@@ -108,7 +108,7 @@ func main() {
 	}
 	securityMiddleware := middleware.NewSecurityMiddleware(securityConfig)
 
-	handler := api.NewHandler(store, repo, securityMiddleware)
+	handler := api.NewHandler(store, repo, securityMiddleware, tel.Logger())
 
 	// Set up Fiber app
 	app := fiber.New(fiber.Config{
@@ -217,6 +217,9 @@ func main() {
 	app.Get("/auth/sign-up/check-inbox", handler.ShowCheckInboxPage)
 	app.Post("/auth/sign-up/check-inbox", signupLimiter, handler.CheckInbox)
 	app.Post("/auth/sign-up/confirm", handler.ConfirmUser)
+
+	// Pricing routes
+	app.Get("/pricing", handler.ShowPricingPage)
 
 	// Account routes
 	app.Get("/account", handler.ShowAccountPage)

@@ -23,7 +23,7 @@ func TestAdminUserActions_Integration(t *testing.T) {
 		}
 	}()
 
-	testRepo := repository.NewDatabaseRepository(db)
+	testRepo := repository.NewPostgresRepository(db)
 
 	// Clean database before starting
 	testutil.CleanupTestDB(t, db)

@@ -35,7 +35,7 @@ func main() {
 	}()
 
 	// Initialize repository
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 
 	// Create test users
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)

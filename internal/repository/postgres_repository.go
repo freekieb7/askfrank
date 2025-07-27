@@ -17,15 +17,15 @@ var (
 	ErrUserRegistrationNotFound = errors.New("user registration not found")
 )
 
-type DatabaseRepository struct {
+type PostgresRepository struct {
 	db database.Database
 }
 
-func NewDatabaseRepository(db database.Database) *DatabaseRepository {
-	return &DatabaseRepository{db: db}
+func NewPostgresRepository(db database.Database) *PostgresRepository {
+	return &PostgresRepository{db: db}
 }
 
-func (r *DatabaseRepository) Migrate() error {
+func (r *PostgresRepository) Migrate() error {
 	_, err := r.db.Exec(`
 	CREATE TABLE IF NOT EXISTS tbl_user (
 		id UUID PRIMARY KEY,
@@ -73,7 +73,7 @@ func (r *DatabaseRepository) Migrate() error {
 	return nil
 }
 
-func (r *DatabaseRepository) CreateUser(user model.User) error {
+func (r *PostgresRepository) CreateUser(user model.User) error {
 	_, err := r.db.Exec("INSERT INTO tbl_user (id, name, email, password_hash, email_verified, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
 		user.ID, user.Name, user.Email, user.PasswordHash, user.EmailVerified, user.CreatedAt)
 	if err != nil {
@@ -82,7 +82,7 @@ func (r *DatabaseRepository) CreateUser(user model.User) error {
 	return nil
 }
 
-func (r *DatabaseRepository) GetUserByID(id uuid.UUID) (model.User, error) {
+func (r *PostgresRepository) GetUserByID(id uuid.UUID) (model.User, error) {
 	var user model.User
 	err := r.db.QueryRow("SELECT id, name, email, password_hash, email_verified, created_at FROM tbl_user WHERE id = $1", id).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.EmailVerified, &user.CreatedAt)
 	if err != nil {
@@ -94,7 +94,7 @@ func (r *DatabaseRepository) GetUserByID(id uuid.UUID) (model.User, error) {
 	return user, nil
 }
 
-func (r *DatabaseRepository) GetUserByEmail(email string) (model.User, error) {
+func (r *PostgresRepository) GetUserByEmail(email string) (model.User, error) {
 	var user model.User
 	err := r.db.QueryRow("SELECT id, name, email, password_hash, email_verified, created_at FROM tbl_user WHERE email = $1", email).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.EmailVerified, &user.CreatedAt)
 	if err != nil {
@@ -106,7 +106,7 @@ func (r *DatabaseRepository) GetUserByEmail(email string) (model.User, error) {
 	return user, nil
 }
 
-func (r *DatabaseRepository) UpdateUser(user model.User) error {
+func (r *PostgresRepository) UpdateUser(user model.User) error {
 	_, err := r.db.Exec("UPDATE tbl_user SET name = $1, email = $2, password_hash = $3, email_verified = $4 WHERE id = $5",
 		user.Name, user.Email, user.PasswordHash, user.EmailVerified, user.ID)
 	if err != nil {
@@ -115,7 +115,7 @@ func (r *DatabaseRepository) UpdateUser(user model.User) error {
 	return nil
 }
 
-func (r *DatabaseRepository) CreateUserRegistration(userRegistration model.UserRegistration) error {
+func (r *PostgresRepository) CreateUserRegistration(userRegistration model.UserRegistration) error {
 	_, err := r.db.Exec("INSERT INTO tbl_user_registration (id, user_id, activation_code, created_at) VALUES ($1, $2, $3, $4)",
 		userRegistration.ID, userRegistration.UserID, userRegistration.ActivationCode, userRegistration.CreatedAt)
 	if err != nil {
@@ -124,7 +124,7 @@ func (r *DatabaseRepository) CreateUserRegistration(userRegistration model.UserR
 	return nil
 }
 
-func (r *DatabaseRepository) GetUserRegistrationByUserID(userID uuid.UUID) (model.UserRegistration, error) {
+func (r *PostgresRepository) GetUserRegistrationByUserID(userID uuid.UUID) (model.UserRegistration, error) {
 	var userRegistration model.UserRegistration
 	err := r.db.QueryRow("SELECT id, user_id, activation_code, created_at FROM tbl_user_registration WHERE user_id = $1", userID).Scan(&userRegistration.ID, &userRegistration.UserID, &userRegistration.ActivationCode, &userRegistration.CreatedAt)
 	if err != nil {
@@ -136,7 +136,7 @@ func (r *DatabaseRepository) GetUserRegistrationByUserID(userID uuid.UUID) (mode
 	return userRegistration, nil
 }
 
-func (r *DatabaseRepository) GetUserRegistrationByEmail(email string) (model.UserRegistration, error) {
+func (r *PostgresRepository) GetUserRegistrationByEmail(email string) (model.UserRegistration, error) {
 	var userRegistration model.UserRegistration
 	query := `
 		SELECT ur.id, ur.user_id, ur.activation_code, ur.created_at 
@@ -154,7 +154,7 @@ func (r *DatabaseRepository) GetUserRegistrationByEmail(email string) (model.Use
 	return userRegistration, nil
 }
 
-func (r *DatabaseRepository) DeleteUserRegistration(id uuid.UUID) error {
+func (r *PostgresRepository) DeleteUserRegistration(id uuid.UUID) error {
 	_, err := r.db.Exec("DELETE FROM tbl_user_registration WHERE id = $1", id)
 	if err != nil {
 		return err
@@ -162,7 +162,7 @@ func (r *DatabaseRepository) DeleteUserRegistration(id uuid.UUID) error {
 	return nil
 }
 
-func (r *DatabaseRepository) GetUserStats() (model.AdminStats, error) {
+func (r *PostgresRepository) GetUserStats() (model.AdminStats, error) {
 	var stats model.AdminStats
 
 	// Get total users count
@@ -192,7 +192,7 @@ func (r *DatabaseRepository) GetUserStats() (model.AdminStats, error) {
 	return stats, nil
 }
 
-func (r *DatabaseRepository) GetAllUsers(limit, offset int) ([]model.UserWithRegistration, int, error) {
+func (r *PostgresRepository) GetAllUsers(limit, offset int) ([]model.UserWithRegistration, int, error) {
 	var users []model.UserWithRegistration
 	var totalCount int
 
@@ -266,7 +266,7 @@ func (r *DatabaseRepository) GetAllUsers(limit, offset int) ([]model.UserWithReg
 }
 
 // ActivateUser activates a user by setting email_verified to true and removing any pending registration
-func (r *DatabaseRepository) ActivateUser(userID uuid.UUID) error {
+func (r *PostgresRepository) ActivateUser(userID uuid.UUID) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -297,7 +297,7 @@ func (r *DatabaseRepository) ActivateUser(userID uuid.UUID) error {
 }
 
 // DeleteUser deletes a user and all associated data
-func (r *DatabaseRepository) DeleteUser(userID uuid.UUID) error {
+func (r *PostgresRepository) DeleteUser(userID uuid.UUID) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -337,7 +337,7 @@ func (r *DatabaseRepository) DeleteUser(userID uuid.UUID) error {
 }
 
 // GetUserByIDForAdmin gets a user by ID for admin operations (includes all fields)
-func (r *DatabaseRepository) GetUserByIDForAdmin(userID uuid.UUID) (model.User, error) {
+func (r *PostgresRepository) GetUserByIDForAdmin(userID uuid.UUID) (model.User, error) {
 	var user model.User
 	query := `
 		SELECT id, name, email, password_hash, email_verified, created_at
@@ -364,6 +364,6 @@ func (r *DatabaseRepository) GetUserByIDForAdmin(userID uuid.UUID) (model.User, 
 }
 
 // HealthCheck performs a simple health check on the database connection
-func (r *DatabaseRepository) HealthCheck(ctx context.Context) error {
+func (r *PostgresRepository) HealthCheck(ctx context.Context) error {
 	return r.db.PingContext(ctx)
 }

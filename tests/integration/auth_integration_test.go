@@ -22,7 +22,7 @@ func TestAuthService_Integration(t *testing.T) {
 	defer testutil.CleanupTestDB(t, db)
 
 	// Setup real services (no mocks)
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 	sessionStore := testutil.NewTestSessionStore()
 	emailService := testutil.NewTestEmailService()
 	authService := service.NewAuthService(repo, sessionStore, emailService)
@@ -117,7 +117,7 @@ func TestDatabase_Integration_CRUD(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
 
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 
 	t.Run("user_crud_operations", func(t *testing.T) {
 		// Create user

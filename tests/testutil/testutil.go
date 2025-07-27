@@ -65,7 +65,7 @@ func SetupTestDB(t *testing.T) database.Database {
 	require.NoError(t, err, "Failed to connect to test database")
 
 	// Run migrations
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 	err = repo.Migrate()
 	require.NoError(t, err, "Failed to migrate test database")
 
@@ -107,7 +107,7 @@ func CreateTestUser(t *testing.T, db database.Database) *model.User {
 		CreatedAt:     time.Now(),
 	}
 
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 	err := repo.CreateUser(*user)
 	require.NoError(t, err, "Failed to create test user")
 
@@ -122,7 +122,7 @@ func CreateTestUserRegistration(t *testing.T, db database.Database, userID uuid.
 		ActivationCode: "test-activation-code",
 	}
 
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 	err := repo.CreateUserRegistration(*registration)
 	require.NoError(t, err, "Failed to create test user registration")
 

@@ -20,7 +20,7 @@ func TestAuthService_Login_Integration(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
 
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 	sessionStore := testutil.NewTestSessionStore()
 	emailService := testutil.NewTestEmailService()
 	authService := service.NewAuthService(repo, sessionStore, emailService)
@@ -137,7 +137,7 @@ func TestAuthService_Register_Integration(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
 
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 	sessionStore := testutil.NewTestSessionStore()
 	emailService := testutil.NewTestEmailService()
 	authService := service.NewAuthService(repo, sessionStore, emailService)
@@ -251,7 +251,7 @@ func TestAuthService_PasswordStrengthValidation_Integration(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	defer testutil.CleanupTestDB(t, db)
 
-	repo := repository.NewDatabaseRepository(db)
+	repo := repository.NewPostgresRepository(db)
 	sessionStore := testutil.NewTestSessionStore()
 	emailService := testutil.NewTestEmailService()
 	authService := service.NewAuthService(repo, sessionStore, emailService)
