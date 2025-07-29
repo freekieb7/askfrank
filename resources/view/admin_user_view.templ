@@ -134,10 +134,6 @@ templ AdminUserView(c *fiber.Ctx, data AdminUserViewData) {
 								<dt class="text-sm font-medium text-gray-500">{ middleware.T(c, "admin.user.member_since") }</dt>
 								<dd class="mt-1 text-sm text-gray-900">{ data.User.CreatedAt.Format("January 2, 2006") }</dd>
 							</div>
-							<div>
-								<dt class="text-sm font-medium text-gray-500">{ middleware.T(c, "admin.user.last_updated") }</dt>
-								<dd class="mt-1 text-sm text-gray-900">{ data.User.UpdatedAt.Format("January 2, 2006 at 3:04 PM") }</dd>
-							</div>
 						</dl>
 					</div>
 				</div>

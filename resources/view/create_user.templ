@@ -177,10 +177,22 @@ templ CreateUserPage(c *fiber.Ctx) {
 				submitButton.textContent = 'Creating Account...';
 				
 				try {
+					// Get CSRF token from meta tag
+					const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+					if (!csrfTokenMeta) {
+						throw new Error('CSRF token not found in meta tag');
+					}
+					const csrfToken = csrfTokenMeta.content;
+					if (!csrfToken) {
+						throw new Error('CSRF token is empty');
+					}
+					
+					console.log('CSRF Token:', csrfToken); // Debug log
+					
 					const response = await fetch('/auth/sign-up/create-user', {
 						method: 'POST',
 						headers: {
-							'X-Csrf-Token': '{ c.Locals("token") }'
+							'X-Csrf-Token': csrfToken
 						},
 						body: formData
 					});
@@ -211,7 +223,7 @@ templ CreateUserPage(c *fiber.Ctx) {
 				} finally {
 					// Re-enable submit button
 					submitButton.disabled = false;
-					submitButton.textContent = '{ middleware.T(c, "auth.signup.submit_button") }';
+					submitButton.textContent = {{ middleware.T(c, "auth.signup.submit_button") }};
 				}
 			});
 		</script>

@@ -3,8 +3,7 @@ package integration
 import (
 	"askfrank/internal/model"
 	"askfrank/internal/repository"
-	"askfrank/tests/testutil"
-	"log"
+	testutil "askfrank/tests/util"
 	"net/http"
 	"testing"
 	"time"
@@ -17,44 +16,41 @@ import (
 func TestAdminPage_Integration(t *testing.T) {
 	// Setup test environment
 	db := testutil.SetupTestDB(t)
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Fatalf("Failed to close database connection: %v", err)
-		}
-	}()
+
+	// Use t.Cleanup for more reliable cleanup
+	t.Cleanup(func() {
+		testutil.CleanupTestDB(t, db)
+	})
 
 	testRepo := repository.NewPostgresRepository(db)
 	testApp := testutil.SetupTestApp(t, db)
 
-	// Clean database before starting
-	testutil.CleanupTestDB(t, db)
-
 	// Create test users
 	adminUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Admin User",
-		Email:         "admin@example.com",
-		PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-		EmailVerified: true,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Admin User",
+		Email:           "admin@example.com",
+		PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+		IsEmailVerified: true,
+		CreatedAt:       time.Now(),
 	}
 
 	regularUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Regular User",
-		Email:         "user@example.com",
-		PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-		EmailVerified: true,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Regular User",
+		Email:           "user@example.com",
+		PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+		IsEmailVerified: true,
+		CreatedAt:       time.Now(),
 	}
 
 	pendingUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Pending User",
-		Email:         "pending@example.com",
-		PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-		EmailVerified: false,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Pending User",
+		Email:           "pending@example.com",
+		PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+		IsEmailVerified: false,
+		CreatedAt:       time.Now(),
 	}
 
 	// Create users in database
@@ -137,8 +133,8 @@ func TestAdminPage_Integration(t *testing.T) {
 			}
 
 			// Verify that Role and IsEmailVerified are properly set by repository
-			assert.Equal(t, "user", user.User.Role, "Default role should be 'user'")
-			assert.Equal(t, user.User.EmailVerified, user.User.IsEmailVerified, "IsEmailVerified should match EmailVerified")
+			assert.Equal(t, user.User.Role, user.User.Role, "Default role should be 'user'")
+			assert.Equal(t, user.User.IsEmailVerified, user.User.IsEmailVerified, "IsEmailVerified should match EmailVerified")
 		}
 
 		assert.True(t, userEmails["admin@example.com"], "Should include admin user")
@@ -172,16 +168,13 @@ func TestAdminPage_Integration(t *testing.T) {
 
 func TestAdminPage_AdminStatsCalculation(t *testing.T) {
 	db := testutil.SetupTestDB(t)
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Fatalf("Failed to close database connection: %v", err)
-		}
-	}()
+
+	// Use t.Cleanup for more reliable cleanup
+	t.Cleanup(func() {
+		testutil.CleanupTestDB(t, db)
+	})
 
 	testRepo := repository.NewPostgresRepository(db)
-
-	// Clean database before starting
-	testutil.CleanupTestDB(t, db)
 
 	// Create users with different creation dates
 	today := time.Now()
@@ -189,22 +182,22 @@ func TestAdminPage_AdminStatsCalculation(t *testing.T) {
 
 	// User created today
 	todayUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Today User",
-		Email:         "today@example.com",
-		PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-		EmailVerified: true,
-		CreatedAt:     today,
+		ID:              uuid.New(),
+		Name:            "Today User",
+		Email:           "today@example.com",
+		PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+		IsEmailVerified: true,
+		CreatedAt:       today,
 	}
 
 	// User created yesterday
 	yesterdayUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Yesterday User",
-		Email:         "yesterday@example.com",
-		PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-		EmailVerified: true,
-		CreatedAt:     yesterday,
+		ID:              uuid.New(),
+		Name:            "Yesterday User",
+		Email:           "yesterday@example.com",
+		PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+		IsEmailVerified: true,
+		CreatedAt:       yesterday,
 	}
 
 	err := testRepo.CreateUser(todayUser)

@@ -52,7 +52,7 @@ templ AccountPage(c *fiber.Ctx, user model.User) {
 									</label>
 									<div class="p-2 bg-[#EAF2EF] rounded-md border flex items-center justify-between">
 										<span class="text-[#05668D] font-medium">{ user.Email }</span>
-										if user.EmailVerified {
+										if user.IsEmailVerified {
 											<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
 												<i class="fas fa-check-circle mr-1"></i>
 												{ middleware.T(c, "account.info.email_verified") }
@@ -124,10 +124,12 @@ templ AccountPage(c *fiber.Ctx, user model.User) {
 									<i class="fas fa-tachometer-alt mr-2"></i>
 									{ middleware.T(c, "account.quick_actions.dashboard") }
 								</a>
-								<a href="/admin" class="block w-full text-center bg-gray-100 text-[#464646] px-3 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors duration-200">
-									<i class="fas fa-lock mr-2"></i>
-									{ middleware.T(c, "account.quick_actions.admin") }
-								</a>
+								if user.Role.String() == "admin" {
+									<a href="/admin" class="block w-full text-center bg-gray-100 text-[#464646] px-3 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors duration-200">
+										<i class="fas fa-lock mr-2"></i>
+										{ middleware.T(c, "account.quick_actions.admin") }
+									</a>
+								}
 								<a href="/contact" class="block w-full text-center bg-gray-100 text-[#464646] px-3 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors duration-200">
 									<i class="fas fa-headset mr-2"></i>
 									{ middleware.T(c, "account.quick_actions.contact_support") }

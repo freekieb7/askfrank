@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"askfrank/internal/config"
-	"askfrank/internal/telemetry"
+	"askfrank/internal/monitoring"
 )
 
 // Logger wraps slog.Logger with additional functionality
@@ -23,7 +23,7 @@ func New(cfg config.Config) *Logger {
 	// Create different handlers based on environment
 	if cfg.Server.Environment == "production" {
 		// In production, use JSON format and send to OpenTelemetry
-		otelHandler := telemetry.NewOTelHandler(&slog.HandlerOptions{
+		otelHandler := monitoring.NewOTelHandler(&slog.HandlerOptions{
 			Level:     slog.LevelInfo,
 			AddSource: true,
 		})
@@ -38,7 +38,7 @@ func New(cfg config.Config) *Logger {
 		handler = NewMultiHandler(otelHandler, consoleHandler)
 	} else {
 		// In development, use text format for better readability
-		otelHandler := telemetry.NewOTelHandler(&slog.HandlerOptions{
+		otelHandler := monitoring.NewOTelHandler(&slog.HandlerOptions{
 			Level:     slog.LevelDebug,
 			AddSource: true,
 		})

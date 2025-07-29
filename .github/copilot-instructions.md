@@ -78,7 +78,7 @@ askfrank/
 - User roles and permissions system
 
 ### Security Middleware Layers
-1. **CSRF Protection**: All forms must include `{{ c.Locals("token") }}` token
+1. **CSRF Protection**: All forms must include csrf token
 2. **Rate Limiting**: 5 attempts per 15 minutes for auth endpoints
 3. **Input Validation**: HTML escaping and suspicious content detection
 4. **Honeypot Fields**: Hidden form fields for bot detection
@@ -86,18 +86,6 @@ askfrank/
 6. **Disposable Email**: Blocked domains list for signup protection
 7. **XSS Protection**: Content sanitization and validation
 8. **CAPTCHA**: reCAPTCHA integration for forms
-
-### Form Security Pattern
-```templ
-<form method="POST" action="/endpoint">
-    <input type="hidden" name="csrf_token" value={{ c.Locals("token") }} />
-    <!-- Honeypot field -->
-    <div style="display: none;">
-        <input type="text" name="website" tabindex="-1" autocomplete="off"/>
-    </div>
-    <!-- Form fields -->
-</form>
-```
 
 ## 📝 Code Conventions
 

@@ -1,21 +1,39 @@
 package model
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type Role string
+
+const (
+	RoleUser  Role = "user"
+	RoleAdmin Role = "admin"
+)
+
+func (r Role) String() string {
+	return string(r)
+}
+
+func (r *Role) Scan(value any) error {
+	if str, ok := value.(string); ok {
+		*r = Role(str)
+		return nil
+	}
+	return fmt.Errorf("cannot scan %T into Role", value)
+}
 
 type User struct {
 	ID              uuid.UUID `json:"id"`
 	Name            string    `json:"name"`
 	Email           string    `json:"email"`
 	PasswordHash    string    `json:"-"`
-	Role            string    `json:"role"`
+	Role            Role      `json:"role"`
 	IsEmailVerified bool      `json:"is_email_verified"`
-	EmailVerified   bool      `json:"email_verified"` // Keep for backward compatibility
 	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type UserRegistration struct {

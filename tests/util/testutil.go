@@ -1,4 +1,4 @@
-package testutil
+package util
 
 import (
 	"askfrank/internal/config"
@@ -6,6 +6,7 @@ import (
 	"askfrank/internal/model"
 	"askfrank/internal/repository"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,12 +61,12 @@ func SetupTestDB(t *testing.T) database.Database {
 	dataSourceName := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.Database.SSLMode)
 
-	db, err := database.NewDatabase(dataSourceName)
+	db, err := database.NewPostgresDatabase(dataSourceName)
 	require.NoError(t, err, "Failed to connect to test database")
 
 	// Run migrations
-	repo := repository.NewPostgresRepository(db)
-	err = repo.Migrate()
+	repo := repository.NewPostgresRepository(db).(*repository.PostgresRepository)
+	err = repo.Migrate(context.Background())
 	require.NoError(t, err, "Failed to migrate test database")
 
 	return db
@@ -99,12 +99,12 @@ func SetupTestApp(t *testing.T, db database.Database) *fiber.App {
 // CreateTestUser creates a test user in the database
 func CreateTestUser(t *testing.T, db database.Database) *model.User {
 	user := &model.User{
-		ID:            uuid.New(),
-		Name:          "Test User",
-		Email:         fmt.Sprintf("test%d@example.com", time.Now().UnixNano()),
-		PasswordHash:  "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
-		EmailVerified: true,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Test User",
+		Email:           fmt.Sprintf("test%d@example.com", time.Now().UnixNano()),
+		PasswordHash:    "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
+		IsEmailVerified: true,
+		CreatedAt:       time.Now(),
 	}
 
 	repo := repository.NewPostgresRepository(db)
@@ -177,12 +177,12 @@ func AssertJSONResponse(t *testing.T, resp *http.Response, expectedStatus int, e
 // MockUser returns a mock user for testing
 func MockUser() model.User {
 	return model.User{
-		ID:            uuid.New(),
-		Name:          "Mock User",
-		Email:         "mock@example.com",
-		PasswordHash:  "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
-		EmailVerified: true,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Mock User",
+		Email:           "mock@example.com",
+		PasswordHash:    "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
+		IsEmailVerified: true,
+		CreatedAt:       time.Now(),
 	}
 }
 

@@ -6,8 +6,8 @@ import (
 	"askfrank/internal/database"
 	"askfrank/internal/i18n"
 	"askfrank/internal/middleware"
+	"askfrank/internal/monitoring"
 	"askfrank/internal/repository"
-	"askfrank/internal/telemetry"
 	"context"
 	"fmt"
 	"log"
@@ -36,14 +36,14 @@ func main() {
 	}
 
 	// Initialize telemetry
-	tel, err := telemetry.New(cfg.Telemetry)
+	telemetry, err := monitoring.NewOpenTelemetry(cfg.Telemetry)
 	if err != nil {
 		log.Fatalf("Failed to initialize telemetry: %v", err)
 	}
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := tel.Shutdown(ctx); err != nil {
+		if err := telemetry.Shutdown(ctx); err != nil {
 			slog.Error("Failed to shutdown telemetry", "error", err)
 		}
 	}()
@@ -86,18 +86,13 @@ func main() {
 	// Connect to the database
 	dataSourceName := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.Database.SSLMode)
-	db, err := database.NewDatabase(dataSourceName)
+	db, err := database.NewPostgresDatabase(dataSourceName)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
 	// Initialize repository
 	repo := repository.NewPostgresRepository(db)
-
-	// Run database migrations
-	if err := repo.Migrate(); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
-	}
 
 	// Initialize security middleware
 	securityConfig := middleware.SecurityConfig{
@@ -108,7 +103,7 @@ func main() {
 	}
 	securityMiddleware := middleware.NewSecurityMiddleware(securityConfig)
 
-	handler := api.NewHandler(store, repo, securityMiddleware, tel.Logger())
+	handler := api.NewHandler(store, repo, telemetry)
 
 	// Set up Fiber app
 	app := fiber.New(fiber.Config{
@@ -118,7 +113,7 @@ func main() {
 
 	// Add telemetry middleware (first to capture all requests)
 	if cfg.Telemetry.Enabled {
-		app.Use(telemetry.FiberMiddleware(cfg.Telemetry.ServiceName))
+		app.Use(monitoring.FiberMiddleware(cfg.Telemetry.ServiceName))
 	}
 
 	// Add security headers middleware

@@ -9,7 +9,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 )
 
 var (
@@ -21,61 +25,34 @@ type PostgresRepository struct {
 	db database.Database
 }
 
-func NewPostgresRepository(db database.Database) *PostgresRepository {
+func NewPostgresRepository(db database.Database) Repository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) Migrate() error {
-	_, err := r.db.Exec(`
-	CREATE TABLE IF NOT EXISTS tbl_user (
-		id UUID PRIMARY KEY,
-		name VARCHAR(100) NOT NULL,
-		email VARCHAR(100) NOT NULL UNIQUE,
-		password_hash VARCHAR(255) NOT NULL,
-		email_verified BOOLEAN NOT NULL,
-		created_at TIMESTAMP NOT NULL
-	);`)
+func (r *PostgresRepository) Migrate(ctx context.Context) error {
+	driver, err := postgres.WithInstance(r.db.DB, &postgres.Config{})
 	if err != nil {
-		return fmt.Errorf("failed to migrate database: %w", err)
+		return fmt.Errorf("failed to create postgres driver: %w", err)
 	}
 
-	_, err = r.db.Exec(`
-	CREATE TABLE IF NOT EXISTS tbl_user_registration (
-		id UUID PRIMARY KEY,
-		user_id UUID NOT NULL REFERENCES tbl_user(id),
-		activation_code VARCHAR(255) NOT NULL,
-		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);`)
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://../../migrations",
+		"postgres", driver)
 	if err != nil {
-		return fmt.Errorf("failed to migrate database: %w", err)
+		return fmt.Errorf("failed to create new migration instance: %w", err)
 	}
 
-	// Add created_at column to existing user_registration tables
-	_, err = r.db.Exec(`
-	ALTER TABLE tbl_user_registration 
-	ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;`)
-	if err != nil {
-		return fmt.Errorf("failed to add created_at column to user_registration: %w", err)
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
-	// Create sessions table for storing session data
-	_, err = r.db.Exec(`
-	CREATE TABLE IF NOT EXISTS sessions (
-		k VARCHAR(255) PRIMARY KEY,
-		v BYTEA,
-		e BIGINT
-	);`)
-	if err != nil {
-		return fmt.Errorf("failed to create sessions table: %w", err)
-	}
-
-	slog.Info("Database migration completed")
+	slog.Info("Database migrations applied successfully")
 	return nil
 }
 
 func (r *PostgresRepository) CreateUser(user model.User) error {
-	_, err := r.db.Exec("INSERT INTO tbl_user (id, name, email, password_hash, email_verified, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-		user.ID, user.Name, user.Email, user.PasswordHash, user.EmailVerified, user.CreatedAt)
+	_, err := r.db.Exec("INSERT INTO tbl_user (id, name, email, password_hash, role, is_email_verified, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		user.ID, user.Name, user.Email, user.PasswordHash, user.Role, user.IsEmailVerified, user.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -84,7 +61,7 @@ func (r *PostgresRepository) CreateUser(user model.User) error {
 
 func (r *PostgresRepository) GetUserByID(id uuid.UUID) (model.User, error) {
 	var user model.User
-	err := r.db.QueryRow("SELECT id, name, email, password_hash, email_verified, created_at FROM tbl_user WHERE id = $1", id).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.EmailVerified, &user.CreatedAt)
+	err := r.db.QueryRow("SELECT id, name, email, password_hash, role, is_email_verified, created_at FROM tbl_user WHERE id = $1", id).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.Role, &user.IsEmailVerified, &user.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return model.User{}, ErrUserNotFound
@@ -96,7 +73,7 @@ func (r *PostgresRepository) GetUserByID(id uuid.UUID) (model.User, error) {
 
 func (r *PostgresRepository) GetUserByEmail(email string) (model.User, error) {
 	var user model.User
-	err := r.db.QueryRow("SELECT id, name, email, password_hash, email_verified, created_at FROM tbl_user WHERE email = $1", email).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.EmailVerified, &user.CreatedAt)
+	err := r.db.QueryRow("SELECT id, name, email, password_hash, role, is_email_verified, created_at FROM tbl_user WHERE email = $1", email).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.Role, &user.IsEmailVerified, &user.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return model.User{}, ErrUserNotFound
@@ -107,8 +84,8 @@ func (r *PostgresRepository) GetUserByEmail(email string) (model.User, error) {
 }
 
 func (r *PostgresRepository) UpdateUser(user model.User) error {
-	_, err := r.db.Exec("UPDATE tbl_user SET name = $1, email = $2, password_hash = $3, email_verified = $4 WHERE id = $5",
-		user.Name, user.Email, user.PasswordHash, user.EmailVerified, user.ID)
+	_, err := r.db.Exec("UPDATE tbl_user SET name = $1, email = $2, password_hash = $3, role = $4, is_email_verified = $5 WHERE id = $6",
+		user.Name, user.Email, user.PasswordHash, user.Role, user.IsEmailVerified, user.ID)
 	if err != nil {
 		return err
 	}
@@ -172,7 +149,7 @@ func (r *PostgresRepository) GetUserStats() (model.AdminStats, error) {
 	}
 
 	// Get active users count (users who have been verified)
-	err = r.db.QueryRow("SELECT COUNT(*) FROM tbl_user WHERE email_verified = true").Scan(&stats.ActiveUsers)
+	err = r.db.QueryRow("SELECT COUNT(*) FROM tbl_user WHERE is_email_verified = true").Scan(&stats.ActiveUsers)
 	if err != nil {
 		return model.AdminStats{}, err
 	}
@@ -205,7 +182,7 @@ func (r *PostgresRepository) GetAllUsers(limit, offset int) ([]model.UserWithReg
 	// Get users with optional registration info
 	query := `
 		SELECT 
-			u.id, u.name, u.email, u.email_verified, u.created_at,
+			u.id, u.name, u.email, u.role, u.is_email_verified, u.created_at,
 			ur.id, ur.activation_code, ur.created_at
 		FROM tbl_user u
 		LEFT JOIN tbl_user_registration ur ON u.id = ur.user_id
@@ -229,17 +206,12 @@ func (r *PostgresRepository) GetAllUsers(limit, offset int) ([]model.UserWithReg
 
 		err := rows.Scan(
 			&user.User.ID, &user.User.Name, &user.User.Email,
-			&user.User.EmailVerified, &user.User.CreatedAt,
+			&user.User.Role, &user.User.IsEmailVerified, &user.User.CreatedAt,
 			&regID, &regActivationCode, &regCreatedAt,
 		)
 		if err != nil {
 			return nil, 0, err
 		}
-
-		// Set consistent fields
-		user.User.IsEmailVerified = user.User.EmailVerified
-		user.User.Role = "user"                   // Default role since we don't have role column
-		user.User.UpdatedAt = user.User.CreatedAt // Use created_at as fallback
 
 		// Set registration info if exists
 		if regID.Valid {
@@ -277,8 +249,7 @@ func (r *PostgresRepository) ActivateUser(userID uuid.UUID) error {
 		}
 	}()
 
-	// Update user to set email_verified = true
-	_, err = tx.Exec("UPDATE tbl_user SET email_verified = true WHERE id = $1", userID)
+	_, err = tx.Exec("UPDATE tbl_user SET is_email_verified = true WHERE id = $1", userID)
 	if err != nil {
 		return fmt.Errorf("failed to activate user: %w", err)
 	}
@@ -340,13 +311,13 @@ func (r *PostgresRepository) DeleteUser(userID uuid.UUID) error {
 func (r *PostgresRepository) GetUserByIDForAdmin(userID uuid.UUID) (model.User, error) {
 	var user model.User
 	query := `
-		SELECT id, name, email, password_hash, email_verified, created_at
+		SELECT id, name, email, password_hash, role, is_email_verified, created_at
 		FROM tbl_user 
 		WHERE id = $1
 	`
 	err := r.db.QueryRow(query, userID).Scan(
 		&user.ID, &user.Name, &user.Email, &user.PasswordHash,
-		&user.EmailVerified, &user.CreatedAt,
+		&user.Role, &user.IsEmailVerified, &user.CreatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -354,11 +325,6 @@ func (r *PostgresRepository) GetUserByIDForAdmin(userID uuid.UUID) (model.User, 
 		}
 		return model.User{}, err
 	}
-
-	// Set consistent fields
-	user.IsEmailVerified = user.EmailVerified
-	user.Role = "user"              // Default role since we don't have role column
-	user.UpdatedAt = user.CreatedAt // Use created_at as fallback
 
 	return user, nil
 }

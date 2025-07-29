@@ -2,6 +2,7 @@ package service
 
 import (
 	"askfrank/internal/model"
+	telemetry "askfrank/internal/monitoring"
 	"askfrank/internal/repository"
 	"context"
 	"crypto/rand"
@@ -30,17 +31,13 @@ type AuthService struct {
 	repo         repository.Repository
 	sessionStore SessionStore
 	emailService EmailService
+	telemetry    telemetry.Telemetry
 }
 
 type SessionStore interface {
 	Set(key string, value interface{}) error
 	Get(key string) (interface{}, error)
 	Delete(key string) error
-}
-
-type EmailService interface {
-	SendVerificationEmail(email, token string) error
-	SendPasswordResetEmail(email, token string) error
 }
 
 type LoginRequest struct {
@@ -61,6 +58,7 @@ func NewAuthService(repo repository.Repository, sessionStore SessionStore, email
 		repo:         repo,
 		sessionStore: sessionStore,
 		emailService: emailService,
+		telemetry:    nil, // Will be set later via SetTelemetry
 	}
 }
 
@@ -88,7 +86,10 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*model.User,
 	// Get user
 	user, err := s.repo.GetUserByEmail(req.Email)
 	if err != nil {
-		s.recordFailedLogin(ctx, req.Email)
+		slog.WarnContext(ctx, "Failed login attempt recorded",
+			"email", req.Email,
+			"timestamp", time.Now(),
+		)
 		span.SetStatus(codes.Error, "User not found")
 		span.RecordError(err)
 
@@ -100,7 +101,11 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*model.User,
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		s.recordFailedLogin(ctx, req.Email)
+		slog.WarnContext(ctx, "Failed login attempt recorded",
+			"email", req.Email,
+			"timestamp", time.Now(),
+		)
+
 		span.SetStatus(codes.Error, "Invalid password")
 		span.RecordError(err)
 
@@ -111,7 +116,7 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*model.User,
 	}
 
 	// Check email verification
-	if !user.EmailVerified {
+	if !user.IsEmailVerified {
 		span.SetStatus(codes.Error, "Email not verified")
 		logger.WarnContext(ctx, "Login failed - email not verified",
 			"user_id", user.ID.String(),
@@ -120,7 +125,11 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*model.User,
 	}
 
 	// Record successful login
-	s.recordSuccessfulLogin(ctx, user.ID)
+	slog.InfoContext(ctx, "Successful login recorded",
+		"user_id", user.ID.String(),
+		"timestamp", time.Now(),
+	)
+
 	span.SetStatus(codes.Ok, "Login successful")
 	span.SetAttributes(
 		attribute.String("auth.user_id", user.ID.String()),
@@ -186,12 +195,13 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*model
 
 	// Create user
 	user := &model.User{
-		ID:            uuid.New(),
-		Name:          "", // TODO: Get from registration form
-		Email:         req.Email,
-		PasswordHash:  string(hashedPassword),
-		EmailVerified: false,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "", // TODO: Get from registration form
+		Email:           req.Email,
+		PasswordHash:    string(hashedPassword),
+		Role:            model.RoleUser, // Set default role
+		IsEmailVerified: false,
+		CreatedAt:       time.Now(),
 	}
 
 	if err := s.repo.CreateUser(*user); err != nil {
@@ -201,11 +211,22 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*model
 			"error", err.Error(),
 			"user_id", user.ID.String(),
 		)
+
+		// Record failed registration metric
+		if s.telemetry != nil {
+			s.telemetry.RecordUserRegistration(ctx, req.Email, false)
+		}
+
 		return nil, err
 	}
 
+	// Record successful registration metric (before email verification)
+	if s.telemetry != nil {
+		s.telemetry.RecordUserRegistration(ctx, req.Email, true)
+	}
+
 	// Send verification email
-	verificationToken, err := s.generateVerificationToken(user.ID)
+	verificationToken, err := s.generateVerificationToken()
 	if err != nil {
 		logger.ErrorContext(ctx, "Failed to generate verification token",
 			"error", err.Error(),
@@ -234,7 +255,7 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*model
 
 	logger.InfoContext(ctx, "Registration successful",
 		"user_id", user.ID.String(),
-		"email_verified", user.EmailVerified,
+		"is_email_verified", user.IsEmailVerified,
 	)
 
 	return user, nil
@@ -270,21 +291,7 @@ func (s *AuthService) validatePasswordStrength(password string) error {
 	return nil
 }
 
-func (s *AuthService) recordFailedLogin(ctx context.Context, email string) {
-	slog.WarnContext(ctx, "Failed login attempt recorded",
-		"email", email,
-		"timestamp", time.Now(),
-	)
-}
-
-func (s *AuthService) recordSuccessfulLogin(ctx context.Context, userID uuid.UUID) {
-	slog.InfoContext(ctx, "Successful login recorded",
-		"user_id", userID.String(),
-		"timestamp", time.Now(),
-	)
-}
-
-func (s *AuthService) generateVerificationToken(userID uuid.UUID) (string, error) {
+func (s *AuthService) generateVerificationToken() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err

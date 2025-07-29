@@ -24,7 +24,7 @@ func main() {
 	// Connect to the database
 	dataSourceName := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.Database.SSLMode)
-	db, err := database.NewDatabase(dataSourceName)
+	db, err := database.NewPostgresDatabase(dataSourceName)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -45,42 +45,42 @@ func main() {
 
 	// Admin user (verified)
 	adminUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Admin User",
-		Email:         "admin@example.com",
-		PasswordHash:  string(hashedPassword),
-		EmailVerified: true,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Admin User",
+		Email:           "admin@example.com",
+		PasswordHash:    string(hashedPassword),
+		IsEmailVerified: true,
+		CreatedAt:       time.Now(),
 	}
 
 	// Regular verified user
 	regularUser := model.User{
-		ID:            uuid.New(),
-		Name:          "John Doe",
-		Email:         "john@example.com",
-		PasswordHash:  string(hashedPassword),
-		EmailVerified: true,
-		CreatedAt:     time.Now().Add(-24 * time.Hour), // Created yesterday
+		ID:              uuid.New(),
+		Name:            "John Doe",
+		Email:           "john@example.com",
+		PasswordHash:    string(hashedPassword),
+		IsEmailVerified: true,
+		CreatedAt:       time.Now().Add(-24 * time.Hour), // Created yesterday
 	}
 
 	// Pending user (not verified)
 	pendingUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Jane Smith",
-		Email:         "jane@example.com",
-		PasswordHash:  string(hashedPassword),
-		EmailVerified: false,
-		CreatedAt:     time.Now().Add(-2 * time.Hour), // Created 2 hours ago
+		ID:              uuid.New(),
+		Name:            "Jane Smith",
+		Email:           "jane@example.com",
+		PasswordHash:    string(hashedPassword),
+		IsEmailVerified: false,
+		CreatedAt:       time.Now().Add(-2 * time.Hour), // Created 2 hours ago
 	}
 
 	// Another pending user
 	pendingUser2 := model.User{
-		ID:            uuid.New(),
-		Name:          "Bob Wilson",
-		Email:         "bob@example.com",
-		PasswordHash:  string(hashedPassword),
-		EmailVerified: false,
-		CreatedAt:     time.Now().Add(-30 * time.Minute), // Created 30 minutes ago
+		ID:              uuid.New(),
+		Name:            "Bob Wilson",
+		Email:           "bob@example.com",
+		PasswordHash:    string(hashedPassword),
+		IsEmailVerified: false,
+		CreatedAt:       time.Now().Add(-30 * time.Minute), // Created 30 minutes ago
 	}
 
 	// Create users

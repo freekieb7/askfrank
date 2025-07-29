@@ -1,8 +1,7 @@
-package telemetry
+package monitoring
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"os"
@@ -15,31 +14,41 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 )
 
-type Telemetry struct {
-	tracerProvider *trace.TracerProvider
-	loggerProvider *sdklog.LoggerProvider
-	config         config.TelemetryConfig
+type Telemetry interface {
+	RecordUserRegistration(ctx context.Context, email string, success bool)
+	Logger() *slog.Logger
+	Shutdown(ctx context.Context) error
 }
 
-// New creates a new telemetry instance with OTLP gRPC exporters for traces and logs
-func New(cfg config.TelemetryConfig) (*Telemetry, error) {
+type OpenTelemetry struct {
+	tracerProvider *trace.TracerProvider
+	loggerProvider *sdklog.LoggerProvider
+	meterProvider  *sdkmetric.MeterProvider
+	config         config.TelemetryConfig
+
+	// Metrics instruments
+	userRegistrations metric.Int64Counter
+}
+
+// New creates a new telemetry instance with OTLP gRPC exporters for traces, logs, and metrics
+func NewOpenTelemetry(cfg config.TelemetryConfig) (Telemetry, error) {
 	if !cfg.Enabled || cfg.ExporterURL == "" {
 		slog.Info("Telemetry disabled or no exporter URL provided")
-		return &Telemetry{config: cfg}, nil
+		return &OpenTelemetry{config: cfg}, nil
 	}
 
 	// Create resource with service information
@@ -61,6 +70,12 @@ func New(cfg config.TelemetryConfig) (*Telemetry, error) {
 		return nil, fmt.Errorf("failed to create log exporter: %w", err)
 	}
 
+	// Create metrics exporter
+	metricExporter, err := createMetricExporter(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+	}
+
 	// Create tracer provider
 	tp := trace.NewTracerProvider(
 		trace.WithBatcher(traceExporter),
@@ -74,13 +89,34 @@ func New(cfg config.TelemetryConfig) (*Telemetry, error) {
 		sdklog.WithResource(res),
 	)
 
+	// Create meter provider
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(res),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter,
+			sdkmetric.WithInterval(10*time.Second))), // Export metrics every 10 seconds
+	)
+
 	// Set global providers and propagator
 	otel.SetTracerProvider(tp)
+	otel.SetMeterProvider(mp)
 	global.SetLoggerProvider(lp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
+
+	// Create telemetry instance
+	tel := &OpenTelemetry{
+		tracerProvider: tp,
+		loggerProvider: lp,
+		meterProvider:  mp,
+		config:         cfg,
+	}
+
+	// Initialize metrics instruments
+	if err := tel.initMetrics(); err != nil {
+		return nil, fmt.Errorf("failed to initialize metrics: %w", err)
+	}
 
 	slog.Info("Telemetry initialized successfully",
 		"service", cfg.ServiceName,
@@ -90,127 +126,59 @@ func New(cfg config.TelemetryConfig) (*Telemetry, error) {
 		"sampling_ratio", cfg.SamplingRatio,
 	)
 
-	return &Telemetry{
-		tracerProvider: tp,
-		loggerProvider: lp,
-		config:         cfg,
-	}, nil
+	return tel, nil
 }
 
 // createTraceExporter creates the OTLP trace exporter
 func createTraceExporter(cfg config.TelemetryConfig) (trace.SpanExporter, error) {
-	opts := createGRPCOptions(cfg)
-	return otlptracegrpc.New(context.Background(), opts...)
+	return otlptracegrpc.New(context.Background(), []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(cfg.ExporterURL),
+		otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
+	}...)
 }
 
 // createLogExporter creates the OTLP log exporter
 func createLogExporter(cfg config.TelemetryConfig) (sdklog.Exporter, error) {
-	opts := createLogGRPCOptions(cfg)
-	return otlploggrpc.New(context.Background(), opts...)
+	return otlploggrpc.New(context.Background(), []otlploggrpc.Option{
+		otlploggrpc.WithEndpoint(cfg.ExporterURL),
+		otlploggrpc.WithTLSCredentials(insecure.NewCredentials()),
+	}...)
 }
 
-// createGRPCOptions creates common gRPC options for trace exporters
-func createGRPCOptions(cfg config.TelemetryConfig) []otlptracegrpc.Option {
-	// Clean the endpoint URL
-	endpoint := strings.TrimPrefix(cfg.ExporterURL, "grpc://")
-	endpoint = strings.TrimPrefix(endpoint, "http://")
-	endpoint = strings.TrimPrefix(endpoint, "https://")
-
-	// Determine if this is a local endpoint (Alloy) or Grafana Cloud
-	isLocal := strings.Contains(endpoint, "127.0.0.1") ||
-		strings.Contains(endpoint, "localhost") ||
-		!strings.Contains(endpoint, "grafana.net")
-
-	if isLocal {
-		// Local Alloy configuration
-		slog.Info("Configuring trace telemetry for local Alloy", "endpoint", endpoint)
-		return []otlptracegrpc.Option{
-			otlptracegrpc.WithEndpoint(endpoint),
-			otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
-		}
-	} else {
-		// Grafana Cloud configuration
-		if cfg.APIKey == "" || cfg.InstanceID == "" {
-			slog.Error("Grafana Cloud API key and instance ID are required for remote endpoint")
-			return nil
-		}
-
-		// Create credentials with authentication
-		creds := credentials.NewTLS(&tls.Config{})
-
-		// Create gRPC connection options with auth
-		dialOpts := []grpc.DialOption{
-			grpc.WithTransportCredentials(creds),
-			grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-				// Add authentication headers
-				ctx = metadata.AppendToOutgoingContext(ctx,
-					"authorization", fmt.Sprintf("Basic %s:%s", cfg.InstanceID, cfg.APIKey),
-				)
-				return invoker(ctx, method, req, reply, cc, opts...)
-			}),
-		}
-
-		slog.Info("Configuring trace telemetry for Grafana Cloud", "endpoint", endpoint)
-		return []otlptracegrpc.Option{
-			otlptracegrpc.WithEndpoint(endpoint),
-			otlptracegrpc.WithTLSCredentials(creds),
-			otlptracegrpc.WithDialOption(dialOpts...),
-		}
-	}
+// createMetricExporter creates the OTLP metric exporter
+func createMetricExporter(cfg config.TelemetryConfig) (sdkmetric.Exporter, error) {
+	return otlpmetricgrpc.New(context.Background(), []otlpmetricgrpc.Option{
+		otlpmetricgrpc.WithEndpoint(cfg.ExporterURL),
+		otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()),
+	}...)
 }
 
-// createLogGRPCOptions creates gRPC options for log exporters
-func createLogGRPCOptions(cfg config.TelemetryConfig) []otlploggrpc.Option {
-	// Clean the endpoint URL
-	endpoint := strings.TrimPrefix(cfg.ExporterURL, "grpc://")
-	endpoint = strings.TrimPrefix(endpoint, "http://")
-	endpoint = strings.TrimPrefix(endpoint, "https://")
-
-	// Determine if this is a local endpoint (Alloy) or Grafana Cloud
-	isLocal := strings.Contains(endpoint, "127.0.0.1") ||
-		strings.Contains(endpoint, "localhost") ||
-		!strings.Contains(endpoint, "grafana.net")
-
-	if isLocal {
-		// Local Alloy configuration
-		slog.Info("Configuring log telemetry for local Alloy", "endpoint", endpoint)
-		return []otlploggrpc.Option{
-			otlploggrpc.WithEndpoint(endpoint),
-			otlploggrpc.WithTLSCredentials(insecure.NewCredentials()),
-		}
-	} else {
-		// Grafana Cloud configuration
-		if cfg.APIKey == "" || cfg.InstanceID == "" {
-			slog.Error("Grafana Cloud API key and instance ID are required for remote endpoint")
-			return nil
-		}
-
-		// Create credentials with authentication
-		creds := credentials.NewTLS(&tls.Config{})
-
-		// Create gRPC connection options with auth
-		dialOpts := []grpc.DialOption{
-			grpc.WithTransportCredentials(creds),
-			grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-				// Add authentication headers
-				ctx = metadata.AppendToOutgoingContext(ctx,
-					"authorization", fmt.Sprintf("Basic %s:%s", cfg.InstanceID, cfg.APIKey),
-				)
-				return invoker(ctx, method, req, reply, cc, opts...)
-			}),
-		}
-
-		slog.Info("Configuring log telemetry for Grafana Cloud", "endpoint", endpoint)
-		return []otlploggrpc.Option{
-			otlploggrpc.WithEndpoint(endpoint),
-			otlploggrpc.WithTLSCredentials(creds),
-			otlploggrpc.WithDialOption(dialOpts...),
-		}
+// initMetrics initializes the metric instruments
+func (t *OpenTelemetry) initMetrics() error {
+	if !t.IsEnabled() {
+		return nil
 	}
+
+	meter := otel.Meter("askfrank")
+
+	var err error
+
+	// User registrations counter
+	t.userRegistrations, err = meter.Int64Counter(
+		"askfrank_user_registrations_total",
+		metric.WithDescription("Total number of user registrations"),
+		metric.WithUnit("1"),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create user registrations counter: %w", err)
+	}
+
+	slog.Info("Metrics instruments initialized successfully")
+	return nil
 }
 
 // Shutdown gracefully shuts down the telemetry
-func (t *Telemetry) Shutdown(ctx context.Context) error {
+func (t *OpenTelemetry) Shutdown(ctx context.Context) error {
 	var errs []error
 
 	if t.tracerProvider != nil {
@@ -225,6 +193,12 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	if t.meterProvider != nil {
+		if err := t.meterProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("meter provider shutdown: %w", err))
+		}
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("telemetry shutdown errors: %v", errs)
 	}
@@ -233,20 +207,20 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 }
 
 // Tracer returns a tracer for the given name
-func (t *Telemetry) Tracer(name string) oteltrace.Tracer {
+func (t *OpenTelemetry) Tracer(name string) oteltrace.Tracer {
 	return otel.Tracer(name)
 }
 
 // Logger returns a slog.Logger configured to send logs to OpenTelemetry if enabled, otherwise to stderr.
-func (t *Telemetry) Logger() *slog.Logger {
+func (t *OpenTelemetry) Logger() *slog.Logger {
 	if t.IsEnabled() {
 		return slog.New(NewOTelHandler(&slog.HandlerOptions{AddSource: true}))
 	}
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: true}))
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.LevelDebug}))
 }
 
 // IsEnabled returns whether telemetry is enabled
-func (t *Telemetry) IsEnabled() bool {
+func (t *OpenTelemetry) IsEnabled() bool {
 	return t.config.Enabled && t.tracerProvider != nil
 }
 
@@ -375,4 +349,31 @@ func convertSlogAttr(attr slog.Attr) log.KeyValue {
 	default:
 		return log.String(attr.Key, attr.Value.String())
 	}
+}
+
+// RecordUserRegistration records a user registration metric
+func (t *OpenTelemetry) RecordUserRegistration(ctx context.Context, email string, success bool) {
+	if !t.IsEnabled() || t.userRegistrations == nil {
+		return
+	}
+
+	// Extract domain from email for additional context
+	domain := "unknown"
+	if parts := strings.Split(email, "@"); len(parts) == 2 {
+		domain = parts[1]
+	}
+
+	// Record the metric with attributes
+	attrs := []attribute.KeyValue{
+		attribute.String("domain", domain),
+		attribute.Bool("success", success),
+		attribute.String("service", "askfrank"),
+	}
+
+	t.userRegistrations.Add(ctx, 1, metric.WithAttributes(attrs...))
+
+	slog.DebugContext(ctx, "User registration metric recorded",
+		"email_domain", domain,
+		"success", success,
+	)
 }

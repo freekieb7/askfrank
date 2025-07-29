@@ -3,7 +3,7 @@ package integration_test
 import (
 	"askfrank/internal/repository"
 	"askfrank/internal/service"
-	"askfrank/tests/testutil"
+	testutil "askfrank/tests/util"
 	"context"
 	"testing"
 
@@ -17,9 +17,13 @@ func TestAuthService_Integration(t *testing.T) {
 		t.Skip("Skipping integration tests in short mode")
 	}
 
-	// Setup test database
+	// Setup test database with proper cleanup
 	db := testutil.SetupTestDB(t)
-	defer testutil.CleanupTestDB(t, db)
+
+	// Use t.Cleanup for more reliable cleanup
+	t.Cleanup(func() {
+		testutil.CleanupTestDB(t, db)
+	})
 
 	// Setup real services (no mocks)
 	repo := repository.NewPostgresRepository(db)
@@ -44,7 +48,7 @@ func TestAuthService_Integration(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, user)
 		assert.Equal(t, email, user.Email)
-		assert.False(t, user.EmailVerified)
+		assert.False(t, user.IsEmailVerified)
 
 		// Step 2: Verify email service was called
 		assert.True(t, emailService.WasVerificationEmailSent(email))
@@ -65,7 +69,7 @@ func TestAuthService_Integration(t *testing.T) {
 		assert.Equal(t, service.ErrEmailNotVerified, err)
 
 		// Step 5: Verify email manually (simulate email verification)
-		storedUser.EmailVerified = true
+		storedUser.IsEmailVerified = true
 		err = repo.UpdateUser(storedUser)
 		require.NoError(t, err)
 
@@ -74,7 +78,7 @@ func TestAuthService_Integration(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, loginUser)
 		assert.Equal(t, email, loginUser.Email)
-		assert.True(t, loginUser.EmailVerified)
+		assert.True(t, loginUser.IsEmailVerified)
 	})
 
 	t.Run("service_error_handling_with_real_database", func(t *testing.T) {
@@ -113,9 +117,13 @@ func TestDatabase_Integration_CRUD(t *testing.T) {
 		t.Skip("Skipping integration tests in short mode")
 	}
 
-	// Setup test database
+	// Setup test database with proper cleanup
 	db := testutil.SetupTestDB(t)
-	defer testutil.CleanupTestDB(t, db)
+
+	// Use t.Cleanup for more reliable cleanup
+	t.Cleanup(func() {
+		testutil.CleanupTestDB(t, db)
+	})
 
 	repo := repository.NewPostgresRepository(db)
 

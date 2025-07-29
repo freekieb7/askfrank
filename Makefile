@@ -1,4 +1,6 @@
 .PHONY: help build test clean dev deps generate migrate lint format security audit docker health
+.PHONY: migrate-up migrate-down migrate-down-all migrate-reset migrate-status migrate-goto migrate-force migrate-create migrate-validate migrate-list
+.PHONY: migrate-tool-up migrate-tool-down migrate-tool-status migrate-tool-create migrate-script-help migrate-script
 .PHONY: test-unit test-integration test-coverage test-coverage-unit test-coverage-integration test-coverage-html test-watch test-benchmark test-clean test-db-setup test-db-cleanup test-db-reset
 .PHONY: docker-compose-up docker-compose-down docker-compose-restart docker-compose-logs docker-compose-logs-postgres docker-compose-logs-alloy docker-compose-status docker-build docker-run docker-stop
 .PHONY: security-fix security-report audit
@@ -90,10 +92,21 @@ help:
 	@echo "  $(GREEN)docker-run$(RESET)         - Run Docker container"
 	@echo "  $(GREEN)docker-stop$(RESET)        - Stop Docker container"
 	@echo ""
-	@echo "$(YELLOW)🗄️  Database:$(RESET)"
+	@echo "$(YELLOW)🗄️  Database & Migrations:$(RESET)"
 	@echo "  $(GREEN)migrate-up$(RESET)         - Run database migrations"
-	@echo "  $(GREEN)migrate-down$(RESET)       - Rollback database migrations"
+	@echo "  $(GREEN)migrate-down$(RESET)       - Rollback 1 database migration"
+	@echo "  $(GREEN)migrate-down-all$(RESET)   - Rollback ALL database migrations (⚠️  destructive)"
+	@echo "  $(GREEN)migrate-reset$(RESET)      - Reset database (down all + up)"
+	@echo "  $(GREEN)migrate-status$(RESET)     - Show current migration status"
+	@echo "  $(GREEN)migrate-goto$(RESET)       - Go to specific migration version"
+	@echo "  $(GREEN)migrate-force$(RESET)      - Force set migration version (⚠️  use with caution)"
 	@echo "  $(GREEN)migrate-create$(RESET)     - Create a new migration file"
+	@echo "  $(GREEN)migrate-validate$(RESET)   - Validate migration files"
+	@echo "  $(GREEN)migrate-list$(RESET)       - List all available migrations"
+	@echo ""
+	@echo "$(YELLOW)🔧 Migration Script (Alternative Interface):$(RESET)"
+	@echo "  $(GREEN)migrate-script-help$(RESET) - Show migration script help"
+	@echo "  $(GREEN)migrate-script$(RESET)     - Run migration script with arguments"
 	@echo ""
 	@echo "$(YELLOW)🔒 Security & Monitoring:$(RESET)"
 	@echo "  $(GREEN)security$(RESET)           - Run security checks"
@@ -260,20 +273,189 @@ run: build
 ## migrate-up: Run database migrations
 migrate-up:
 	@echo "$(BLUE)Running database migrations...$(RESET)"
-	migrate -path migrations -database "$(DB_URL)" up
+	@if ! command -v ~/go/bin/migrate >/dev/null 2>&1; then \
+		echo "$(RED)Error: migrate tool not found. Run 'make deps' to install.$(RESET)"; \
+		exit 1; \
+	fi
+	~/go/bin/migrate -path migrations -database "$(DB_URL)" up
 	@echo "$(GREEN)Migrations completed$(RESET)"
 
-## migrate-down: Rollback database migrations
+## migrate-down: Rollback database migrations (rollback 1 step)
 migrate-down:
-	@echo "$(BLUE)Rolling back database migrations...$(RESET)"
-	migrate -path migrations -database "$(DB_URL)" down
+	@echo "$(BLUE)Rolling back 1 database migration...$(RESET)"
+	@if ! command -v ~/go/bin/migrate >/dev/null 2>&1; then \
+		echo "$(RED)Error: migrate tool not found. Run 'make deps' to install.$(RESET)"; \
+		exit 1; \
+	fi
+	~/go/bin/migrate -path migrations -database "$(DB_URL)" down 1
 	@echo "$(GREEN)Rollback completed$(RESET)"
+
+## migrate-down-all: Rollback all database migrations
+migrate-down-all:
+	@echo "$(RED)WARNING: This will rollback ALL migrations and destroy all data!$(RESET)"
+	@read -p "Are you sure? Type 'yes' to confirm: " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		echo "$(BLUE)Rolling back all database migrations...$(RESET)"; \
+		~/go/bin/migrate -path migrations -database "$(DB_URL)" down -all; \
+		echo "$(GREEN)All migrations rolled back$(RESET)"; \
+	else \
+		echo "$(YELLOW)Migration rollback cancelled$(RESET)"; \
+	fi
+
+## migrate-reset: Reset database (down all + up)
+migrate-reset:
+	@echo "$(BLUE)Resetting database (down all + up)...$(RESET)"
+	@if ! command -v ~/go/bin/migrate >/dev/null 2>&1; then \
+		echo "$(RED)Error: migrate tool not found. Run 'make deps' to install.$(RESET)"; \
+		exit 1; \
+	fi
+	~/go/bin/migrate -path migrations -database "$(DB_URL)" down -all
+	~/go/bin/migrate -path migrations -database "$(DB_URL)" up
+	@echo "$(GREEN)Database reset completed$(RESET)"
+
+## migrate-status: Show migration status
+migrate-status:
+	@echo "$(BLUE)Checking migration status...$(RESET)"
+	@if ! command -v ~/go/bin/migrate >/dev/null 2>&1; then \
+		echo "$(RED)Error: migrate tool not found. Run 'make deps' to install.$(RESET)"; \
+		exit 1; \
+	fi
+	~/go/bin/migrate -path migrations -database "$(DB_URL)" version
+	@echo "$(GREEN)Migration status check completed$(RESET)"
+
+## migrate-goto: Go to specific migration version
+migrate-goto:
+	@echo "$(BLUE)Available migrations:$(RESET)"
+	@ls -1 migrations/*.up.sql 2>/dev/null | sed 's/migrations\///g' | sed 's/\.up\.sql//g' | sort || echo "$(YELLOW)No migrations found$(RESET)"
+	@read -p "Enter migration version to go to (e.g., 000001): " version; \
+	if [ -n "$$version" ]; then \
+		echo "$(BLUE)Going to migration version $$version...$(RESET)"; \
+		migrate -path migrations -database "$(DB_URL)" goto $$version; \
+		echo "$(GREEN)Migration to version $$version completed$(RESET)"; \
+	else \
+		echo "$(YELLOW)No version specified, operation cancelled$(RESET)"; \
+	fi
+
+## migrate-force: Force set migration version (use with caution)
+migrate-force:
+	@echo "$(RED)WARNING: This will force set the migration version without running migrations!$(RESET)"
+	@echo "$(YELLOW)This should only be used to fix migration state issues.$(RESET)"
+	@read -p "Enter version to force set (e.g., 000001): " version; \
+	if [ -n "$$version" ]; then \
+		read -p "Are you sure? Type 'yes' to confirm: " confirm; \
+		if [ "$$confirm" = "yes" ]; then \
+			echo "$(BLUE)Force setting migration version to $$version...$(RESET)"; \
+			migrate -path migrations -database "$(DB_URL)" force $$version; \
+			echo "$(GREEN)Migration version forced to $$version$(RESET)"; \
+		else \
+			echo "$(YELLOW)Force migration cancelled$(RESET)"; \
+		fi; \
+	else \
+		echo "$(YELLOW)No version specified, operation cancelled$(RESET)"; \
+	fi
 
 ## migrate-create: Create a new migration file
 migrate-create:
+	@if ! command -v migrate >/dev/null 2>&1; then \
+		echo "$(RED)Error: migrate tool not found. Run 'make deps' to install.$(RESET)"; \
+		exit 1; \
+	fi
+	@read -p "Enter migration name (e.g., add_user_profile_table): " name; \
+	if [ -n "$$name" ]; then \
+		migrate create -ext sql -dir migrations $$name; \
+		echo "$(GREEN)Migration files created for: $$name$(RESET)"; \
+		echo "$(BLUE)Edit the generated .up.sql and .down.sql files in the migrations/ directory$(RESET)"; \
+	else \
+		echo "$(YELLOW)No migration name specified, operation cancelled$(RESET)"; \
+	fi
+
+## migrate-validate: Validate migration files
+migrate-validate:
+	@echo "$(BLUE)Validating migration files...$(RESET)"
+	@if [ ! -d "migrations" ]; then \
+		echo "$(RED)Error: migrations directory not found$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)Checking for .up.sql files...$(RESET)"
+	@up_count=$$(ls -1 migrations/*.up.sql 2>/dev/null | wc -l); \
+	down_count=$$(ls -1 migrations/*.down.sql 2>/dev/null | wc -l); \
+	echo "Found $$up_count up migrations and $$down_count down migrations"; \
+	if [ $$up_count -eq $$down_count ]; then \
+		echo "$(GREEN)✓ Migration file counts match$(RESET)"; \
+	else \
+		echo "$(RED)✗ Migration file counts don't match$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)Checking for matching up/down pairs...$(RESET)"
+	@for up_file in migrations/*.up.sql; do \
+		base_name=$$(basename "$$up_file" .up.sql); \
+		down_file="migrations/$$base_name.down.sql"; \
+		if [ -f "$$down_file" ]; then \
+			echo "$(GREEN)✓ $$base_name$(RESET)"; \
+		else \
+			echo "$(RED)✗ Missing down migration for $$base_name$(RESET)"; \
+			exit 1; \
+		fi; \
+	done
+	@echo "$(GREEN)All migration files are valid$(RESET)"
+
+## migrate-list: List all available migrations
+migrate-list:
+	@echo "$(BLUE)Available migrations:$(RESET)"
+	@if [ -d "migrations" ]; then \
+		for file in migrations/*.up.sql; do \
+			if [ -f "$$file" ]; then \
+				base_name=$$(basename "$$file" .up.sql); \
+				migration_name=$$(echo "$$base_name" | sed 's/^[0-9]*_//'); \
+				echo "  $(GREEN)$$base_name$(RESET) - $$migration_name"; \
+			fi; \
+		done; \
+	else \
+		echo "$(YELLOW)No migrations directory found$(RESET)"; \
+	fi
+
+## migrate-tool-up: Use built-in migration tool to run up migrations
+migrate-tool-up:
+	@echo "$(BLUE)Running migrations with built-in tool...$(RESET)"
+	$(GOCMD) run cmd/migrate/main.go -command up
+	@echo "$(GREEN)Built-in migration tool completed$(RESET)"
+
+## migrate-tool-down: Use built-in migration tool to rollback migrations
+migrate-tool-down:
+	@echo "$(BLUE)Rolling back migrations with built-in tool...$(RESET)"
+	$(GOCMD) run cmd/migrate/main.go -command down
+	@echo "$(GREEN)Built-in migration rollback completed$(RESET)"
+
+## migrate-tool-status: Use built-in migration tool to check status
+migrate-tool-status:
+	@echo "$(BLUE)Checking migration status with built-in tool...$(RESET)"
+	$(GOCMD) run cmd/migrate/main.go -command version
+
+## migrate-tool-create: Use built-in migration tool to create migration
+migrate-tool-create:
 	@read -p "Enter migration name: " name; \
-	migrate create -ext sql -dir migrations $$name
-	@echo "$(GREEN)Migration files created$(RESET)"
+	if [ -n "$$name" ]; then \
+		$(GOCMD) run cmd/migrate/main.go -command create -name "$$name"; \
+	else \
+		echo "$(YELLOW)No migration name specified$(RESET)"; \
+	fi
+
+## migrate-script-help: Show migration script help
+migrate-script-help:
+	@./scripts/migrate.sh --help
+
+## migrate-script: Run migration script with arguments (usage: make migrate-script ARGS="command options")
+migrate-script:
+	@if [ -z "$(ARGS)" ]; then \
+		echo "$(YELLOW)Usage: make migrate-script ARGS=\"command options\"$(RESET)"; \
+		echo "$(BLUE)Examples:$(RESET)"; \
+		echo "  make migrate-script ARGS=\"list\""; \
+		echo "  make migrate-script ARGS=\"up\""; \
+		echo "  make migrate-script ARGS=\"create add_new_table\""; \
+		echo "  make migrate-script ARGS=\"status\""; \
+	else \
+		./scripts/migrate.sh $(ARGS); \
+	fi
 
 ## audit: Run security audit with govulncheck
 audit:

@@ -4,7 +4,7 @@ import (
 	"askfrank/internal/model"
 	"askfrank/internal/repository"
 	"askfrank/internal/service"
-	"askfrank/tests/testutil"
+	testutil "askfrank/tests/util"
 	"context"
 	"testing"
 	"time"
@@ -31,12 +31,12 @@ func TestAuthService_Login_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	testUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Test User",
-		Email:         "test@example.com",
-		PasswordHash:  string(hashedPassword),
-		EmailVerified: true,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Test User",
+		Email:           "test@example.com",
+		PasswordHash:    string(hashedPassword),
+		IsEmailVerified: true,
+		CreatedAt:       time.Now(),
 	}
 
 	err = repo.CreateUser(testUser)
@@ -84,12 +84,12 @@ func TestAuthService_Login_Integration(t *testing.T) {
 			password: password,
 			setupUser: func() model.User {
 				unverifiedUser := model.User{
-					ID:            uuid.New(),
-					Name:          "Unverified User",
-					Email:         "unverified@example.com",
-					PasswordHash:  string(hashedPassword),
-					EmailVerified: false,
-					CreatedAt:     time.Now(),
+					ID:              uuid.New(),
+					Name:            "Unverified User",
+					Email:           "unverified@example.com",
+					PasswordHash:    string(hashedPassword),
+					IsEmailVerified: false,
+					CreatedAt:       time.Now(),
 				}
 				err := repo.CreateUser(unverifiedUser)
 				require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestAuthService_Login_Integration(t *testing.T) {
 					assert.NotNil(t, user)
 					assert.Equal(t, expectedUser.Email, user.Email)
 					assert.Equal(t, expectedUser.ID, user.ID)
-					assert.True(t, user.EmailVerified)
+					assert.True(t, user.IsEmailVerified)
 				}
 			}
 		})
@@ -174,12 +174,12 @@ func TestAuthService_Register_Integration(t *testing.T) {
 			setupData: func() {
 				// Create existing user
 				existingUser := model.User{
-					ID:            uuid.New(),
-					Name:          "Existing User",
-					Email:         "existing@example.com",
-					PasswordHash:  "hashedpassword",
-					EmailVerified: true,
-					CreatedAt:     time.Now(),
+					ID:              uuid.New(),
+					Name:            "Existing User",
+					Email:           "existing@example.com",
+					PasswordHash:    "hashedpassword",
+					IsEmailVerified: true,
+					CreatedAt:       time.Now(),
 				}
 				err := repo.CreateUser(existingUser)
 				require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestAuthService_Register_Integration(t *testing.T) {
 				if tt.expectUser {
 					assert.NotNil(t, user)
 					assert.Equal(t, tt.email, user.Email)
-					assert.False(t, user.EmailVerified) // Should be false initially
+					assert.False(t, user.IsEmailVerified) // Should be false initially
 
 					// Verify user was actually created in database
 					storedUser, err := repo.GetUserByEmail(tt.email)

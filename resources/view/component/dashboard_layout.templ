@@ -171,10 +171,11 @@ templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ
                 function confirmLogout() {
                     if (confirm('Are you sure you want to logout?')) {
                         // Use fetch with CSRF header for logout
+						const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
                         fetch('/auth/logout', {
                             method: 'POST',
                             headers: {
-                                'X-Csrf-Token': '{ c.Locals("token") }'
+                                'X-Csrf-Token': csrfToken
                             }
                         }).then(response => {
                             if (response.redirected) {

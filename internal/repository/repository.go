@@ -29,6 +29,6 @@ type Repository interface {
 	GetUserByIDForAdmin(userID uuid.UUID) (model.User, error)
 
 	// Database operations
-	Migrate() error
+	Migrate(ctx context.Context) error
 	HealthCheck(ctx context.Context) error
 }

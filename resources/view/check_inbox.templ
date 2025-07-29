@@ -152,10 +152,11 @@ templ CheckInboxPage(c *fiber.Ctx, email string) {
 				submitButton.textContent = 'Verifying...';
 				
 				try {
+					const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 					const response = await fetch('/auth/sign-up/check-inbox', {
 						method: 'POST',
 						headers: {
-							'X-Csrf-Token': '{ c.Locals("token") }'
+							'X-Csrf-Token': csrfToken
 						},
 						body: formData
 					});
@@ -188,7 +189,7 @@ templ CheckInboxPage(c *fiber.Ctx, email string) {
 				} finally {
 					// Re-enable submit button
 					submitButton.disabled = false;
-					submitButton.textContent = '{ middleware.T(c, "auth.checkinbox.submit_button") }';
+					submitButton.textContent = {{ middleware.T(c, "auth.checkinbox.submit_button") }};
 				}
 			});
 			

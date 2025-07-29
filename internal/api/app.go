@@ -1,11 +1,10 @@
 package api
 
 import (
-	"askfrank/internal/middleware"
 	"askfrank/internal/model"
+	"askfrank/internal/monitoring"
 	"askfrank/internal/repository"
 	"askfrank/resources/view"
-	"log/slog"
 	"math/rand"
 	"os"
 	"strings"
@@ -19,14 +18,13 @@ import (
 )
 
 type Handler struct {
-	store    *session.Store
-	repo     repository.Repository
-	security *middleware.SecurityMiddleware
-	logger   *slog.Logger
+	store     *session.Store
+	repo      repository.Repository
+	telemetry monitoring.Telemetry
 }
 
-func NewHandler(store *session.Store, repository repository.Repository, security *middleware.SecurityMiddleware, logger *slog.Logger) Handler {
-	return Handler{store: store, repo: repository, security: security, logger: logger}
+func NewHandler(store *session.Store, repository repository.Repository, tel monitoring.Telemetry) Handler {
+	return Handler{store: store, repo: repository, telemetry: tel}
 }
 
 func (h *Handler) ShowHomePage(c *fiber.Ctx) error {
@@ -62,7 +60,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 				"error": "Invalid email or password",
 			})
 		}
-		h.logger.ErrorContext(c.Context(), "Failed to get user by email", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by email", "error", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Internal server error",
 		})
@@ -76,7 +74,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	}
 
 	// Check if user's email is verified
-	if !user.EmailVerified {
+	if !user.IsEmailVerified {
 		return c.Status(403).JSON(fiber.Map{
 			"error": "Please verify your email address before logging in",
 		})
@@ -85,21 +83,21 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	// Store user ID in session
 	sess, err := h.store.Get(c)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get session", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get session", "error", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to create session",
 		})
 	}
 	sess.Set("user_id", user.ID.String())
 	if err := sess.Save(); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to save session", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to save session", "error", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to save session",
 		})
 	}
 
 	// Log successful login
-	h.logger.InfoContext(c.Context(), "User logged in successfully", "email", email, "user_id", user.ID, "ip", c.IP())
+	h.telemetry.Logger().InfoContext(c.Context(), "User logged in successfully", "email", email, "user_id", user.ID, "ip", c.IP())
 
 	return c.Redirect("/account")
 }
@@ -107,7 +105,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 func (h *Handler) Logout(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get session", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get session", "error", err)
 		return c.Status(500).SendString("Failed to get sessions")
 	}
 
@@ -117,13 +115,13 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 	// Clear session
 	sess.Delete("user_id")
 	if err := sess.Save(); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to save session", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to save session", "error", err)
 		return c.Status(500).SendString("Failed to save session")
 	}
 
 	// Log successful logout
 	if userID != nil {
-		h.logger.InfoContext(c.Context(), "User logged out successfully", "user_id", userID, "ip", c.IP())
+		h.telemetry.Logger().InfoContext(c.Context(), "User logged out successfully", "user_id", userID, "ip", c.IP())
 	}
 
 	return c.Redirect("/auth/login?logout=true")
@@ -158,7 +156,7 @@ func (h *Handler) ShowCheckInboxPage(c *fiber.Ctx) error {
 
 	user, err := h.repo.GetUserByID(userId)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
 	}
 
@@ -193,7 +191,16 @@ func (h *Handler) ShowAccountPage(c *fiber.Ctx) error {
 
 	user, err := h.repo.GetUserByID(userId)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
+		if err == repository.ErrUserNotFound {
+			sess.Delete("user_id") // Clear session if user not found
+			if err := sess.Save(); err != nil {
+				h.telemetry.Logger().ErrorContext(c.Context(), "Failed to save session after user not found", "error", err)
+				return c.Status(500).SendString("Failed to save session")
+			}
+			return c.Redirect("/auth/login?error=user_not_found")
+		}
+
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
 	}
 
@@ -223,7 +230,7 @@ func (h *Handler) ShowDashboardPage(c *fiber.Ctx) error {
 
 	user, err := h.repo.GetUserByID(userId)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
 	}
 
@@ -253,7 +260,7 @@ func (h *Handler) CheckInbox(c *fiber.Ctx) error {
 
 	user, err := h.repo.GetUserByID(userId)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
 	}
 
@@ -264,7 +271,7 @@ func (h *Handler) CheckInbox(c *fiber.Ctx) error {
 
 	userRegistration, err := h.repo.GetUserRegistrationByUserID(userId)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get user registration by ID", "userid", userId, "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user registration by ID", "userid", userId, "error", err)
 		return c.Status(500).SendString("Failed to retrieve user registration information")
 	}
 	if userRegistration.ActivationCode != activationCode {
@@ -272,14 +279,14 @@ func (h *Handler) CheckInbox(c *fiber.Ctx) error {
 	}
 
 	if err := h.repo.DeleteUserRegistration(userRegistration.ID); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to delete user registration", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to delete user registration", "error", err)
 		return c.Status(500).SendString("Failed to delete user registration")
 	}
 
-	user.EmailVerified = true // Mark email as verified
+	user.IsEmailVerified = true // Mark email as verified
 
 	if err := h.repo.UpdateUser(user); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to update user", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to update user", "error", err)
 		return c.Status(500).SendString("Failed to update user information")
 	}
 
@@ -332,7 +339,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 			"error": "User with this email already exists",
 		})
 	} else if err != repository.ErrUserNotFound {
-		h.logger.ErrorContext(c.Context(), "Failed to check existing user", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to check existing user", "error", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Internal server error",
 		})
@@ -341,7 +348,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	// Hash the password
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to hash password", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to hash password", "error", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to process password",
 		})
@@ -349,20 +356,28 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 
 	// Create user model
 	user := model.User{
-		ID:            uuid.New(),
-		Name:          strings.Split(email, "@")[0],
-		Email:         email,
-		PasswordHash:  string(passwordHash),
-		EmailVerified: false,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            strings.Split(email, "@")[0],
+		Email:           email,
+		PasswordHash:    string(passwordHash),
+		Role:            model.RoleUser,
+		IsEmailVerified: false,
+		CreatedAt:       time.Now(),
 	}
 
 	if err := h.repo.CreateUser(user); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to create user", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to create user", "error", err)
+
+		// Record failed registration metric
+		h.telemetry.RecordUserRegistration(c.Context(), email, false)
+
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to create user account",
 		})
 	}
+
+	// Record successful registration metric
+	h.telemetry.RecordUserRegistration(c.Context(), email, true)
 
 	// Generate activation code
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -377,18 +392,19 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 		ID:             uuid.New(),
 		UserID:         user.ID,
 		ActivationCode: codeStr,
+		CreatedAt:      time.Now(),
 	}
 
 	if err := h.repo.CreateUserRegistration(userRegistration); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to create user registration", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to create user registration", "error", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Internal server error",
 		})
 	}
 
 	// Log the signup attempt
-	h.logger.InfoContext(c.Context(), "New user signup", "email", email, "newsletter", newsletter != "", "ip", c.IP())
-	h.logger.DebugContext(c.Context(), "Activation code generated", "code", codeStr)
+	h.telemetry.Logger().InfoContext(c.Context(), "New user signup", "email", email, "newsletter", newsletter != "", "ip", c.IP())
+	h.telemetry.Logger().DebugContext(c.Context(), "Activation code generated", "code", codeStr)
 
 	// // Send confirmation email (in production, use a proper email service)
 	// go func() {
@@ -400,12 +416,12 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	// add user to session store
 	sess, err := h.store.Get(c)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get session", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get session", "error", err)
 		return c.Status(500).SendString("Failed to get session")
 	}
 	sess.Set("user_id", user.ID.String())
 	if err := sess.Save(); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to save session", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to save session", "error", err)
 		return c.Status(500).SendString("Failed to save session")
 	}
 
@@ -426,7 +442,7 @@ func (h *Handler) ConfirmUser(c *fiber.Ctx) error {
 	// Validate activation code (check against database)
 	userRegistration, err := h.repo.GetUserRegistrationByEmail(email)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get user registration", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user registration", "error", err)
 		return c.Status(400).SendString("Invalid email or activation code")
 	}
 
@@ -435,11 +451,11 @@ func (h *Handler) ConfirmUser(c *fiber.Ctx) error {
 	}
 
 	if err := h.repo.DeleteUserRegistration(userRegistration.ID); err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to delete user registration", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to delete user registration", "error", err)
 		return c.Status(500).SendString("Failed to complete activation")
 	}
 
-	h.logger.InfoContext(c.Context(), "User activated successfully", "email", email)
+	h.telemetry.Logger().InfoContext(c.Context(), "User activated successfully", "email", email)
 
 	// Redirect to success page or login
 	return c.Redirect("/?activated=true")
@@ -447,7 +463,7 @@ func (h *Handler) ConfirmUser(c *fiber.Ctx) error {
 
 // ShowAdminPage displays the admin dashboard with user overview
 func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
-	h.logger.InfoContext(c.Context(), "Admin dashboard accessed")
+	h.telemetry.Logger().InfoContext(c.Context(), "Admin dashboard accessed")
 	// Check if user is authenticated
 	sess, err := h.store.Get(c)
 	if err != nil {
@@ -472,13 +488,13 @@ func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
 	// Get current user to check admin privileges
 	currentUser, err := h.repo.GetUserByID(userId)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get current user", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get current user", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
 	}
 
 	// Check if user is admin
-	if !isAdminUser(currentUser.Email) {
-		h.logger.WarnContext(c.Context(), "Unauthorized admin access attempt", "user_id", userId, "email", currentUser.Email, "ip", c.IP())
+	if currentUser.Role != model.RoleAdmin {
+		h.telemetry.Logger().WarnContext(c.Context(), "Unauthorized admin access attempt", "user_id", userId, "email", currentUser.Email, "ip", c.IP())
 		return c.Status(403).SendString("Access denied: Admin privileges required")
 	}
 
@@ -494,14 +510,14 @@ func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
 	// Get user statistics
 	stats, err := h.repo.GetUserStats()
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get user statistics", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user statistics", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user statistics")
 	}
 
 	// Get all users with pagination
 	users, totalUsers, err := h.repo.GetAllUsers(limit, offset)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to get users", "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get users", "error", err)
 		return c.Status(500).SendString("Failed to retrieve users")
 	}
 
@@ -523,7 +539,7 @@ func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
 	}
 
 	// Log admin access
-	h.logger.InfoContext(c.Context(), "Admin dashboard accessed",
+	h.telemetry.Logger().InfoContext(c.Context(), "Admin dashboard accessed",
 		"admin_user_id", userId,
 		"admin_email", currentUser.Email,
 		"total_users", stats.TotalUsers,
@@ -532,27 +548,6 @@ func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
 	)
 
 	return render(c, view.AdminPage(c, adminData))
-}
-
-// isAdminUser checks if the user has admin privileges
-// Replace this with your actual admin authorization logic
-func isAdminUser(email string) bool {
-	// For demo purposes, you can hardcode admin emails
-	// In production, use a proper role-based system
-	adminEmails := []string{
-		"admin@askfrank.com",
-		"freek@askfrank.com",
-		"freekieb6@hotmail.com", // Replace with your email
-		// Add more admin emails as needed
-	}
-
-	for _, adminEmail := range adminEmails {
-		if email == adminEmail {
-			return true
-		}
-	}
-
-	return false
 }
 
 // AdminActivateUser activates a user account (admin only)
@@ -580,8 +575,8 @@ func (h *Handler) AdminActivateUser(c *fiber.Ctx) error {
 	}
 
 	// Check if user is admin
-	if !isAdminUser(currentUser.Email) {
-		h.logger.WarnContext(c.Context(), "Non-admin user attempted to access admin function",
+	if currentUser.Role != model.RoleAdmin {
+		h.telemetry.Logger().WarnContext(c.Context(), "Non-admin user attempted to access admin function",
 			"user_id", userId,
 			"email", currentUser.Email,
 			"action", "activate_user",
@@ -613,7 +608,7 @@ func (h *Handler) AdminActivateUser(c *fiber.Ctx) error {
 	// Activate the user
 	err = h.repo.ActivateUser(targetUUID)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to activate user",
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to activate user",
 			"error", err,
 			"admin_user_id", userId,
 			"target_user_id", targetUserID,
@@ -622,7 +617,7 @@ func (h *Handler) AdminActivateUser(c *fiber.Ctx) error {
 	}
 
 	// Log admin action
-	h.logger.InfoContext(c.Context(), "User activated by admin",
+	h.telemetry.Logger().InfoContext(c.Context(), "User activated by admin",
 		"admin_user_id", userId,
 		"admin_email", currentUser.Email,
 		"target_user_id", targetUserID,
@@ -663,8 +658,8 @@ func (h *Handler) AdminDeleteUser(c *fiber.Ctx) error {
 	}
 
 	// Check if user is admin
-	if !isAdminUser(currentUser.Email) {
-		h.logger.WarnContext(c.Context(), "Non-admin user attempted to access admin function",
+	if currentUser.Role != model.RoleAdmin {
+		h.telemetry.Logger().WarnContext(c.Context(), "Non-admin user attempted to access admin function",
 			"user_id", userId,
 			"email", currentUser.Email,
 			"action", "delete_user",
@@ -701,7 +696,7 @@ func (h *Handler) AdminDeleteUser(c *fiber.Ctx) error {
 	// Delete the user
 	err = h.repo.DeleteUser(targetUUID)
 	if err != nil {
-		h.logger.ErrorContext(c.Context(), "Failed to delete user",
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to delete user",
 			"error", err,
 			"admin_user_id", userId,
 			"target_user_id", targetUserID,
@@ -710,7 +705,7 @@ func (h *Handler) AdminDeleteUser(c *fiber.Ctx) error {
 	}
 
 	// Log admin action
-	h.logger.InfoContext(c.Context(), "User deleted by admin",
+	h.telemetry.Logger().InfoContext(c.Context(), "User deleted by admin",
 		"admin_user_id", userId,
 		"admin_email", currentUser.Email,
 		"target_user_id", targetUserID,
@@ -769,7 +764,7 @@ func (h *Handler) ShowAdminUserView(c *fiber.Ctx) error {
 		if err == repository.ErrUserNotFound {
 			return c.Status(404).SendString("User not found")
 		}
-		h.logger.ErrorContext(c.Context(), "Failed to get user for admin view",
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user for admin view",
 			"error", err,
 			"admin_user_id", userId,
 			"target_user_id", targetUserId,

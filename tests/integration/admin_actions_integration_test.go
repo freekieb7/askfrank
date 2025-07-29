@@ -3,8 +3,7 @@ package integration
 import (
 	"askfrank/internal/model"
 	"askfrank/internal/repository"
-	"askfrank/tests/testutil"
-	"log"
+	testutil "askfrank/tests/util"
 	"net/http"
 	"testing"
 	"time"
@@ -17,34 +16,31 @@ import (
 func TestAdminUserActions_Integration(t *testing.T) {
 	// Setup test environment
 	db := testutil.SetupTestDB(t)
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Fatalf("Failed to close database connection: %v", err)
-		}
-	}()
+
+	// Use t.Cleanup for more reliable cleanup
+	t.Cleanup(func() {
+		testutil.CleanupTestDB(t, db)
+	})
 
 	testRepo := repository.NewPostgresRepository(db)
 
-	// Clean database before starting
-	testutil.CleanupTestDB(t, db)
-
 	// Create test users
 	pendingUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Pending User",
-		Email:         "pending@example.com",
-		PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-		EmailVerified: false,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Pending User",
+		Email:           "pending@example.com",
+		PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+		IsEmailVerified: false,
+		CreatedAt:       time.Now(),
 	}
 
 	activeUser := model.User{
-		ID:            uuid.New(),
-		Name:          "Active User",
-		Email:         "active@example.com",
-		PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-		EmailVerified: true,
-		CreatedAt:     time.Now(),
+		ID:              uuid.New(),
+		Name:            "Active User",
+		Email:           "active@example.com",
+		PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+		IsEmailVerified: true,
+		CreatedAt:       time.Now(),
 	}
 
 	// Create users in database
@@ -68,7 +64,7 @@ func TestAdminUserActions_Integration(t *testing.T) {
 		// Verify user is pending before activation
 		user, err := testRepo.GetUserByIDForAdmin(pendingUser.ID)
 		require.NoError(t, err)
-		assert.False(t, user.EmailVerified, "User should be unverified before activation")
+		assert.False(t, user.IsEmailVerified, "User should be unverified before activation")
 
 		// Check that registration exists
 		_, err = testRepo.GetUserRegistrationByUserID(pendingUser.ID)
@@ -81,7 +77,7 @@ func TestAdminUserActions_Integration(t *testing.T) {
 		// Verify user is now verified
 		user, err = testRepo.GetUserByIDForAdmin(pendingUser.ID)
 		require.NoError(t, err)
-		assert.True(t, user.EmailVerified, "User should be verified after activation")
+		assert.True(t, user.IsEmailVerified, "User should be verified after activation")
 
 		// Check that registration is deleted
 		_, err = testRepo.GetUserRegistrationByUserID(pendingUser.ID)
@@ -117,12 +113,13 @@ func TestAdminUserActions_Integration(t *testing.T) {
 	t.Run("GetUserByIDForAdmin Works", func(t *testing.T) {
 		// Create a new user for this test
 		testUser := model.User{
-			ID:            uuid.New(),
-			Name:          "Test User",
-			Email:         "test@example.com",
-			PasswordHash:  "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
-			EmailVerified: true,
-			CreatedAt:     time.Now(),
+			ID:              uuid.New(),
+			Name:            "Test User",
+			Email:           "test@example.com",
+			PasswordHash:    "$2a$10$abcdefghijklmnopqrstuvwxyz123456789",
+			IsEmailVerified: true,
+			Role:            model.RoleUser,
+			CreatedAt:       time.Now(),
 		}
 
 		err := testRepo.CreateUser(testUser)
@@ -135,25 +132,22 @@ func TestAdminUserActions_Integration(t *testing.T) {
 		assert.Equal(t, testUser.ID, retrievedUser.ID)
 		assert.Equal(t, testUser.Name, retrievedUser.Name)
 		assert.Equal(t, testUser.Email, retrievedUser.Email)
-		assert.Equal(t, testUser.EmailVerified, retrievedUser.EmailVerified)
-		assert.Equal(t, testUser.EmailVerified, retrievedUser.IsEmailVerified)
-		assert.Equal(t, "user", retrievedUser.Role) // Default role
+		assert.Equal(t, testUser.IsEmailVerified, retrievedUser.IsEmailVerified)
+		assert.Equal(t, testUser.IsEmailVerified, retrievedUser.IsEmailVerified)
+		assert.Equal(t, testUser.Role, retrievedUser.Role) // Default role
 	})
 }
 
 func TestAdminUserActions_EndpointValidation(t *testing.T) {
 	// Setup test environment
 	db := testutil.SetupTestDB(t)
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Fatalf("Failed to close database connection: %v", err)
-		}
-	}()
+
+	// Use t.Cleanup for more reliable cleanup
+	t.Cleanup(func() {
+		testutil.CleanupTestDB(t, db)
+	})
 
 	testApp := testutil.SetupTestApp(t, db)
-
-	// Clean database before starting
-	testutil.CleanupTestDB(t, db)
 
 	t.Run("Admin Activate Endpoint Returns 404 Without Route", func(t *testing.T) {
 		userID := uuid.New()

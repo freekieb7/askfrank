@@ -3,7 +3,7 @@ package validator_test
 import (
 	"askfrank/internal/service"
 	"askfrank/internal/validator"
-	"askfrank/tests/testutil"
+	testutil "askfrank/tests/util"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
