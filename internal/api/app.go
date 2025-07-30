@@ -17,27 +17,27 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Handler struct {
+type AppHandler struct {
 	store     *session.Store
 	repo      repository.Repository
 	telemetry monitoring.Telemetry
 }
 
-func NewHandler(store *session.Store, repository repository.Repository, tel monitoring.Telemetry) Handler {
-	return Handler{store: store, repo: repository, telemetry: tel}
+func NewAppHandler(store *session.Store, repository repository.Repository, tel monitoring.Telemetry) AppHandler {
+	return AppHandler{store: store, repo: repository, telemetry: tel}
 }
 
-func (h *Handler) ShowHomePage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowHomePage(c *fiber.Ctx) error {
 	return render(c, view.HomePage(c))
 }
 
-func (h *Handler) ShowLoginPage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowLoginPage(c *fiber.Ctx) error {
 	// Store RECAPTCHA site key in locals for template
 	c.Locals("recaptcha_site_key", os.Getenv("RECAPTCHA_SITE_KEY"))
 	return render(c, view.LoginPage(c))
 }
 
-func (h *Handler) Login(c *fiber.Ctx) error {
+func (h *AppHandler) Login(c *fiber.Ctx) error {
 	email := c.FormValue("email")
 	password := c.FormValue("password")
 
@@ -102,7 +102,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	return c.Redirect("/account")
 }
 
-func (h *Handler) Logout(c *fiber.Ctx) error {
+func (h *AppHandler) Logout(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c)
 	if err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get session", "error", err)
@@ -127,13 +127,13 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 	return c.Redirect("/auth/login?logout=true")
 }
 
-func (h *Handler) ShowCreateUserPage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowCreateUserPage(c *fiber.Ctx) error {
 	// Store RECAPTCHA site key in locals for template
 	c.Locals("recaptcha_site_key", os.Getenv("RECAPTCHA_SITE_KEY"))
 	return render(c, view.CreateUserPage(c))
 }
 
-func (h *Handler) ShowCheckInboxPage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowCheckInboxPage(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c) // Ensure session is initialized
 	if err != nil {
 		return err
@@ -163,12 +163,12 @@ func (h *Handler) ShowCheckInboxPage(c *fiber.Ctx) error {
 	return render(c, view.CheckInboxPage(c, user.Email))
 }
 
-func (h *Handler) ShowPricingPage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowPricingPage(c *fiber.Ctx) error {
 	// Render the pricing page
 	return render(c, view.PricingPage(c))
 }
 
-func (h *Handler) ShowAccountPage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowAccountPage(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c)
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func (h *Handler) ShowAccountPage(c *fiber.Ctx) error {
 	return render(c, view.AccountPage(c, user))
 }
 
-func (h *Handler) ShowDashboardPage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowDashboardPage(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c)
 	if err != nil {
 		return err
@@ -237,7 +237,7 @@ func (h *Handler) ShowDashboardPage(c *fiber.Ctx) error {
 	return render(c, view.DashboardPage(c, user))
 }
 
-func (h *Handler) CheckInbox(c *fiber.Ctx) error {
+func (h *AppHandler) CheckInbox(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c)
 	if err != nil {
 		return err
@@ -293,7 +293,7 @@ func (h *Handler) CheckInbox(c *fiber.Ctx) error {
 	return c.Redirect("/account")
 }
 
-func (h *Handler) CreateUser(c *fiber.Ctx) error {
+func (h *AppHandler) CreateUser(c *fiber.Ctx) error {
 	// Get sanitized form data from security middleware
 	email, ok := c.Locals("sanitized_email").(string)
 	if !ok {
@@ -429,7 +429,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	return c.Redirect("/auth/sign-up/check-inbox")
 }
 
-func (h *Handler) ConfirmUser(c *fiber.Ctx) error {
+func (h *AppHandler) ConfirmUser(c *fiber.Ctx) error {
 	// Get form data
 	email := c.FormValue("email")
 	activationCode := c.FormValue("activation_code")
@@ -462,7 +462,7 @@ func (h *Handler) ConfirmUser(c *fiber.Ctx) error {
 }
 
 // ShowAdminPage displays the admin dashboard with user overview
-func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
+func (h *AppHandler) ShowAdminPage(c *fiber.Ctx) error {
 	h.telemetry.Logger().InfoContext(c.Context(), "Admin dashboard accessed")
 	// Check if user is authenticated
 	sess, err := h.store.Get(c)
@@ -551,7 +551,7 @@ func (h *Handler) ShowAdminPage(c *fiber.Ctx) error {
 }
 
 // AdminActivateUser activates a user account (admin only)
-func (h *Handler) AdminActivateUser(c *fiber.Ctx) error {
+func (h *AppHandler) AdminActivateUser(c *fiber.Ctx) error {
 	// Check authentication
 	sess, err := h.store.Get(c)
 	if err != nil {
@@ -634,7 +634,7 @@ func (h *Handler) AdminActivateUser(c *fiber.Ctx) error {
 }
 
 // AdminDeleteUser deletes a user account (admin only)
-func (h *Handler) AdminDeleteUser(c *fiber.Ctx) error {
+func (h *AppHandler) AdminDeleteUser(c *fiber.Ctx) error {
 	// Check authentication
 	sess, err := h.store.Get(c)
 	if err != nil {
@@ -718,7 +718,7 @@ func (h *Handler) AdminDeleteUser(c *fiber.Ctx) error {
 }
 
 // ShowAdminUserView displays detailed view of a specific user for admins
-func (h *Handler) ShowAdminUserView(c *fiber.Ctx) error {
+func (h *AppHandler) ShowAdminUserView(c *fiber.Ctx) error {
 	// Check if user is logged in and has admin privileges
 	sess, err := h.store.Get(c)
 	if err != nil {
@@ -796,7 +796,7 @@ func (h *Handler) ShowAdminUserView(c *fiber.Ctx) error {
 }
 
 // Health returns the health status of the application
-func (h *Handler) Health(c *fiber.Ctx) error {
+func (h *AppHandler) Health(c *fiber.Ctx) error {
 	// Check database connectivity
 	if err := h.repo.HealthCheck(c.Context()); err != nil {
 		return c.Status(503).JSON(fiber.Map{

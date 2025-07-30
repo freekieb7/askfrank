@@ -31,4 +31,11 @@ type Repository interface {
 	// Database operations
 	Migrate(ctx context.Context) error
 	HealthCheck(ctx context.Context) error
+
+	// Folder operations
+	CreateFolder(folder model.Folder) error
+	GetFolderByID(id uuid.UUID) (model.Folder, error)
+	UpdateFolder(folder model.Folder) error
+	DeleteFolder(id uuid.UUID) error
+	GetFoldersByUserID(userID uuid.UUID) ([]model.Folder, error)
 }

@@ -103,7 +103,7 @@ func main() {
 	}
 	securityMiddleware := middleware.NewSecurityMiddleware(securityConfig)
 
-	handler := api.NewHandler(store, repo, telemetry)
+	handler := api.NewAppHandler(store, repo, telemetry)
 
 	// Set up Fiber app
 	app := fiber.New(fiber.Config{

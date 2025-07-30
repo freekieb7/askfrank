@@ -36,6 +36,40 @@ type User struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+type Group struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type GroupMemberType string
+
+const (
+	GroupMemberTypeUser   GroupMemberType = "user"
+	GroupMemberTypeSystem GroupMemberType = "system"
+	GroupMemberTypeGroup  GroupMemberType = "group"
+)
+
+type GroupMember struct {
+	GroupID  uuid.UUID       `json:"group_id"`
+	Type     GroupMemberType `json:"type"` // "user", "system" or "group"
+	MemberID uuid.UUID       `json:"member_id"`
+}
+
+type Folder struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Document struct {
+	ID        uuid.UUID `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	FolderID  uuid.UUID `json:"folder_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type UserRegistration struct {
 	ID             uuid.UUID `json:"id"`
 	UserID         uuid.UUID `json:"user_id"`
