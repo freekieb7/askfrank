@@ -144,7 +144,7 @@ templ LoginPage(c *fiber.Ctx) {
 						method: 'POST',
 						body: formData,
 						headers: {
-							'X-Csrf-Token': csrfToken
+							'X-CSRF-Token': csrfToken
 						}
 					});
 					

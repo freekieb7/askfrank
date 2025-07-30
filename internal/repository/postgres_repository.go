@@ -5,6 +5,7 @@ import (
 	"askfrank/internal/model"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,10 @@ import (
 var (
 	ErrUserNotFound             = errors.New("user not found")
 	ErrUserRegistrationNotFound = errors.New("user registration not found")
+	ErrFolderNotFound           = errors.New("folder not found")
+	ErrUserAlreadyExists        = errors.New("user already exists")
+	ErrDocumentNotFound         = errors.New("document not found")
+	ErrFolderAlreadyExists      = errors.New("folder already exists")
 )
 
 type PostgresRepository struct {
@@ -27,6 +32,304 @@ type PostgresRepository struct {
 
 func NewPostgresRepository(db database.Database) Repository {
 	return &PostgresRepository{db: db}
+}
+
+func (r *PostgresRepository) CreateDocument(document model.Document) error {
+	_, err := r.db.Exec("INSERT INTO tbl_document (id, folder_id, owner_id, name, size, last_modified) VALUES ($1, $2, $3, $4, $5, $6)",
+		document.ID, document.FolderID, document.OwnerID, document.Name, document.Size, document.LastModified)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresRepository) DeleteDocument(id uuid.UUID) error {
+	_, err := r.db.Exec("DELETE FROM tbl_document WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresRepository) GetDocumentByID(id uuid.UUID) (model.Document, error) {
+	var document model.Document
+	err := r.db.QueryRow("SELECT id, folder_id, owner_id, name, size, last_modified FROM tbl_document WHERE id = $1", id).Scan(&document.ID, &document.FolderID, &document.OwnerID, &document.Name, &document.Size, &document.LastModified)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return model.Document{}, ErrDocumentNotFound
+		}
+		return model.Document{}, err
+	}
+	return document, nil
+}
+
+func (r *PostgresRepository) GetDocumentsByFolderID(folderID uuid.UUID) ([]model.Document, error) {
+	var documents []model.Document
+	rows, err := r.db.Query("SELECT id, folder_id, owner_id, name, size, last_modified FROM tbl_document WHERE folder_id = $1", folderID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
+
+	for rows.Next() {
+		var document model.Document
+		if err := rows.Scan(&document.ID, &document.FolderID, &document.OwnerID, &document.Name, &document.Size, &document.LastModified); err != nil {
+			return nil, err
+		}
+		documents = append(documents, document)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return documents, nil
+}
+
+func (r *PostgresRepository) GetDocumentsByOwnerID(ownerID uuid.UUID) ([]model.Document, error) {
+	rows, err := r.db.Query("SELECT id, owner_id, name, size, last_modified FROM tbl_document WHERE owner_id = $1 ORDER BY last_modified DESC", ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
+
+	var documents []model.Document
+	for rows.Next() {
+		var document model.Document
+		err := rows.Scan(&document.ID, &document.OwnerID, &document.Name, &document.Size, &document.LastModified)
+		if err != nil {
+			return nil, err
+		}
+		documents = append(documents, document)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return documents, nil
+}
+
+func (r *PostgresRepository) UpdateDocument(document model.Document) error {
+	_, err := r.db.Exec("UPDATE tbl_document SET name = $1, size = $2 WHERE id = $3",
+		document.Name, document.Size, document.ID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresRepository) CreateFolder(folder model.Folder) error {
+	_, err := r.db.Exec("INSERT INTO tbl_folder (id, owner_id, name, last_modified) VALUES ($1, $2, $3, $4)",
+		folder.ID, folder.OwnerID, folder.Name, folder.LastModified)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresRepository) DeleteFolder(id uuid.UUID) error {
+	_, err := r.db.Exec("DELETE FROM tbl_folder WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresRepository) GetFolderByID(id uuid.UUID) (model.Folder, error) {
+	var folder model.Folder
+	err := r.db.QueryRow("SELECT id, owner_id, name, last_modified FROM tbl_folder WHERE id = $1", id).Scan(&folder.ID, &folder.OwnerID, &folder.Name, &folder.LastModified)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return model.Folder{}, ErrFolderNotFound
+		}
+		return model.Folder{}, err
+	}
+	return folder, nil
+}
+func (r *PostgresRepository) GetFoldersByOwnerID(ownerID uuid.UUID) ([]model.Folder, error) {
+	var folders []model.Folder
+	rows, err := r.db.Query("SELECT id, owner_id, name, last_modified FROM tbl_folder WHERE owner_id = $1", ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
+
+	for rows.Next() {
+		var folder model.Folder
+		if err := rows.Scan(&folder.ID, &folder.OwnerID, &folder.Name, &folder.LastModified); err != nil {
+			return nil, err
+		}
+		folders = append(folders, folder)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return folders, nil
+}
+
+// UpdateFolder implements Repository.
+func (r *PostgresRepository) UpdateFolder(folder model.Folder) error {
+	_, err := r.db.Exec("UPDATE tbl_folder SET name = $1 WHERE id = $2",
+		folder.Name, folder.ID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// LogAudit implements Repository.
+func (r *PostgresRepository) LogAudit(ctx context.Context, log model.AuditLog) error {
+	oldValuesJSON, _ := json.Marshal(log.OldValues)
+	newValuesJSON, _ := json.Marshal(log.NewValues)
+
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO tbl_audit_log (id, user_id, entity_type, entity_id, action, 
+         old_values, new_values, ip_address, user_agent, session_id, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		log.ID, log.UserID, log.EntityType, log.EntityID, log.Action,
+		oldValuesJSON, newValuesJSON, log.IPAddress, log.UserAgent,
+		log.SessionID, log.CreatedAt,
+	)
+	return err
+}
+
+// GetAuditLogs implements Repository.
+func (r *PostgresRepository) GetAuditLogs(ctx context.Context, filters model.AuditFilters) ([]model.AuditLog, error) {
+	query := `SELECT id, user_id, entity_type, entity_id, action, old_values, new_values, 
+              ip_address, user_agent, session_id, created_at 
+              FROM tbl_audit_log WHERE 1=1`
+	args := []interface{}{}
+	argIndex := 1
+
+	if filters.UserID != nil {
+		query += fmt.Sprintf(" AND user_id = $%d", argIndex)
+		args = append(args, *filters.UserID)
+		argIndex++
+	}
+
+	if filters.EntityType != "" {
+		query += fmt.Sprintf(" AND entity_type = $%d", argIndex)
+		args = append(args, filters.EntityType)
+		argIndex++
+	}
+
+	if filters.Action != "" {
+		query += fmt.Sprintf(" AND action = $%d", argIndex)
+		args = append(args, filters.Action)
+		argIndex++
+	}
+
+	if filters.StartDate != nil {
+		query += fmt.Sprintf(" AND created_at >= $%d", argIndex)
+		args = append(args, *filters.StartDate)
+		argIndex++
+	}
+
+	if filters.EndDate != nil {
+		query += fmt.Sprintf(" AND created_at <= $%d", argIndex)
+		args = append(args, *filters.EndDate)
+		argIndex++
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	if filters.Limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", argIndex)
+		args = append(args, filters.Limit)
+		argIndex++
+	}
+
+	if filters.Offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", argIndex)
+		args = append(args, filters.Offset)
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
+
+	var auditLogs []model.AuditLog
+	for rows.Next() {
+		var log model.AuditLog
+		var oldValuesJSON, newValuesJSON sql.NullString
+
+		err := rows.Scan(&log.ID, &log.UserID, &log.EntityType, &log.EntityID, &log.Action,
+			&oldValuesJSON, &newValuesJSON, &log.IPAddress, &log.UserAgent,
+			&log.SessionID, &log.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		if oldValuesJSON.Valid {
+			if err := json.Unmarshal([]byte(oldValuesJSON.String), &log.OldValues); err != nil {
+				return nil, err
+			}
+		}
+		if newValuesJSON.Valid {
+			if err := json.Unmarshal([]byte(newValuesJSON.String), &log.NewValues); err != nil {
+				return nil, err
+			}
+		}
+
+		auditLogs = append(auditLogs, log)
+	}
+
+	return auditLogs, nil
+}
+
+// GetAuditLogsCount implements Repository.
+func (r *PostgresRepository) GetAuditLogsCount(ctx context.Context, filters model.AuditFilters) (int, error) {
+	query := `SELECT COUNT(*) FROM tbl_audit_log WHERE 1=1`
+	args := []any{}
+	argIndex := 1
+
+	if filters.UserID != nil {
+		query += fmt.Sprintf(" AND user_id = $%d", argIndex)
+		args = append(args, *filters.UserID)
+		argIndex++
+	}
+
+	if filters.EntityType != "" {
+		query += fmt.Sprintf(" AND entity_type = $%d", argIndex)
+		args = append(args, filters.EntityType)
+		argIndex++
+	}
+
+	if filters.Action != "" {
+		query += fmt.Sprintf(" AND action = $%d", argIndex)
+		args = append(args, filters.Action)
+		argIndex++
+	}
+
+	if filters.StartDate != nil {
+		query += fmt.Sprintf(" AND created_at >= $%d", argIndex)
+		args = append(args, *filters.StartDate)
+		argIndex++
+	}
+
+	if filters.EndDate != nil {
+		query += fmt.Sprintf(" AND created_at <= $%d", argIndex)
+		args = append(args, *filters.EndDate)
+	}
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
 }
 
 func (r *PostgresRepository) Migrate(ctx context.Context) error {

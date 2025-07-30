@@ -124,7 +124,7 @@ func main() {
 
 	// CSRF Protection with session-based configuration (recommended)
 	app.Use(csrf.New(csrf.Config{
-		KeyLookup:         "header:X-Csrf-Token",
+		KeyLookup:         "header:X-CSRF-Token",
 		CookieName:        "askfrank-csrf_",
 		CookieSameSite:    "Lax",
 		CookieSecure:      cfg.Server.Environment == "production",
@@ -221,12 +221,20 @@ func main() {
 
 	// Dashboard routes
 	app.Get("/dashboard", handler.ShowDashboardPage)
+	app.Get("/workspace", handler.ShowWorkspacePage)
+
+	// Workspace API routes
+	app.Post("/api/folders", handler.CreateFolder)
+	app.Delete("/api/folders/:id", handler.DeleteFolder)
+	app.Post("/api/documents", handler.CreateDocument)
+	app.Delete("/api/documents/:id", handler.DeleteDocument)
 
 	// Admin routes
 	app.Get("/admin", handler.ShowAdminPage)
 	app.Get("/admin/users/:id", handler.ShowAdminUserView)
 	app.Post("/admin/users/:id/activate", handler.AdminActivateUser)
 	app.Delete("/admin/users/:id", handler.AdminDeleteUser)
+	app.Get("/admin/audit", handler.ShowAuditPage)
 
 	port := cfg.Server.Port
 	if port == "" {

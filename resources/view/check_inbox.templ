@@ -156,7 +156,7 @@ templ CheckInboxPage(c *fiber.Ctx, email string) {
 					const response = await fetch('/auth/sign-up/check-inbox', {
 						method: 'POST',
 						headers: {
-							'X-Csrf-Token': csrfToken
+							'X-CSRF-Token': csrfToken
 						},
 						body: formData
 					});

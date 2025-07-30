@@ -37,5 +37,18 @@ type Repository interface {
 	GetFolderByID(id uuid.UUID) (model.Folder, error)
 	UpdateFolder(folder model.Folder) error
 	DeleteFolder(id uuid.UUID) error
-	GetFoldersByUserID(userID uuid.UUID) ([]model.Folder, error)
+	GetFoldersByOwnerID(ownerID uuid.UUID) ([]model.Folder, error)
+
+	// Document operations
+	CreateDocument(document model.Document) error
+	GetDocumentByID(id uuid.UUID) (model.Document, error)
+	UpdateDocument(document model.Document) error
+	DeleteDocument(id uuid.UUID) error
+	GetDocumentsByFolderID(folderID uuid.UUID) ([]model.Document, error)
+	GetDocumentsByOwnerID(ownerID uuid.UUID) ([]model.Document, error)
+
+	// Audit operations
+	LogAudit(ctx context.Context, log model.AuditLog) error
+	GetAuditLogs(ctx context.Context, filters model.AuditFilters) ([]model.AuditLog, error)
+	GetAuditLogsCount(ctx context.Context, filters model.AuditFilters) (int, error)
 }

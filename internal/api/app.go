@@ -4,7 +4,9 @@ import (
 	"askfrank/internal/model"
 	"askfrank/internal/monitoring"
 	"askfrank/internal/repository"
+	"askfrank/internal/service"
 	"askfrank/resources/view"
+	"errors"
 	"math/rand"
 	"os"
 	"strings"
@@ -17,14 +19,25 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var (
+	ErrSessionUserIDNotFound = errors.New("user ID not found in session")
+)
+
 type AppHandler struct {
-	store     *session.Store
-	repo      repository.Repository
-	telemetry monitoring.Telemetry
+	store        *session.Store
+	repo         repository.Repository
+	telemetry    monitoring.Telemetry
+	auditService *service.AuditService
 }
 
 func NewAppHandler(store *session.Store, repository repository.Repository, tel monitoring.Telemetry) AppHandler {
-	return AppHandler{store: store, repo: repository, telemetry: tel}
+	auditService := service.NewAuditService(repository)
+	return AppHandler{
+		store:        store,
+		repo:         repository,
+		telemetry:    tel,
+		auditService: auditService,
+	}
 }
 
 func (h *AppHandler) ShowHomePage(c *fiber.Ctx) error {
@@ -99,6 +112,10 @@ func (h *AppHandler) Login(c *fiber.Ctx) error {
 	// Log successful login
 	h.telemetry.Logger().InfoContext(c.Context(), "User logged in successfully", "email", email, "user_id", user.ID, "ip", c.IP())
 
+	// Log audit event for login
+	auditCtx := service.ExtractAuditContext(&user.ID, c.IP(), c.Get("User-Agent"), sess.ID())
+	h.auditService.LogAuthenticationEvent(c.Context(), user.ID, model.AuditActionLogin, auditCtx)
+
 	return c.Redirect("/account")
 }
 
@@ -110,7 +127,15 @@ func (h *AppHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	// Get user ID for logging before deleting
-	userID := sess.Get("user_id")
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID")
+	}
+
+	// Log audit event for logout
+	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
+	h.auditService.LogAuthenticationEvent(c.Context(), userID, model.AuditActionLogout, auditCtx)
 
 	// Clear session
 	sess.Delete("user_id")
@@ -120,9 +145,7 @@ func (h *AppHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	// Log successful logout
-	if userID != nil {
-		h.telemetry.Logger().InfoContext(c.Context(), "User logged out successfully", "user_id", userID, "ip", c.IP())
-	}
+	h.telemetry.Logger().InfoContext(c.Context(), "User logged out successfully", "user_id", userID, "ip", c.IP())
 
 	return c.Redirect("/auth/login?logout=true")
 }
@@ -139,22 +162,18 @@ func (h *AppHandler) ShowCheckInboxPage(c *fiber.Ctx) error {
 		return err
 	}
 
-	sessUserId := sess.Get("user_id")
-	if sessUserId == nil {
-		return c.Redirect("/auth/login")
-	}
-
-	userIdStr, ok := sessUserId.(string)
-	if !ok {
-		return c.Status(400).SendString("Invalid session user ID")
-	}
-
-	userId, err := uuid.Parse(userIdStr)
+	// Get user ID from session
+	userID, err := h.sessionUserId(sess)
 	if err != nil {
-		return c.Status(400).SendString("Invalid user ID format")
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID")
 	}
 
-	user, err := h.repo.GetUserByID(userId)
+	user, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
@@ -164,7 +183,6 @@ func (h *AppHandler) ShowCheckInboxPage(c *fiber.Ctx) error {
 }
 
 func (h *AppHandler) ShowPricingPage(c *fiber.Ctx) error {
-	// Render the pricing page
 	return render(c, view.PricingPage(c))
 }
 
@@ -174,22 +192,17 @@ func (h *AppHandler) ShowAccountPage(c *fiber.Ctx) error {
 		return err
 	}
 
-	sessUserId := sess.Get("user_id")
-	if sessUserId == nil {
-		return c.Redirect("/auth/login")
-	}
-
-	userIdStr, ok := sessUserId.(string)
-	if !ok {
-		return c.Status(400).SendString("Invalid session user ID")
-	}
-
-	userId, err := uuid.Parse(userIdStr)
+	userID, err := h.sessionUserId(sess)
 	if err != nil {
-		return c.Status(400).SendString("Invalid user ID format")
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID")
 	}
 
-	user, err := h.repo.GetUserByID(userId)
+	user, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		if err == repository.ErrUserNotFound {
 			sess.Delete("user_id") // Clear session if user not found
@@ -213,22 +226,16 @@ func (h *AppHandler) ShowDashboardPage(c *fiber.Ctx) error {
 		return err
 	}
 
-	sessUserId := sess.Get("user_id")
-	if sessUserId == nil {
-		return c.Redirect("/auth/login")
-	}
-
-	userIdStr, ok := sessUserId.(string)
-	if !ok {
-		return c.Status(400).SendString("Invalid session user ID")
-	}
-
-	userId, err := uuid.Parse(userIdStr)
+	userID, err := h.sessionUserId(sess)
 	if err != nil {
-		return c.Status(400).SendString("Invalid user ID format")
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+
+		return c.Status(500).SendString("Failed to get user ID from session")
 	}
 
-	user, err := h.repo.GetUserByID(userId)
+	user, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
@@ -237,28 +244,60 @@ func (h *AppHandler) ShowDashboardPage(c *fiber.Ctx) error {
 	return render(c, view.DashboardPage(c, user))
 }
 
+func (h *AppHandler) ShowWorkspacePage(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return err
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+
+		return c.Status(500).SendString("Failed to get user ID from session")
+	}
+
+	user, err := h.repo.GetUserByID(userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
+		return c.Status(500).SendString("Failed to retrieve user information")
+	}
+
+	// Get user's folders
+	folders, err := h.repo.GetFoldersByOwnerID(userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get folders", "error", err)
+		return c.Status(500).SendString("Failed to retrieve folders")
+	}
+
+	// Get user's documents
+	documents, err := h.repo.GetDocumentsByOwnerID(userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get documents", "error", err)
+		return c.Status(500).SendString("Failed to retrieve documents")
+	}
+
+	return render(c, view.WorkspacePage(c, user, folders, documents))
+}
+
 func (h *AppHandler) CheckInbox(c *fiber.Ctx) error {
 	sess, err := h.store.Get(c)
 	if err != nil {
 		return err
 	}
 
-	sessUserId := sess.Get("user_id")
-	if sessUserId == nil {
-		return c.Redirect("/auth/login")
-	}
-
-	userIdStr, ok := sessUserId.(string)
-	if !ok {
-		return c.Status(400).SendString("Invalid session user ID")
-	}
-
-	userId, err := uuid.Parse(userIdStr)
+	userID, err := h.sessionUserId(sess)
 	if err != nil {
-		return c.Status(400).SendString("Invalid user ID format")
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+
+		return c.Status(500).SendString("Failed to get user ID from session")
 	}
 
-	user, err := h.repo.GetUserByID(userId)
+	user, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user by ID", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
@@ -269,15 +308,18 @@ func (h *AppHandler) CheckInbox(c *fiber.Ctx) error {
 		return c.Status(400).SendString("Activation code is required")
 	}
 
-	userRegistration, err := h.repo.GetUserRegistrationByUserID(userId)
+	userRegistration, err := h.repo.GetUserRegistrationByUserID(userID)
 	if err != nil {
-		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user registration by ID", "userid", userId, "error", err)
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user registration by ID", "userid", userID, "error", err)
 		return c.Status(500).SendString("Failed to retrieve user registration information")
 	}
+
+	// Validate activation code
 	if userRegistration.ActivationCode != activationCode {
 		return c.Status(400).SendString("Invalid activation code")
 	}
 
+	// Delete user registration after successful activation
 	if err := h.repo.DeleteUserRegistration(userRegistration.ID); err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to delete user registration", "error", err)
 		return c.Status(500).SendString("Failed to delete user registration")
@@ -470,23 +512,17 @@ func (h *AppHandler) ShowAdminPage(c *fiber.Ctx) error {
 		return err
 	}
 
-	sessUserId := sess.Get("user_id")
-	if sessUserId == nil {
-		return c.Redirect("/auth/login")
-	}
-
-	userIdStr, ok := sessUserId.(string)
-	if !ok {
-		return c.Status(400).SendString("Invalid session user ID")
-	}
-
-	userId, err := uuid.Parse(userIdStr)
+	userID, err := h.sessionUserId(sess)
 	if err != nil {
-		return c.Status(400).SendString("Invalid user ID format")
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID from session")
 	}
 
 	// Get current user to check admin privileges
-	currentUser, err := h.repo.GetUserByID(userId)
+	currentUser, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get current user", "error", err)
 		return c.Status(500).SendString("Failed to retrieve user information")
@@ -494,7 +530,7 @@ func (h *AppHandler) ShowAdminPage(c *fiber.Ctx) error {
 
 	// Check if user is admin
 	if currentUser.Role != model.RoleAdmin {
-		h.telemetry.Logger().WarnContext(c.Context(), "Unauthorized admin access attempt", "user_id", userId, "email", currentUser.Email, "ip", c.IP())
+		h.telemetry.Logger().WarnContext(c.Context(), "Unauthorized admin access attempt", "user_id", userID, "email", currentUser.Email, "ip", c.IP())
 		return c.Status(403).SendString("Access denied: Admin privileges required")
 	}
 
@@ -540,7 +576,7 @@ func (h *AppHandler) ShowAdminPage(c *fiber.Ctx) error {
 
 	// Log admin access
 	h.telemetry.Logger().InfoContext(c.Context(), "Admin dashboard accessed",
-		"admin_user_id", userId,
+		"admin_user_id", userID,
 		"admin_email", currentUser.Email,
 		"total_users", stats.TotalUsers,
 		"page", page,
@@ -558,18 +594,18 @@ func (h *AppHandler) AdminActivateUser(c *fiber.Ctx) error {
 		return c.Status(500).SendString("Session error")
 	}
 
-	userId, ok := sess.Get("user_id").(string)
-	if !ok || userId == "" {
-		return c.Status(401).SendString("Unauthorized")
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).SendString("Unauthorized")
+		}
+
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID from session")
 	}
 
 	// Get current user to check admin privileges
-	userUUID, err := uuid.Parse(userId)
-	if err != nil {
-		return c.Status(400).SendString("Invalid user ID")
-	}
-
-	currentUser, err := h.repo.GetUserByID(userUUID)
+	currentUser, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		return c.Status(500).SendString("Failed to get current user")
 	}
@@ -577,7 +613,7 @@ func (h *AppHandler) AdminActivateUser(c *fiber.Ctx) error {
 	// Check if user is admin
 	if currentUser.Role != model.RoleAdmin {
 		h.telemetry.Logger().WarnContext(c.Context(), "Non-admin user attempted to access admin function",
-			"user_id", userId,
+			"user_id", userID,
 			"email", currentUser.Email,
 			"action", "activate_user",
 			"ip", c.IP(),
@@ -610,7 +646,7 @@ func (h *AppHandler) AdminActivateUser(c *fiber.Ctx) error {
 	if err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to activate user",
 			"error", err,
-			"admin_user_id", userId,
+			"admin_user_id", userID,
 			"target_user_id", targetUserID,
 		)
 		return c.Status(500).SendString("Failed to activate user")
@@ -618,7 +654,7 @@ func (h *AppHandler) AdminActivateUser(c *fiber.Ctx) error {
 
 	// Log admin action
 	h.telemetry.Logger().InfoContext(c.Context(), "User activated by admin",
-		"admin_user_id", userId,
+		"admin_user_id", userID,
 		"admin_email", currentUser.Email,
 		"target_user_id", targetUserID,
 		"target_email", targetUser.Email,
@@ -641,18 +677,17 @@ func (h *AppHandler) AdminDeleteUser(c *fiber.Ctx) error {
 		return c.Status(500).SendString("Session error")
 	}
 
-	userId, ok := sess.Get("user_id").(string)
-	if !ok || userId == "" {
-		return c.Status(401).SendString("Unauthorized")
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).SendString("Unauthorized")
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID from session")
 	}
 
 	// Get current user to check admin privileges
-	userUUID, err := uuid.Parse(userId)
-	if err != nil {
-		return c.Status(400).SendString("Invalid user ID")
-	}
-
-	currentUser, err := h.repo.GetUserByID(userUUID)
+	currentUser, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		return c.Status(500).SendString("Failed to get current user")
 	}
@@ -660,7 +695,7 @@ func (h *AppHandler) AdminDeleteUser(c *fiber.Ctx) error {
 	// Check if user is admin
 	if currentUser.Role != model.RoleAdmin {
 		h.telemetry.Logger().WarnContext(c.Context(), "Non-admin user attempted to access admin function",
-			"user_id", userId,
+			"user_id", userID,
 			"email", currentUser.Email,
 			"action", "delete_user",
 			"ip", c.IP(),
@@ -680,7 +715,7 @@ func (h *AppHandler) AdminDeleteUser(c *fiber.Ctx) error {
 	}
 
 	// Prevent admin from deleting themselves
-	if targetUUID == userUUID {
+	if targetUUID == userID {
 		return c.Status(400).SendString("Cannot delete your own account")
 	}
 
@@ -698,7 +733,7 @@ func (h *AppHandler) AdminDeleteUser(c *fiber.Ctx) error {
 	if err != nil {
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to delete user",
 			"error", err,
-			"admin_user_id", userId,
+			"admin_user_id", userID,
 			"target_user_id", targetUserID,
 		)
 		return c.Status(500).SendString("Failed to delete user")
@@ -706,7 +741,7 @@ func (h *AppHandler) AdminDeleteUser(c *fiber.Ctx) error {
 
 	// Log admin action
 	h.telemetry.Logger().InfoContext(c.Context(), "User deleted by admin",
-		"admin_user_id", userId,
+		"admin_user_id", userID,
 		"admin_email", currentUser.Email,
 		"target_user_id", targetUserID,
 		"target_email", targetUser.Email,
@@ -725,24 +760,17 @@ func (h *AppHandler) ShowAdminUserView(c *fiber.Ctx) error {
 		return c.Redirect("/auth/login")
 	}
 
-	sessUserId := sess.Get("user_id")
-	if sessUserId == nil {
-		return c.Redirect("/auth/login")
-	}
-
-	// Ensure user ID is a valid UUID
-	userIdStr, ok := sessUserId.(string)
-	if !ok || userIdStr == "" {
-		return c.Status(400).SendString("Invalid session user ID")
-	}
-
-	userId, err := uuid.Parse(userIdStr)
+	userID, err := h.sessionUserId(sess)
 	if err != nil {
-		return c.Status(400).SendString("Invalid user ID format")
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID from session")
 	}
 
 	// Get current user to verify admin role
-	currentUser, err := h.repo.GetUserByID(userId)
+	currentUser, err := h.repo.GetUserByID(userID)
 	if err != nil {
 		return c.Redirect("/auth/login")
 	}
@@ -766,7 +794,7 @@ func (h *AppHandler) ShowAdminUserView(c *fiber.Ctx) error {
 		}
 		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user for admin view",
 			"error", err,
-			"admin_user_id", userId,
+			"admin_user_id", userID,
 			"target_user_id", targetUserId,
 		)
 		return c.Status(500).SendString("Failed to retrieve user")
@@ -795,24 +823,346 @@ func (h *AppHandler) ShowAdminUserView(c *fiber.Ctx) error {
 	return render(c, view.AdminUserView(c, data))
 }
 
-// Health returns the health status of the application
-func (h *AppHandler) Health(c *fiber.Ctx) error {
-	// Check database connectivity
-	if err := h.repo.HealthCheck(c.Context()); err != nil {
-		return c.Status(503).JSON(fiber.Map{
-			"status": "unhealthy",
-			"error":  "database connection failed",
-		})
+// ShowAuditPage displays the audit log for admin users
+func (h *AppHandler) ShowAuditPage(c *fiber.Ctx) error {
+	// Check if user is authenticated
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return err
 	}
 
-	return c.JSON(fiber.Map{
-		"status":    "healthy",
-		"timestamp": time.Now().Format(time.RFC3339),
-		"version":   os.Getenv("VERSION"),
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).SendString("Failed to get user ID from session")
+	}
+
+	// Get current user to check admin privileges
+	currentUser, err := h.repo.GetUserByID(userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get current user", "error", err)
+		return c.Status(500).SendString("Failed to retrieve user information")
+	}
+
+	// Check if user is admin
+	if currentUser.Role != model.RoleAdmin {
+		h.telemetry.Logger().WarnContext(c.Context(), "Unauthorized audit access attempt", "user_id", userID, "email", currentUser.Email, "ip", c.IP())
+		return c.Status(403).SendString("Access denied: Admin privileges required")
+	}
+
+	// Parse filter parameters
+	filters := model.AuditFilters{
+		EntityType: c.Query("entity_type"),
+		Action:     model.AuditAction(c.Query("action")),
+		Limit:      20, // Default page size
+	}
+
+	// Parse pagination
+	page := c.QueryInt("page", 1)
+	if page < 1 {
+		page = 1
+	}
+	filters.Offset = (page - 1) * filters.Limit
+
+	// Parse date filters
+	if startDate := c.Query("start_date"); startDate != "" {
+		if parsed, err := time.Parse("2006-01-02", startDate); err == nil {
+			filters.StartDate = &parsed
+		}
+	}
+
+	if endDate := c.Query("end_date"); endDate != "" {
+		if parsed, err := time.Parse("2006-01-02", endDate); err == nil {
+			// Set to end of day
+			endOfDay := parsed.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+			filters.EndDate = &endOfDay
+		}
+	}
+
+	// Get audit logs
+	auditLogs, err := h.repo.GetAuditLogs(c.Context(), filters)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get audit logs", "error", err)
+		return c.Status(500).SendString("Failed to retrieve audit logs")
+	}
+
+	// Get total count for pagination
+	totalLogs, err := h.repo.GetAuditLogsCount(c.Context(), model.AuditFilters{
+		EntityType: filters.EntityType,
+		Action:     filters.Action,
+		StartDate:  filters.StartDate,
+		EndDate:    filters.EndDate,
 	})
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get audit logs count", "error", err)
+		return c.Status(500).SendString("Failed to retrieve audit logs count")
+	}
+
+	// Calculate total pages
+	totalPages := (totalLogs + filters.Limit - 1) / filters.Limit
+
+	// Prepare audit page data
+	auditData := view.AuditPageData{
+		AuditLogs:   auditLogs,
+		CurrentPage: page,
+		TotalPages:  totalPages,
+		TotalLogs:   totalLogs,
+		Filters:     filters,
+	}
+
+	// Log audit page access
+	h.telemetry.Logger().InfoContext(c.Context(), "Audit page accessed",
+		"admin_user_id", userID,
+		"admin_email", currentUser.Email,
+		"page", page,
+		"total_logs", totalLogs,
+		"ip", c.IP(),
+	)
+
+	return render(c, view.AuditPage(c, currentUser, auditData))
+}
+
+// CreateFolder creates a new folder for the authenticated user
+func (h *AppHandler) CreateFolder(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID from session"})
+	}
+
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Folder name is required"})
+	}
+
+	folder := model.Folder{
+		ID:           uuid.New(),
+		Name:         name,
+		OwnerID:      userID,
+		LastModified: time.Now(),
+	}
+
+	err = h.repo.CreateFolder(folder)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to create folder"})
+	}
+
+	// Log audit event
+	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
+	newValues := map[string]interface{}{
+		"name":     folder.Name,
+		"owner_id": folder.OwnerID.String(),
+	}
+	h.auditService.LogFolderAction(c.Context(), folder.ID, model.AuditActionCreate, auditCtx, nil, newValues)
+
+	return c.JSON(fiber.Map{"success": true, "folder": folder})
+}
+
+// DeleteFolder deletes a folder for the authenticated user
+func (h *AppHandler) DeleteFolder(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID from session"})
+	}
+
+	folderIDStr := c.Params("id")
+	folderID, err := uuid.Parse(folderIDStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid folder ID"})
+	}
+
+	// Verify folder belongs to user before deleting
+	folder, err := h.repo.GetFolderByID(folderID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Folder not found"})
+	}
+
+	if folder.OwnerID != userID {
+		return c.Status(403).JSON(fiber.Map{"error": "Access denied"})
+	}
+
+	// Store folder info for audit log
+	oldValues := map[string]interface{}{
+		"name":     folder.Name,
+		"owner_id": folder.OwnerID.String(),
+	}
+
+	err = h.repo.DeleteFolder(folderID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to delete folder"})
+	}
+
+	// Log audit event
+	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
+	h.auditService.LogFolderAction(c.Context(), folderID, model.AuditActionDelete, auditCtx, oldValues, nil)
+
+	return c.JSON(fiber.Map{"success": true})
+}
+
+// CreateDocument creates a new document for the authenticated user
+func (h *AppHandler) CreateDocument(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID from session"})
+	}
+
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Document name is required"})
+	}
+
+	document := model.Document{
+		ID:           uuid.New(),
+		Name:         name,
+		OwnerID:      userID,
+		Size:         0,   // Size will be set later when content is uploaded
+		FolderID:     nil, // Optional folder ID
+		LastModified: time.Now(),
+	}
+
+	// Handle optional folder ID
+	folderIDStr := c.FormValue("folder_id")
+	if folderIDStr != "" {
+		folderID, err := uuid.Parse(folderIDStr)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid folder ID"})
+		}
+
+		// Verify folder belongs to user
+		folder, err := h.repo.GetFolderByID(folderID)
+		if err != nil {
+			return c.Status(404).JSON(fiber.Map{"error": "Folder not found"})
+		}
+
+		// Ensure folder belongs to the user
+		if folder.OwnerID != userID {
+			return c.Status(403).JSON(fiber.Map{"error": "Access denied to folder"})
+		}
+
+		document.FolderID = &folderID
+	}
+
+	err = h.repo.CreateDocument(document)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to create document"})
+	}
+
+	// Log audit event
+	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
+	newValues := map[string]interface{}{
+		"name":     document.Name,
+		"owner_id": document.OwnerID.String(),
+	}
+	if document.FolderID != nil {
+		newValues["folder_id"] = document.FolderID.String()
+	}
+	h.auditService.LogDocumentAction(c.Context(), document.ID, model.AuditActionCreate, auditCtx, nil, newValues)
+
+	return c.JSON(fiber.Map{"success": true, "document": document})
+}
+
+// DeleteDocument deletes a document for the authenticated user
+func (h *AppHandler) DeleteDocument(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get user ID from session", "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID from session"})
+	}
+
+	documentIDStr := c.Params("id")
+	documentID, err := uuid.Parse(documentIDStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid document ID"})
+	}
+
+	// Verify document belongs to user before deleting
+	document, err := h.repo.GetDocumentByID(documentID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Document not found"})
+	}
+
+	if document.OwnerID != userID {
+		return c.Status(403).JSON(fiber.Map{"error": "Access denied"})
+	}
+
+	// Store document info for audit log
+	oldValues := map[string]interface{}{
+		"name":     document.Name,
+		"owner_id": document.OwnerID.String(),
+	}
+	if document.FolderID != nil {
+		oldValues["folder_id"] = document.FolderID.String()
+	}
+
+	err = h.repo.DeleteDocument(documentID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to delete document"})
+	}
+
+	// Log audit event
+	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
+	h.auditService.LogDocumentAction(c.Context(), documentID, model.AuditActionDelete, auditCtx, oldValues, nil)
+
+	return c.JSON(fiber.Map{"success": true})
 }
 
 func render(c *fiber.Ctx, component templ.Component) error {
 	c.Set("Content-Type", "text/html")
 	return component.Render(c.Context(), c.Response().BodyWriter())
+}
+
+func (h *AppHandler) sessionUserId(sess *session.Session) (uuid.UUID, error) {
+	sessUserID := sess.Get("user_id")
+	if sessUserID == nil {
+		return uuid.UUID{}, ErrSessionUserIDNotFound
+	}
+
+	userIDStr, ok := sessUserID.(string)
+	if !ok || userIDStr == "" {
+		return uuid.UUID{}, errors.New("invalid user ID")
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.UUID{}, errors.New("invalid user ID format")
+	}
+
+	return userID, nil
 }

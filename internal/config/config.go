@@ -13,6 +13,7 @@ type Config struct {
 	Email     EmailConfig
 	Security  SecurityConfig
 	Telemetry TelemetryConfig
+	OpenFGA   OpenFGAConfig
 }
 
 type ServerConfig struct {
@@ -73,6 +74,15 @@ type TelemetryConfig struct {
 	SamplingRatio  float64
 }
 
+type OpenFGAConfig struct {
+	APIHost     string
+	StoreID     string
+	ModelID     string
+	APIToken    string
+	Enabled     bool
+	Environment string
+}
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -126,6 +136,14 @@ func Load() (*Config, error) {
 			APIKey:         getEnv("GRAFANA_CLOUD_API_KEY", ""),
 			Enabled:        parseBoolEnv("OTEL_ENABLED", true),
 			SamplingRatio:  parseFloatEnv("OTEL_SAMPLING_RATIO", 0.1),
+		},
+		OpenFGA: OpenFGAConfig{
+			APIHost:     getEnv("OPENFGA_API_HOST", "localhost:8080"),
+			StoreID:     getEnv("OPENFGA_STORE_ID", ""),
+			ModelID:     getEnv("OPENFGA_MODEL_ID", ""),
+			APIToken:    getEnv("OPENFGA_API_TOKEN", ""),
+			Enabled:     parseBoolEnv("OPENFGA_ENABLED", false),
+			Environment: getEnv("OPENFGA_ENVIRONMENT", "development"),
 		},
 	}
 

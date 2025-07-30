@@ -192,7 +192,7 @@ templ CreateUserPage(c *fiber.Ctx) {
 					const response = await fetch('/auth/sign-up/create-user', {
 						method: 'POST',
 						headers: {
-							'X-Csrf-Token': csrfToken
+							'X-CSRF-Token': csrfToken
 						},
 						body: formData
 					});

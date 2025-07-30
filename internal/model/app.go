@@ -57,17 +57,19 @@ type GroupMember struct {
 }
 
 type Folder struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	OwnerID      uuid.UUID `json:"owner_id"`
+	Name         string    `json:"name"`
+	LastModified time.Time `json:"last_modified"`
 }
 
 type Document struct {
-	ID        uuid.UUID `json:"id"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	FolderID  uuid.UUID `json:"folder_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           uuid.UUID  `json:"id"`
+	OwnerID      uuid.UUID  `json:"owner_id"`
+	Name         string     `json:"name"`
+	Size         uint64     `json:"size"`
+	FolderID     *uuid.UUID `json:"folder_id,omitempty"`
+	LastModified time.Time  `json:"last_modified"`
 }
 
 type UserRegistration struct {
@@ -87,4 +89,39 @@ type AdminStats struct {
 type UserWithRegistration struct {
 	User         User              `json:"user"`
 	Registration *UserRegistration `json:"registration,omitempty"`
+}
+
+type AuditAction string
+
+const (
+	AuditActionCreate AuditAction = "create"
+	AuditActionRead   AuditAction = "read"
+	AuditActionUpdate AuditAction = "update"
+	AuditActionDelete AuditAction = "delete"
+	AuditActionLogin  AuditAction = "login"
+	AuditActionLogout AuditAction = "logout"
+)
+
+type AuditLog struct {
+	ID         uuid.UUID              `json:"id"`
+	UserID     *uuid.UUID             `json:"user_id,omitempty"`
+	EntityType string                 `json:"entity_type"`
+	EntityID   uuid.UUID              `json:"entity_id"`
+	Action     AuditAction            `json:"action"`
+	OldValues  map[string]interface{} `json:"old_values,omitempty"`
+	NewValues  map[string]interface{} `json:"new_values,omitempty"`
+	IPAddress  string                 `json:"ip_address,omitempty"`
+	UserAgent  string                 `json:"user_agent,omitempty"`
+	SessionID  string                 `json:"session_id,omitempty"`
+	CreatedAt  time.Time              `json:"created_at"`
+}
+
+type AuditFilters struct {
+	UserID     *uuid.UUID
+	EntityType string
+	Action     AuditAction
+	StartDate  *time.Time
+	EndDate    *time.Time
+	Limit      int
+	Offset     int
 }

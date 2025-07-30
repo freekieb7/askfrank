@@ -172,7 +172,7 @@ templ AccountPage(c *fiber.Ctx, user model.User) {
 					fetch('/auth/logout', {
 						method: 'POST',
 						headers: {
-							'X-Csrf-Token': csrfToken
+							'X-CSRF-Token': csrfToken
 						}
 					}).then(response => {
 						if (response.redirected) {

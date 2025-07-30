@@ -1,0 +1,211 @@
+package view
+
+import (
+	"askfrank/internal/model"
+	"askfrank/resources/view/component"
+	"github.com/gofiber/fiber/v2"
+	"strconv"
+)
+
+type AuditPageData struct {
+	AuditLogs   []model.AuditLog
+	CurrentPage int
+	TotalPages  int
+	TotalLogs   int
+	Filters     model.AuditFilters
+}
+
+templ AuditPage(c *fiber.Ctx, user model.User, data AuditPageData) {
+	@component.DashboardLayout("Audit Log", c, user, AuditContent(data))
+}
+
+templ AuditContent(data AuditPageData) {
+	<div class="container mx-auto px-4 py-8">
+		<div class="mb-8">
+			<h1 class="text-3xl font-bold text-gray-900 mb-2">Audit Log</h1>
+			<p class="text-gray-600">View system activity and user actions</p>
+		</div>
+		<!-- Audit Filters -->
+		<div class="bg-white rounded-lg shadow-md mb-6">
+			<div class="p-6">
+				<h2 class="text-lg font-semibold text-gray-900 mb-4">Filters</h2>
+				<form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+					<div>
+						<label for="entity_type" class="block text-sm font-medium text-gray-700 mb-1">Entity Type</label>
+						<select name="entity_type" id="entity_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+							<option value="">All Types</option>
+							<option value="user" if data.Filters.EntityType == "user" {
+	selected
+}>User</option>
+							<option value="document" if data.Filters.EntityType == "document" {
+	selected
+}>Document</option>
+							<option value="folder" if data.Filters.EntityType == "folder" {
+	selected
+}>Folder</option>
+							<option value="session" if data.Filters.EntityType == "session" {
+	selected
+}>Session</option>
+						</select>
+					</div>
+					<div>
+						<label for="action" class="block text-sm font-medium text-gray-700 mb-1">Action</label>
+						<select name="action" id="action" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+							<option value="">All Actions</option>
+							<option value="create" if data.Filters.Action == "create" {
+	selected
+}>Create</option>
+							<option value="read" if data.Filters.Action == "read" {
+	selected
+}>Read</option>
+							<option value="update" if data.Filters.Action == "update" {
+	selected
+}>Update</option>
+							<option value="delete" if data.Filters.Action == "delete" {
+	selected
+}>Delete</option>
+							<option value="login" if data.Filters.Action == "login" {
+	selected
+}>Login</option>
+							<option value="logout" if data.Filters.Action == "logout" {
+	selected
+}>Logout</option>
+						</select>
+					</div>
+					<div>
+						<label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+						<input type="date" name="start_date" id="start_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+					</div>
+					<div class="flex items-end">
+						<button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+							Filter
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+		<!-- Audit Log Table -->
+		<div class="bg-white rounded-lg shadow-md">
+			<div class="p-6">
+				<div class="flex justify-between items-center mb-4">
+					<h2 class="text-lg font-semibold text-gray-900">Activity Log</h2>
+					<span class="text-sm text-gray-500">
+						Showing { strconv.Itoa((data.CurrentPage-1)*20 + 1) } - { strconv.Itoa(min(data.CurrentPage*20, data.TotalLogs)) } of { strconv.Itoa(data.TotalLogs) } entries
+					</span>
+				</div>
+				if len(data.AuditLogs) == 0 {
+					<div class="text-center py-8">
+						<svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+						</svg>
+						<p class="text-gray-500">No audit entries found</p>
+					</div>
+				} else {
+					<div class="overflow-x-auto">
+						<table class="min-w-full divide-y divide-gray-200">
+							<thead class="bg-gray-50">
+								<tr>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entity</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+								</tr>
+							</thead>
+							<tbody class="bg-white divide-y divide-gray-200">
+								for _, log := range data.AuditLogs {
+									<tr class="hover:bg-gray-50">
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+											{ log.CreatedAt.Format("Jan 2, 2006 15:04:05") }
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+											if log.UserID != nil {
+												{ log.UserID.String()[:8] }...
+											} else {
+												<span class="text-gray-400">System</span>
+											}
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap">
+											@actionBadge(string(log.Action))
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+											<div>
+												<div class="font-medium">{ log.EntityType }</div>
+												<div class="text-gray-500 text-xs">{ log.EntityID.String()[:8] }...</div>
+											</div>
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+											{ log.IPAddress }
+										</td>
+										<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+											if log.UserAgent != "" {
+												<div class="max-w-xs truncate" title={ log.UserAgent }>
+													{ log.UserAgent }
+												</div>
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+				<!-- Pagination -->
+				if data.TotalPages > 1 {
+					<div class="flex items-center justify-between px-4 py-3 sm:px-6 border-t border-gray-200">
+						<div class="flex justify-between flex-1 sm:hidden">
+							if data.CurrentPage > 1 {
+								<a href={ templ.URL("?page=" + strconv.Itoa(data.CurrentPage-1)) } class="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+									Previous
+								</a>
+							}
+							if data.CurrentPage < data.TotalPages {
+								<a href={ templ.URL("?page=" + strconv.Itoa(data.CurrentPage+1)) } class="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+									Next
+								</a>
+							}
+						</div>
+						<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+							<div>
+								<p class="text-sm text-gray-700">
+									Page <span class="font-medium">{ strconv.Itoa(data.CurrentPage) }</span> of <span class="font-medium">{ strconv.Itoa(data.TotalPages) }</span>
+								</p>
+							</div>
+							<div>
+								<nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+									if data.CurrentPage > 1 {
+										<a href={ templ.URL("?page=" + strconv.Itoa(data.CurrentPage-1)) } class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+											Previous
+										</a>
+									}
+									if data.CurrentPage < data.TotalPages {
+										<a href={ templ.URL("?page=" + strconv.Itoa(data.CurrentPage+1)) } class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+											Next
+										</a>
+									}
+								</nav>
+							</div>
+						</div>
+					</div>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+templ actionBadge(action string) {
+	<span
+		class={
+			"inline-flex px-2 py-1 text-xs font-semibold rounded-full",
+			templ.KV("bg-green-100 text-green-800", action == "create"),
+			templ.KV("bg-blue-100 text-blue-800", action == "read"),
+			templ.KV("bg-yellow-100 text-yellow-800", action == "update"),
+			templ.KV("bg-red-100 text-red-800", action == "delete"),
+			templ.KV("bg-purple-100 text-purple-800", action == "login"),
+			templ.KV("bg-gray-100 text-gray-800", action == "logout"),
+		}
+	>
+		{ action }
+	</span>
+}
