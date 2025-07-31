@@ -44,7 +44,7 @@ func (s *AuditService) LogUserAction(ctx context.Context, entityType string, ent
 
 	// Async logging for performance
 	go func() {
-		if err := s.repo.LogAudit(context.Background(), auditLog); err != nil {
+		if err := s.repo.CreateAuditLog(context.Background(), auditLog); err != nil {
 			slog.Error("Failed to log audit", "error", err, "entity_type", entityType, "action", action)
 		}
 	}()

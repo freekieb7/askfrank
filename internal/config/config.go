@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"askfrank/internal/storage"
 )
 
 type Config struct {
@@ -12,6 +14,8 @@ type Config struct {
 	Auth      AuthConfig
 	Email     EmailConfig
 	Security  SecurityConfig
+	Storage   storage.StorageConfig
+	Stripe    StripeConfig
 	Telemetry TelemetryConfig
 	OpenFGA   OpenFGAConfig
 }
@@ -61,6 +65,13 @@ type SecurityConfig struct {
 	MaxLoginAttempts   int
 	MaxSignupAttempts  int
 	BlockDuration      time.Duration
+}
+
+type StripeConfig struct {
+	SecretKey      string
+	PublishableKey string
+	WebhookSecret  string
+	Environment    string
 }
 
 type TelemetryConfig struct {
@@ -126,6 +137,13 @@ func Load() (*Config, error) {
 			MaxLoginAttempts:   parseIntEnv("MAX_LOGIN_ATTEMPTS", 5),
 			MaxSignupAttempts:  parseIntEnv("MAX_SIGNUP_ATTEMPTS", 3),
 			BlockDuration:      parseDurationEnv("BLOCK_DURATION", "15m"),
+		},
+		Storage: loadStorageConfig(),
+		Stripe: StripeConfig{
+			SecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
+			PublishableKey: getEnv("STRIPE_PUBLISHABLE_KEY", ""),
+			WebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
+			Environment:    getEnv("STRIPE_ENVIRONMENT", "test"),
 		},
 		Telemetry: TelemetryConfig{
 			ServiceName:    getEnv("OTEL_SERVICE_NAME", "askfrank"),
@@ -194,4 +212,22 @@ func parseFloatEnv(key string, defaultValue float64) float64 {
 		}
 	}
 	return defaultValue
+}
+
+func loadStorageConfig() storage.StorageConfig {
+	storageType := getEnv("STORAGE_TYPE", "local")
+
+	config := storage.StorageConfig{
+		Type:      storage.StorageType(storageType),
+		LocalPath: getEnv("STORAGE_LOCAL_PATH", "./uploads"),
+	}
+
+	if storageType == "s3" {
+		config.S3 = &storage.S3Config{
+			Bucket: getEnv("STORAGE_S3_BUCKET", ""),
+			Region: getEnv("STORAGE_S3_REGION", ""),
+		}
+	}
+
+	return config
 }

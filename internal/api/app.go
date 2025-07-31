@@ -5,8 +5,10 @@ import (
 	"askfrank/internal/monitoring"
 	"askfrank/internal/repository"
 	"askfrank/internal/service"
+	"askfrank/internal/storage"
 	"askfrank/resources/view"
 	"errors"
+	"fmt"
 	"math/rand"
 	"os"
 	"strings"
@@ -24,19 +26,26 @@ var (
 )
 
 type AppHandler struct {
-	store        *session.Store
-	repo         repository.Repository
-	telemetry    monitoring.Telemetry
-	auditService *service.AuditService
+	store               *session.Store
+	repo                repository.Repository
+	storage             storage.Storage
+	telemetry           monitoring.Telemetry
+	auditService        *service.AuditService
+	subscriptionService *service.SubscriptionService
+	usageService        *service.UsageService
 }
 
-func NewAppHandler(store *session.Store, repository repository.Repository, tel monitoring.Telemetry) AppHandler {
+func NewAppHandler(store *session.Store, repository repository.Repository, storageBackend storage.Storage, subscriptionSvc *service.SubscriptionService, tel monitoring.Telemetry) AppHandler {
 	auditService := service.NewAuditService(repository)
+	usageService := service.NewUsageService(repository, tel.Logger())
 	return AppHandler{
-		store:        store,
-		repo:         repository,
-		telemetry:    tel,
-		auditService: auditService,
+		store:               store,
+		repo:                repository,
+		storage:             storageBackend,
+		telemetry:           tel,
+		auditService:        auditService,
+		subscriptionService: subscriptionSvc,
+		usageService:        usageService,
 	}
 }
 
@@ -1076,6 +1085,23 @@ func (h *AppHandler) CreateDocument(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to create document"})
 	}
 
+	// Track usage if this is a report document
+	if strings.Contains(strings.ToLower(document.Name), "report") {
+		// Check if user has remaining reports in their plan
+		canCreateReport, err := h.usageService.CheckUsageLimits(c.Context(), userID, model.UsageTypeReports)
+		if err != nil {
+			h.telemetry.Logger().WarnContext(c.Context(), "Failed to check usage limits", "error", err, "user_id", userID)
+		} else if !canCreateReport {
+			h.telemetry.Logger().InfoContext(c.Context(), "Report created over plan limit", "user_id", userID, "document_name", document.Name)
+		}
+
+		// Track report generation usage
+		err = h.usageService.TrackReportGeneration(c.Context(), userID, "document_report")
+		if err != nil {
+			h.telemetry.Logger().ErrorContext(c.Context(), "Failed to track report usage", "error", err, "user_id", userID)
+		}
+	}
+
 	// Log audit event
 	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
 	newValues := map[string]interface{}{
@@ -1165,4 +1191,386 @@ func (h *AppHandler) sessionUserId(sess *session.Session) (uuid.UUID, error) {
 	}
 
 	return userID, nil
+}
+
+// UploadFile handles file uploads for documents
+func (h *AppHandler) UploadFile(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID"})
+	}
+
+	// Get the document ID from URL params
+	documentIDStr := c.Params("id")
+	documentID, err := uuid.Parse(documentIDStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid document ID"})
+	}
+
+	// Verify document belongs to user
+	document, err := h.repo.GetDocumentByID(documentID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Document not found"})
+	}
+
+	if document.OwnerID != userID {
+		return c.Status(403).JSON(fiber.Map{"error": "Access denied"})
+	}
+
+	// Get uploaded file
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "No file uploaded"})
+	}
+
+	// Validate file size (limit to 10MB for now)
+	const maxFileSize = 10 * 1024 * 1024 // 10MB
+	if file.Size > maxFileSize {
+		return c.Status(400).JSON(fiber.Map{"error": "File too large (max 10MB)"})
+	}
+
+	// Open the uploaded file
+	src, err := file.Open()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to open uploaded file"})
+	}
+	defer src.Close()
+
+	// Store the file
+	storageKey, err := h.storage.Store(c.Context(), userID, file.Filename, src, file.Header.Get("Content-Type"))
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to store file", "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to store file"})
+	}
+
+	// Update document with storage information
+	document.Size = uint64(file.Size)
+	document.ContentType = file.Header.Get("Content-Type")
+	document.StorageKey = storageKey
+	document.LastModified = time.Now()
+
+	err = h.repo.UpdateDocument(document)
+	if err != nil {
+		// Try to clean up the stored file
+		h.storage.Delete(c.Context(), storageKey)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to update document"})
+	}
+
+	// Log audit event
+	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
+	oldValues := map[string]interface{}{
+		"size":         0,
+		"content_type": "",
+		"storage_key":  "",
+	}
+	newValues := map[string]interface{}{
+		"size":         document.Size,
+		"content_type": document.ContentType,
+		"storage_key":  document.StorageKey,
+	}
+	h.auditService.LogDocumentAction(c.Context(), documentID, model.AuditActionUpdate, auditCtx, oldValues, newValues)
+
+	return c.JSON(fiber.Map{
+		"success":  true,
+		"document": document,
+		"message":  "File uploaded successfully",
+	})
+}
+
+// DownloadFile handles file downloads for documents
+func (h *AppHandler) DownloadFile(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).SendString("Session error")
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).SendString("Unauthorized")
+		}
+		return c.Status(500).SendString("Failed to get user ID")
+	}
+
+	// Get the document ID from URL params
+	documentIDStr := c.Params("id")
+	documentID, err := uuid.Parse(documentIDStr)
+	if err != nil {
+		return c.Status(400).SendString("Invalid document ID")
+	}
+
+	// Verify document belongs to user
+	document, err := h.repo.GetDocumentByID(documentID)
+	if err != nil {
+		return c.Status(404).SendString("Document not found")
+	}
+
+	if document.OwnerID != userID {
+		return c.Status(403).SendString("Access denied")
+	}
+
+	// Check if document has a file
+	if document.StorageKey == "" {
+		return c.Status(404).SendString("No file associated with this document")
+	}
+
+	// Get file from storage
+	fileReader, err := h.storage.Retrieve(c.Context(), document.StorageKey)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to retrieve file", "error", err)
+		return c.Status(500).SendString("Failed to retrieve file")
+	}
+	defer fileReader.Close()
+
+	// Set appropriate headers
+	c.Set("Content-Type", document.ContentType)
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, document.Name))
+	c.Set("Content-Length", fmt.Sprintf("%d", document.Size))
+
+	// Log audit event for file access
+	auditCtx := service.ExtractAuditContext(&userID, c.IP(), c.Get("User-Agent"), sess.ID())
+	h.auditService.LogDocumentAction(c.Context(), documentID, model.AuditActionRead, auditCtx, nil, nil)
+
+	// Stream the file to the response
+	return c.SendStream(fileReader)
+}
+
+// ServeFile serves files for local storage (when using local storage backend)
+func (h *AppHandler) ServeFile(c *fiber.Ctx) error {
+	// This endpoint is only for local storage
+	// For S3, we use presigned URLs directly
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).SendString("Session error")
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).SendString("Unauthorized")
+		}
+		return c.Status(500).SendString("Failed to get user ID")
+	}
+
+	// Get storage key from URL path
+	storageKey := c.Params("*")
+	if storageKey == "" {
+		return c.Status(400).SendString("Invalid file path")
+	}
+
+	// Verify the file belongs to the user by checking the storage key pattern
+	// Storage key format: userID/year/month/uuid_filename
+	if !strings.HasPrefix(storageKey, userID.String()+"/") {
+		return c.Status(403).SendString("Access denied")
+	}
+
+	// Check if file exists
+	exists, err := h.storage.Exists(c.Context(), storageKey)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to check file existence", "error", err)
+		return c.Status(500).SendString("Internal server error")
+	}
+
+	if !exists {
+		return c.Status(404).SendString("File not found")
+	}
+
+	// Get file metadata
+	metadata, err := h.storage.GetMetadata(c.Context(), storageKey)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get file metadata", "error", err)
+		return c.Status(500).SendString("Internal server error")
+	}
+
+	// Get file from storage
+	fileReader, err := h.storage.Retrieve(c.Context(), storageKey)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to retrieve file", "error", err)
+		return c.Status(500).SendString("Failed to retrieve file")
+	}
+	defer fileReader.Close()
+
+	// Set appropriate headers
+	c.Set("Content-Type", metadata.ContentType)
+	c.Set("Content-Length", fmt.Sprintf("%d", metadata.Size))
+	c.Set("Last-Modified", metadata.LastModified.Format(time.RFC1123))
+	c.Set("ETag", metadata.ETag)
+
+	// Stream the file to the response
+	return c.SendStream(fileReader)
+}
+
+// Subscription handlers
+func (h *AppHandler) ShowSubscriptionPlans(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Redirect("/auth/login")
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Redirect("/auth/login")
+		}
+		return c.Status(500).SendString("Failed to get user ID")
+	}
+
+	user, err := h.repo.GetUserByID(userID)
+	if err != nil {
+		return c.Status(500).SendString("Failed to get user")
+	}
+
+	plans, err := h.repo.GetSubscriptionPlans(c.Context())
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get subscription plans", "error", err)
+		return c.Status(500).SendString("Failed to load subscription plans")
+	}
+
+	// Get current subscription if exists
+	var currentSubscription *model.UserSubscription
+	if sub, err := h.repo.GetActiveSubscriptionByUserID(c.Context(), userID); err == nil {
+		currentSubscription = &sub
+	}
+
+	return render(c, view.SubscriptionPlansPage(c, user, plans, currentSubscription))
+}
+
+func (h *AppHandler) CreateCheckoutSession(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID"})
+	}
+
+	var req struct {
+		PlanID     string `json:"plan_id"`
+		SuccessURL string `json:"success_url"`
+		CancelURL  string `json:"cancel_url"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
+	}
+
+	planID, err := uuid.Parse(req.PlanID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid plan ID"})
+	}
+
+	session, err := h.subscriptionService.CreateCheckoutSession(
+		c.Context(), userID, planID, req.SuccessURL, req.CancelURL)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to create checkout session", "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to create checkout session"})
+	}
+
+	return c.JSON(fiber.Map{"checkout_url": session.URL})
+}
+
+func (h *AppHandler) CancelSubscription(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID"})
+	}
+
+	err = h.subscriptionService.CancelSubscription(c.Context(), userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to cancel subscription", "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to cancel subscription"})
+	}
+
+	return c.JSON(fiber.Map{"success": true})
+}
+
+func (h *AppHandler) StripeWebhook(c *fiber.Ctx) error {
+	payload := c.Body()
+	signature := c.Get("Stripe-Signature")
+
+	err := h.subscriptionService.HandleWebhook(c.Context(), payload, signature)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to handle webhook", "error", err)
+		return c.Status(400).JSON(fiber.Map{"error": "Webhook processing failed"})
+	}
+
+	return c.JSON(fiber.Map{"received": true})
+}
+
+// Usage tracking handlers
+func (h *AppHandler) GetUsageSummary(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID"})
+	}
+
+	summary, err := h.usageService.GetUsageSummary(c.Context(), userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get usage summary", "error", err, "user_id", userID)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get usage summary"})
+	}
+
+	// Get plan limits for comparison
+	limits, err := h.subscriptionService.GetPlanLimits(c.Context(), userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to get plan limits", "error", err, "user_id", userID)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get plan limits"})
+	}
+
+	return c.JSON(fiber.Map{
+		"usage_summary": summary,
+		"plan_limits":   limits,
+	})
+}
+
+func (h *AppHandler) ProcessOverages(c *fiber.Ctx) error {
+	sess, err := h.store.Get(c)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Session error"})
+	}
+
+	userID, err := h.sessionUserId(sess)
+	if err != nil {
+		if errors.Is(err, ErrSessionUserIDNotFound) {
+			return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to get user ID"})
+	}
+
+	err = h.usageService.ProcessMonthlyOverages(c.Context(), userID)
+	if err != nil {
+		h.telemetry.Logger().ErrorContext(c.Context(), "Failed to process overages", "error", err, "user_id", userID)
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to process overages"})
+	}
+
+	return c.JSON(fiber.Map{"success": true})
 }

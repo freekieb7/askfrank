@@ -68,6 +68,8 @@ type Document struct {
 	OwnerID      uuid.UUID  `json:"owner_id"`
 	Name         string     `json:"name"`
 	Size         uint64     `json:"size"`
+	ContentType  string     `json:"content_type"`
+	StorageKey   string     `json:"storage_key"`
 	FolderID     *uuid.UUID `json:"folder_id,omitempty"`
 	LastModified time.Time  `json:"last_modified"`
 }

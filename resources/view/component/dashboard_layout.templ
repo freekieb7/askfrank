@@ -95,6 +95,10 @@ templ DashboardLayout(title string, c *fiber.Ctx, user model.User, content templ
 							<i class="fas fa-cog w-4 mr-2 text-[#028090] text-xs"></i>
 							{ middleware.T(c, "dashboard.nav.settings") }
 						</a>
+						<a href="/subscription" class="sidebar-link flex items-center px-2 py-1.5 rounded-lg text-sm">
+							<i class="fas fa-credit-card w-4 mr-2 text-[#028090] text-xs"></i>
+							{ middleware.T(c, "dashboard.nav.subscription") }
+						</a>
 						<!-- Divider -->
 						<div class="border-t border-gray-200 my-2"></div>
 						<!-- Secondary Menu -->

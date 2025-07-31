@@ -3,6 +3,7 @@ package repository
 import (
 	"askfrank/internal/model"
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -48,7 +49,23 @@ type Repository interface {
 	GetDocumentsByOwnerID(ownerID uuid.UUID) ([]model.Document, error)
 
 	// Audit operations
-	LogAudit(ctx context.Context, log model.AuditLog) error
+	CreateAuditLog(ctx context.Context, log model.AuditLog) error
 	GetAuditLogs(ctx context.Context, filters model.AuditFilters) ([]model.AuditLog, error)
 	GetAuditLogsCount(ctx context.Context, filters model.AuditFilters) (int, error)
+
+	// Subscription operations
+	GetSubscriptionPlans(ctx context.Context) ([]model.SubscriptionPlan, error)
+	GetSubscriptionPlanByID(ctx context.Context, id uuid.UUID) (model.SubscriptionPlan, error)
+	CreateUserSubscription(ctx context.Context, subscription model.UserSubscription) error
+	GetActiveSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (model.UserSubscription, error)
+	UpdateUserSubscription(ctx context.Context, subscription model.UserSubscription) error
+	GetActiveSubscriptions(ctx context.Context) ([]model.UserSubscription, error)
+
+	// Usage tracking methods
+	CreateUsageRecord(ctx context.Context, record model.UsageRecord) error
+	GetUsageByUserAndPeriod(ctx context.Context, userID uuid.UUID, period time.Time) ([]model.UsageRecord, error)
+	GetUsageSummary(ctx context.Context, userID uuid.UUID, period time.Time) (model.UsageSummary, error)
+	GetPlanLimits(ctx context.Context, planID uuid.UUID) (model.PlanLimits, error)
+	MarkUsageAsCharged(ctx context.Context, usageIDs []uuid.UUID) error
+	GetUnchargedUsage(ctx context.Context, userID uuid.UUID, period time.Time) ([]model.UsageRecord, error)
 }

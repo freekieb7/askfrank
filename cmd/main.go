@@ -8,6 +8,8 @@ import (
 	"askfrank/internal/middleware"
 	"askfrank/internal/monitoring"
 	"askfrank/internal/repository"
+	"askfrank/internal/service"
+	"askfrank/internal/storage"
 	"context"
 	"fmt"
 	"log"
@@ -94,6 +96,13 @@ func main() {
 	// Initialize repository
 	repo := repository.NewPostgresRepository(db)
 
+	// Initialize storage
+	storageFactory := storage.NewFactory(cfg.Storage)
+	storageBackend, err := storageFactory.CreateStorage()
+	if err != nil {
+		log.Fatalf("Failed to initialize storage: %v", err)
+	}
+
 	// Initialize security middleware
 	securityConfig := middleware.SecurityConfig{
 		RecaptchaSecretKey: cfg.Security.ReCaptchaSecretKey,
@@ -103,7 +112,10 @@ func main() {
 	}
 	securityMiddleware := middleware.NewSecurityMiddleware(securityConfig)
 
-	handler := api.NewAppHandler(store, repo, telemetry)
+	// Initialize subscription service
+	subscriptionService := service.NewSubscriptionService(repo, cfg.Stripe, telemetry.Logger())
+
+	handler := api.NewAppHandler(store, repo, storageBackend, subscriptionService, telemetry)
 
 	// Set up Fiber app
 	app := fiber.New(fiber.Config{
@@ -223,11 +235,26 @@ func main() {
 	app.Get("/dashboard", handler.ShowDashboardPage)
 	app.Get("/workspace", handler.ShowWorkspacePage)
 
+	// Subscription routes
+	app.Get("/subscription", handler.ShowSubscriptionPlans)
+	app.Post("/api/subscription/checkout", handler.CreateCheckoutSession)
+	app.Post("/api/subscription/cancel", handler.CancelSubscription)
+	app.Post("/api/webhooks/stripe", handler.StripeWebhook)
+
+	// Usage tracking routes
+	app.Get("/api/usage/summary", handler.GetUsageSummary)
+	app.Post("/api/usage/process-overages", handler.ProcessOverages)
+
 	// Workspace API routes
 	app.Post("/api/folders", handler.CreateFolder)
 	app.Delete("/api/folders/:id", handler.DeleteFolder)
 	app.Post("/api/documents", handler.CreateDocument)
 	app.Delete("/api/documents/:id", handler.DeleteDocument)
+
+	// File upload/download routes
+	app.Post("/api/documents/:id/upload", handler.UploadFile)
+	app.Get("/api/documents/:id/download", handler.DownloadFile)
+	app.Get("/files/*", handler.ServeFile) // For local storage file serving
 
 	// Admin routes
 	app.Get("/admin", handler.ShowAdminPage)
