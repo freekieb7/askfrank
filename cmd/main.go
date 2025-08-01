@@ -1,121 +1,42 @@
 package main
 
 import (
-	"askfrank/internal/api"
-	"askfrank/internal/config"
-	"askfrank/internal/database"
-	"askfrank/internal/i18n"
-	"askfrank/internal/middleware"
-	"askfrank/internal/monitoring"
-	"askfrank/internal/repository"
-	"askfrank/internal/service"
-	"askfrank/internal/storage"
 	"context"
-	"fmt"
-	"log"
-	"log/slog"
+	"hp/internal/api"
+	"hp/internal/config"
+	"hp/internal/database"
+	"hp/internal/i18n"
+	"hp/internal/middleware"
+	"hp/internal/web"
 	"os"
 	"os/signal"
-	"slices"
 	"syscall"
 	"time"
 
-	"github.com/a-h/templ"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/gofiber/fiber/v2/utils"
-	"github.com/gofiber/storage/postgres/v3"
-	_ "github.com/lib/pq"
+	"golang.org/x/exp/slog"
 )
 
 func main() {
-	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+	if err := run(context.Background()); err != nil {
+		panic(err)
+	}
+}
+
+func run(ctx context.Context) error {
+	cfg := config.NewConfig()
+
+	translator := i18n.NewTranslator(i18n.NL)
+	if err := translator.LoadTranslations(); err != nil {
+		slog.Error("Failed to load translations", "error", err)
 	}
 
-	// Initialize telemetry
-	telemetry, err := monitoring.NewOpenTelemetry(cfg.Telemetry)
-	if err != nil {
-		log.Fatalf("Failed to initialize telemetry: %v", err)
-	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := telemetry.Shutdown(ctx); err != nil {
-			slog.Error("Failed to shutdown telemetry", "error", err)
-		}
-	}()
+	db := database.NewDatabase(cfg.Database)
 
-	slog.Info("AskFrank Healthcare IT Platform starting",
-		"version", os.Getenv("VERSION"),
-		"environment", cfg.Server.Environment,
-		"telemetry_enabled", cfg.Telemetry.Enabled,
-	)
-
-	// Initialize internationalization
-	i18nInstance := i18n.New("en")
-	err = i18nInstance.LoadTranslations("translations")
-	if err != nil {
-		log.Fatalf("Failed to load translations: %v", err)
-	}
-
-	// Initialize session store
-	sessionStorage := postgres.New(postgres.Config{
-		Host:     cfg.Database.Host,
-		Port:     cfg.Database.Port,
-		Database: cfg.Database.Name,
-		Username: cfg.Database.User,
-		Password: cfg.Database.Password,
-		Table:    "sessions",
-		Reset:    false, // Don't reset the table on startup
-	})
-
-	store := session.New(session.Config{
-		Storage:        sessionStorage,
-		KeyLookup:      "cookie:session_id",
-		CookieDomain:   "",
-		CookiePath:     "/",
-		CookieSecure:   cfg.Server.Environment == "production",
-		CookieHTTPOnly: true,
-		CookieSameSite: "Lax",
-		Expiration:     cfg.Auth.SessionExpiration,
-	})
-
-	// Connect to the database
-	dataSourceName := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.Database.SSLMode)
-	db, err := database.NewPostgresDatabase(dataSourceName)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-
-	// Initialize repository
-	repo := repository.NewPostgresRepository(db)
-
-	// Initialize storage
-	storageFactory := storage.NewFactory(cfg.Storage)
-	storageBackend, err := storageFactory.CreateStorage()
-	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
-	}
-
-	// Initialize security middleware
-	securityConfig := middleware.SecurityConfig{
-		RecaptchaSecretKey: cfg.Security.ReCaptchaSecretKey,
-		MaxSignupAttempts:  cfg.Security.MaxSignupAttempts,
-		RateLimitWindow:    15 * time.Minute,
-		BlockDuration:      cfg.Security.BlockDuration,
-	}
-	securityMiddleware := middleware.NewSecurityMiddleware(securityConfig)
-
-	// Initialize subscription service
-	subscriptionService := service.NewSubscriptionService(repo, cfg.Stripe, telemetry.Logger())
-
-	handler := api.NewAppHandler(store, repo, storageBackend, subscriptionService, telemetry)
+	sessionStore := session.New()
 
 	// Set up Fiber app
 	app := fiber.New(fiber.Config{
@@ -123,179 +44,66 @@ func main() {
 		WriteTimeout: cfg.Server.WriteTimeout,
 	})
 
-	// Add telemetry middleware (first to capture all requests)
-	if cfg.Telemetry.Enabled {
-		app.Use(monitoring.FiberMiddleware(cfg.Telemetry.ServiceName))
-	}
+	pageHandler := web.NewPageHandler(translator, sessionStore)
+	healthHandler := api.NewHealthHandler(db)
 
-	// Add security headers middleware
-	// app.Use(middleware.SecurityHeadersMiddleware()) // todo enable after fixing script issues
-
-	// Add input sanitization middleware
-	app.Use(middleware.InputSanitizationMiddleware())
-
-	// CSRF Protection with session-based configuration (recommended)
+	// Middleware
+	// app.Use(middleware.Logger())
+	// app.Use(middleware.Recover())
+	// app.Use(middleware.RequestID())
+	// app.Use(middleware.CORS())
+	app.Use(middleware.Localization())
 	app.Use(csrf.New(csrf.Config{
-		KeyLookup:         "header:X-CSRF-Token",
-		CookieName:        "askfrank-csrf_",
+		KeyLookup:         "header:X-Csrf-Token",
+		CookieName:        "hp-csrf_",
 		CookieSameSite:    "Lax",
 		CookieSecure:      cfg.Server.Environment == "production",
 		CookieSessionOnly: true,
 		CookieHTTPOnly:    true,
 		Expiration:        1 * time.Hour,
 		KeyGenerator:      utils.UUIDv4,
-		Session:           store,
+		Session:           sessionStore,
 		SessionKey:        "fiber.csrf.token",
-		ContextKey:        "token",
+		ContextKey:        "csrf_token",
 	}))
 
-	// Add IP blocking middleware globally
-	app.Use(securityMiddleware.IPBlockMiddleware())
+	// Static file serving
+	app.Static("/static", "./internal/web/static")
 
-	// Add i18n middleware
-	app.Use(middleware.I18nMiddleware(i18nInstance, store))
+	// Routes
+	app.Get("/", middleware.Authenticated(sessionStore), pageHandler.ShowHomePage)
 
-	// Rate limiting for sign-up endpoints with configuration
-	signupLimiter := limiter.New(limiter.Config{
-		Max:        cfg.Security.MaxSignupAttempts,
-		Expiration: cfg.Security.BlockDuration,
-		KeyGenerator: func(c *fiber.Ctx) string {
-			return c.IP() // Limit by IP address
-		},
-		LimitReached: func(c *fiber.Ctx) error {
-			return c.Status(429).JSON(fiber.Map{
-				"error": "Too many sign-up attempts. Please try again later.",
-			})
-		},
-	})
+	app.Get("/login", pageHandler.ShowLoginPage)
+	app.Post("/login", pageHandler.Login)
 
-	// Language switching endpoint
-	app.Get("/lang/:lang", func(c *fiber.Ctx) error {
-		lang := c.Params("lang")
-		sess, err := store.Get(c)
-		if err != nil {
-			return err
-		}
+	app.Post("/logout", pageHandler.Logout)
 
-		// Validate language
-		availableLangs := i18nInstance.GetAvailableLanguages()
-		validLang := slices.Contains(availableLangs, lang)
+	app.Get("/register", pageHandler.ShowRegisterPage)
 
-		if validLang {
-			sess.Set("lang", lang)
-			if err := sess.Save(); err != nil {
-				return err
-			}
-		}
+	app.Get("/api/health", healthHandler.Healthy)
 
-		// Redirect back to referer or home
-		referer := c.Get("Referer")
-		if referer == "" {
-			referer = "/"
-		}
-		return c.Redirect(referer)
-	})
-
-	app.Get("/", handler.ShowHomePage)
-
-	app.Get("/health", func(c *fiber.Ctx) error {
-		if err := repo.HealthCheck(c.Context()); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status": "unhealthy",
-				"error":  err.Error(),
-			})
-		}
-		return c.JSON(fiber.Map{
-			"status":            "healthy",
-			"version":           os.Getenv("VERSION"),
-			"environment":       cfg.Server.Environment,
-			"telemetry_enabled": cfg.Telemetry.Enabled,
-		})
-	})
-
-	// Login routes
-	app.Get("/auth/login", handler.ShowLoginPage)
-	app.Post("/auth/login", handler.Login)
-	app.Post("/auth/logout", handler.Logout)
-
-	// Auth routes with rate limiting and security validation
-	app.Get("/auth/sign-up/create-user", handler.ShowCreateUserPage)
-	app.Post("/auth/sign-up/create-user", signupLimiter, securityMiddleware.ValidateSignupForm, handler.CreateUser)
-	app.Get("/auth/sign-up/check-inbox", handler.ShowCheckInboxPage)
-	app.Post("/auth/sign-up/check-inbox", signupLimiter, handler.CheckInbox)
-	app.Post("/auth/sign-up/confirm", handler.ConfirmUser)
-
-	// Pricing routes
-	app.Get("/pricing", handler.ShowPricingPage)
-
-	// Account routes
-	app.Get("/account", handler.ShowAccountPage)
-
-	// Dashboard routes
-	app.Get("/dashboard", handler.ShowDashboardPage)
-	app.Get("/workspace", handler.ShowWorkspacePage)
-
-	// Subscription routes
-	app.Get("/subscription", handler.ShowSubscriptionPlans)
-	app.Post("/api/subscription/checkout", handler.CreateCheckoutSession)
-	app.Post("/api/subscription/cancel", handler.CancelSubscription)
-	app.Post("/api/webhooks/stripe", handler.StripeWebhook)
-
-	// Usage tracking routes
-	app.Get("/api/usage/summary", handler.GetUsageSummary)
-	app.Post("/api/usage/process-overages", handler.ProcessOverages)
-
-	// Workspace API routes
-	app.Post("/api/folders", handler.CreateFolder)
-	app.Delete("/api/folders/:id", handler.DeleteFolder)
-	app.Post("/api/documents", handler.CreateDocument)
-	app.Delete("/api/documents/:id", handler.DeleteDocument)
-
-	// File upload/download routes
-	app.Post("/api/documents/:id/upload", handler.UploadFile)
-	app.Get("/api/documents/:id/download", handler.DownloadFile)
-	app.Get("/files/*", handler.ServeFile) // For local storage file serving
-
-	// Admin routes
-	app.Get("/admin", handler.ShowAdminPage)
-	app.Get("/admin/users/:id", handler.ShowAdminUserView)
-	app.Post("/admin/users/:id/activate", handler.AdminActivateUser)
-	app.Delete("/admin/users/:id", handler.AdminDeleteUser)
-	app.Get("/admin/audit", handler.ShowAuditPage)
-
-	port := cfg.Server.Port
-	if port == "" {
-		port = "8080"
-	}
-
-	// Setup graceful shutdown
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
+	// Start the server
 	go func() {
-		<-c
-		slog.Info("Gracefully shutting down AskFrank...")
-		_ = app.Shutdown()
+		if err := app.Listen(cfg.Server.Host + ":" + cfg.Server.Port); err != nil {
+			panic(err)
+		}
 	}()
 
-	slog.Info("AskFrank Healthcare IT Platform started",
-		"port", port,
-		"environment", cfg.Server.Environment,
-		"security_features", map[string]interface{}{
-			"rate_limiting":   cfg.Security.RateLimitEnabled,
-			"csrf_protection": true,
-			"telemetry":       cfg.Telemetry.Enabled,
-		},
-	)
+	c := make(chan os.Signal, 1)                    // Create channel to signify a signal being sent
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM) // When an interrupt or termination signal is sent, notify the channel
 
-	if err := app.Listen(":" + port); err != nil {
-		slog.Error("Failed to start server", "error", err)
+	<-c // This blocks the main thread until an interrupt is received
+	err := app.Shutdown()
+	if err != nil {
+		slog.Error("Error shutting down", "error", err)
 	}
 
-	slog.Info("AskFrank Healthcare IT Platform stopped")
-}
+	slog.Info("Running cleanup tasks...")
 
-func Render(c *fiber.Ctx, component templ.Component) error {
-	c.Set("Content-Type", "text/html")
-	return component.Render(c.Context(), c.Response().BodyWriter())
+	// Your cleanup tasks go here
+	// db.Close()
+	// redisConn.Close()
+	slog.Info("Fiber was successful shutdown.")
+
+	return nil
 }

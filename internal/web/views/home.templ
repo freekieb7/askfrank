@@ -1,0 +1,11 @@
+package views
+
+
+import "github.com/gofiber/fiber/v2"
+import "hp/internal/web/views/component"
+
+templ HomePage(c *fiber.Ctx, t Translate) {
+	@component.Layout("AskFrank - The Foundation for Data-Driven Healthcare", c) {
+		<h1>{t(c, "home.title")}</h1>
+	}
+}
