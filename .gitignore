@@ -15,3 +15,6 @@ archive/
 
 # Temporary files
 tmp/
+
+# Built binaries
+bin/

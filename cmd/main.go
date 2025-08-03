@@ -8,6 +8,7 @@ import (
 	"hp/internal/i18n"
 	"hp/internal/middleware"
 	"hp/internal/web"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,7 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/gofiber/fiber/v2/utils"
-	"golang.org/x/exp/slog"
+	"github.com/gofiber/storage/postgres/v3"
 )
 
 func main() {
@@ -29,14 +30,29 @@ func main() {
 func run(ctx context.Context) error {
 	cfg := config.NewConfig()
 
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
 	translator := i18n.NewTranslator(i18n.NL)
 	if err := translator.LoadTranslations(); err != nil {
-		slog.Error("Failed to load translations", "error", err)
+		logger.Error("Failed to load translations", "error", err)
 	}
 
 	db := database.NewDatabase(cfg.Database)
 
-	sessionStore := session.New()
+	sessionStore := session.New(session.Config{
+		Expiration: 24 * time.Hour,
+		Storage: postgres.New(postgres.Config{
+			DB:         db.Pool,
+			Table:      "tbl_session",
+			Reset:      false,
+			GCInterval: 10 * time.Second,
+		}),
+		CookieHTTPOnly: true,
+		CookieSecure:   cfg.Server.Environment == "production",
+		CookieSameSite: "Lax",
+	})
 
 	// Set up Fiber app
 	app := fiber.New(fiber.Config{
@@ -44,7 +60,7 @@ func run(ctx context.Context) error {
 		WriteTimeout: cfg.Server.WriteTimeout,
 	})
 
-	pageHandler := web.NewPageHandler(translator, sessionStore)
+	pageHandler := web.NewPageHandler(logger, translator, sessionStore, db)
 	healthHandler := api.NewHealthHandler(db)
 
 	// Middleware
@@ -79,6 +95,7 @@ func run(ctx context.Context) error {
 	app.Post("/logout", pageHandler.Logout)
 
 	app.Get("/register", pageHandler.ShowRegisterPage)
+	app.Post("/register", pageHandler.Register)
 
 	app.Get("/api/health", healthHandler.Healthy)
 

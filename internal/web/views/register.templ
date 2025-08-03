@@ -1,11 +1,210 @@
 package views
 
-
 import "github.com/gofiber/fiber/v2"
 import "hp/internal/web/views/component"
+import "hp/internal/web/translate"
 
-templ RegisterPage(c *fiber.Ctx, t Translate) {
-	@component.Layout("AskFrank - The Foundation for Data-Driven Healthcare", c) {
-		<h1>Register</h1>
+templ RegisterPage(c *fiber.Ctx, t translate.Translate) {
+	@component.Layout("Register - AskFrank", c) {
+		<div class="min-h-screen bg-gray-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+			<div class="max-w-sm w-full space-y-4">
+				<!-- Header -->
+				<div class="text-center">
+					<i class="fas fa-user-plus text-4xl text-ocean mb-2"></i>
+					<h2 class="text-2xl font-bold text-gray-900">
+						Join <span class="text-gradient-ocean">AskFrank</span>
+					</h2>
+					<p class="mt-1 text-sm text-gray-600">Create your healthcare platform account</p>
+				</div>
+				<!-- Register Form -->
+				<div class="bg-white py-6 px-6 shadow-compact rounded-lg border border-gray-200">
+					<form class="space-y-4" method="POST" action="/register" id="register-form">
+						<div id="error-message" class="hidden p-4 bg-red-50 border border-red-200 rounded-md">
+							<div class="flex">
+								<div class="flex-shrink-0">
+									<svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+									</svg>
+								</div>
+								<div class="ml-3">
+									<h3 class="text-sm font-medium text-red-800" id="error-text">
+										<!-- Error message will be inserted here -->
+									</h3>
+								</div>
+							</div>
+						</div>
+						<!-- Success message display -->
+						<div id="success-message" class="hidden p-4 bg-green-50 border border-green-200 rounded-md">
+							<div class="flex">
+								<div class="flex-shrink-0">
+									<svg class="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+									</svg>
+								</div>
+								<div class="ml-3">
+									<h3 class="text-sm font-medium text-green-800" id="success-text">
+										<!-- Success message will be inserted here -->
+									</h3>
+								</div>
+							</div>
+						</div>
+						<div>
+							<label for="name" class="block text-sm font-medium text-gray-700 mb-1">
+								Full Name
+							</label>
+							<div class="relative">
+								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+									<i class="fas fa-user text-gray-400 text-sm"></i>
+								</div>
+								<input
+									id="name"
+									name="name"
+									type="text"
+									required
+									class="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ocean focus:border-ocean"
+									placeholder="Enter your full name"
+								/>
+							</div>
+						</div>
+						<div>
+							<label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+								Email Address
+							</label>
+							<div class="relative">
+								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+									<i class="fas fa-envelope text-gray-400 text-sm"></i>
+								</div>
+								<input
+									id="email"
+									name="email"
+									type="email"
+									required
+									class="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ocean focus:border-ocean"
+									placeholder="Enter your email address"
+								/>
+							</div>
+						</div>
+						<div>
+							<label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+								Password
+							</label>
+							<div class="relative">
+								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+									<i class="fas fa-lock text-gray-400 text-sm"></i>
+								</div>
+								<input
+									id="password"
+									name="password"
+									type="password"
+									required
+									class="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ocean focus:border-ocean"
+									placeholder="Create a password"
+								/>
+							</div>
+						</div>
+						<div class="flex items-start">
+							<div class="flex items-center h-5">
+								<input
+									id="terms"
+									name="terms"
+									type="checkbox"
+									required
+									class="h-4 w-4 text-ocean focus:ring-ocean border-gray-300 rounded"
+								/>
+							</div>
+							<div class="ml-3 text-sm">
+								<label for="terms" class="text-gray-600">
+									I agree to the 
+									<a href="/terms" class="text-aqua hover:text-teal transition-colors">Terms of Service</a>
+									and 
+									<a href="/privacy" class="text-aqua hover:text-teal transition-colors">Privacy Policy</a>
+								</label>
+							</div>
+						</div>
+						<div>
+							<button
+								type="submit"
+								class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-ocean hover:bg-teal focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ocean transition-colors"
+							>
+								<i class="fas fa-user-plus mr-2"></i>
+								Create Account
+							</button>
+						</div>
+					</form>
+				</div>
+				<!-- Login Link -->
+				<div class="text-center">
+					<p class="text-sm text-gray-600">
+						Already have an account?
+						<a href="/login" class="text-aqua hover:text-teal font-medium transition-colors">
+							Sign in here
+						</a>
+					</p>
+				</div>
+			</div>
+		</div>
+		<script>
+			document.addEventListener('DOMContentLoaded', function() {
+				// Focus the name field on page load
+				document.getElementById('name').focus();
+
+				const form = document.getElementById('register-form');
+				const errorDiv = document.getElementById('error-message');
+				const successDiv = document.getElementById('success-message');
+				const errorText = document.getElementById('error-text');
+				const successText = document.getElementById('success-text');
+				const submitButton = form.querySelector('button[type="submit"]');
+
+				form.addEventListener('submit', function(event) {
+					event.preventDefault();
+
+					submitButton.disabled = true; // Disable submit button to prevent multiple submissions
+					errorDiv.classList.add('hidden'); // Hide error message
+					successDiv.classList.add('hidden'); // Hide success message
+
+					// Check if terms are accepted
+					const termsCheckbox = document.getElementById('terms');
+					if (!termsCheckbox.checked) {
+						errorDiv.classList.remove('hidden');
+						errorText.textContent = 'You must accept the terms and conditions to register.';
+						return;
+					}
+
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                    const formData = new FormData(this);
+
+					fetch('/register', {
+						method: 'POST',
+						body: formData,
+						headers: {
+							'X-Csrf-Token': csrfToken // Include CSRF token in the request
+						},
+					}).then(async response => {
+						if (response.ok) {
+							successDiv.classList.remove('hidden');
+							successText.textContent = 'Registration successful! Redirecting...';
+
+							const json = await response.json();
+							if (json.redirect) {
+								setTimeout(() => {
+									window.location.href = json.redirect;
+								}, 1000); // Redirect after 1 second
+							}
+						} else {
+							const result = await response.json();
+
+							// Handle error response
+							errorText.textContent = result.error || 'Registration failed';
+							errorDiv.classList.remove('hidden');
+						}
+					}).catch(error => {
+						errorText.textContent = 'Network error. Please try again.';
+						errorDiv.classList.remove('hidden');
+					}).finally(() => {
+						submitButton.disabled = false; // Re-enable submit button
+					});
+				});
+			});
+		</script>
 	}
 }

@@ -40,7 +40,7 @@ func Layout(title string, c *fiber.Ctx) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(c.Locals("lang").(i18n.Language).String())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/layout.templ`, Line: 9, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/layout.templ`, Line: 9, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -58,7 +58,7 @@ func Layout(title string, c *fiber.Ctx) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(csrfToken)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/layout.templ`, Line: 15, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/layout.templ`, Line: 15, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -76,13 +76,13 @@ func Layout(title string, c *fiber.Ctx) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/layout.templ`, Line: 17, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/layout.templ`, Line: 17, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</title><link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css\" integrity=\"sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ==\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\"><link href=\"/static/output.css\" rel=\"stylesheet\"></head><body>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</title><link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css\" integrity=\"sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ==\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\"><script src=\"https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4\"></script><style>\n\t\t\t\t/* Custom styles following the style guide */\n\t\t\t\tbody {\n\t\t\t\t\tfont-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;\n\t\t\t\t\t-webkit-font-smoothing: antialiased;\n\t\t\t\t\t-moz-osx-font-smoothing: grayscale;\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t:root {\n\t\t\t\t\t--ocean-blue: #05668D;\n\t\t\t\t\t--deep-teal: #028090;\n\t\t\t\t\t--mint-green: #00A896;\n\t\t\t\t\t--aqua-green: #02C39A;\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t.text-ocean { color: var(--ocean-blue); }\n\t\t\t\t.text-teal { color: var(--deep-teal); }\n\t\t\t\t.text-mint { color: var(--mint-green); }\n\t\t\t\t.text-aqua { color: var(--aqua-green); }\n\t\t\t\t\n\t\t\t\t.bg-ocean { background-color: var(--ocean-blue); }\n\t\t\t\t.bg-teal { background-color: var(--deep-teal); }\n\t\t\t\t.bg-mint { background-color: var(--mint-green); }\n\t\t\t\t.bg-aqua { background-color: var(--aqua-green); }\n\t\t\t\t\n\t\t\t\t.border-ocean { border-color: var(--ocean-blue); }\n\t\t\t\t.border-teal { border-color: var(--deep-teal); }\n\t\t\t\t.border-mint { border-color: var(--mint-green); }\n\t\t\t\t.border-aqua { border-color: var(--aqua-green); }\n\t\t\t\t\n\t\t\t\t.text-gradient-ocean {\n\t\t\t\t\tbackground: linear-gradient(to right, var(--ocean-blue), var(--deep-teal));\n\t\t\t\t\t-webkit-background-clip: text;\n\t\t\t\t\t-webkit-text-fill-color: transparent;\n\t\t\t\t\tbackground-clip: text;\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t.bg-gradient-ocean {\n\t\t\t\t\tbackground: linear-gradient(to right, var(--ocean-blue), var(--deep-teal));\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t.hover\\:bg-teal:hover { background-color: var(--deep-teal); }\n\t\t\t\t.focus\\:ring-ocean:focus { \n\t\t\t\t\t--tw-ring-color: var(--ocean-blue);\n\t\t\t\t\t--tw-ring-opacity: 0.5;\n\t\t\t\t}\n\t\t\t\t.focus\\:border-ocean:focus { border-color: var(--ocean-blue); }\n\t\t\t\t\n\t\t\t\t/* Compact shadows */\n\t\t\t\t.shadow-compact {\n\t\t\t\t\tbox-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);\n\t\t\t\t}\n\t\t\t</style></head><body>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

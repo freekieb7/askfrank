@@ -3,23 +3,79 @@ package component
 import "github.com/gofiber/fiber/v2"
 import "hp/internal/i18n"
 
-// todo add language    
+// todo add language
 templ Layout(title string, c *fiber.Ctx) {
-    <!DOCTYPE html>
-    <html lang={ c.Locals("lang").(i18n.Language).String() }>
-    <head>
-        <meta charset="UTF-8"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-        <!-- Hidden CSRF token for JavaScript -->
-        if csrfToken, ok := c.Locals("csrf_token").(string); ok {
-            <meta name="csrf-token" content={ csrfToken }/>
-        }
-        <title>{ title }</title>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-        <link href="/static/output.css" rel="stylesheet">
-    </head>
-    <body>
-        { children... }
-    </body>
-    </html>
+	<!DOCTYPE html>
+	<html lang={ c.Locals("lang").(i18n.Language).String() }>
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<!-- Hidden CSRF token for JavaScript -->
+			if csrfToken, ok := c.Locals("csrf_token").(string); ok {
+				<meta name="csrf-token" content={ csrfToken }/>
+			}
+			<title>{ title }</title>
+			<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ==" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<style>
+				/* Custom styles following the style guide */
+				body {
+					font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+					-webkit-font-smoothing: antialiased;
+					-moz-osx-font-smoothing: grayscale;
+				}
+				
+				:root {
+					--ocean-blue: #05668D;
+					--deep-teal: #028090;
+					--mint-green: #00A896;
+					--aqua-green: #02C39A;
+				}
+				
+				.text-ocean { color: var(--ocean-blue); }
+				.text-teal { color: var(--deep-teal); }
+				.text-mint { color: var(--mint-green); }
+				.text-aqua { color: var(--aqua-green); }
+				
+				.bg-ocean { background-color: var(--ocean-blue); }
+				.bg-teal { background-color: var(--deep-teal); }
+				.bg-mint { background-color: var(--mint-green); }
+				.bg-aqua { background-color: var(--aqua-green); }
+				
+				.border-ocean { border-color: var(--ocean-blue); }
+				.border-teal { border-color: var(--deep-teal); }
+				.border-mint { border-color: var(--mint-green); }
+				.border-aqua { border-color: var(--aqua-green); }
+				
+				.text-gradient-ocean {
+					background: linear-gradient(to right, var(--ocean-blue), var(--deep-teal));
+					-webkit-background-clip: text;
+					-webkit-text-fill-color: transparent;
+					background-clip: text;
+				}
+				
+				.bg-gradient-ocean {
+					background: linear-gradient(to right, var(--ocean-blue), var(--deep-teal));
+				}
+				
+				.hover\:bg-teal:hover { background-color: var(--deep-teal); }
+				.focus\:ring-ocean:focus { 
+					--tw-ring-color: var(--ocean-blue);
+					--tw-ring-opacity: 0.5;
+				}
+				.focus\:border-ocean:focus { border-color: var(--ocean-blue); }
+				
+				/* Compact shadows */
+				.shadow-compact {
+					box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+				}
+			</style>
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
 }

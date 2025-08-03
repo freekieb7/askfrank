@@ -19,7 +19,7 @@ func NewHealthHandler(db *database.PostgresDatabase) *HealthHandler {
 
 func (h *HealthHandler) Healthy(c *fiber.Ctx) error {
 	// Check database connection
-	if err := h.db.Ping(); err != nil {
+	if err := h.db.Ping(c.Context()); err != nil {
 		slog.Error("Database connection failed", "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status":  "unhealthy",
