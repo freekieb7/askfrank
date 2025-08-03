@@ -1,0 +1,23 @@
+package component
+
+templ MetricCard(title, value, change string, isPositive bool) {
+	<div class="metric-card">
+		<div class="metric-title">{ title }</div>
+		<div class="metric-value">{ value }</div>
+		if change != "" {
+			<div class={ templ.KV("metric-change", true), templ.KV("negative", !isPositive) }>
+				{ change }
+			</div>
+		}
+	</div>
+}
+
+templ LoadingSkeleton(height string) {
+	<div class="skeleton rounded" style={ "height: " + height }></div>
+}
+
+templ CompactCard() {
+	<div class="compact-card">
+		{ children... }
+	</div>
+}

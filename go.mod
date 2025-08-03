@@ -5,8 +5,11 @@ go 1.24.3
 require (
 	github.com/a-h/templ v0.3.924
 	github.com/gofiber/fiber/v2 v2.52.9
+	github.com/gofiber/storage/postgres/v3 v3.3.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.5
-	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792
+	github.com/stripe/stripe-go/v82 v82.4.0
+	golang.org/x/crypto v0.40.0
 )
 
 require (
@@ -22,9 +25,7 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/gofiber/storage/postgres/v3 v3.3.0 // indirect
 	github.com/gohugoio/hugo v0.147.6 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -44,7 +45,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect

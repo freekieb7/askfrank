@@ -1,3 +1,10 @@
 {
-    "home.title": "Welkom bij AskFrank"
+    "home.title": "Welkom bij AskFrank",
+    "drive.title": "Mijn Drive",
+    "drive.description": "Beheer je bestanden en mappen",
+    "drive.new_folder": "Nieuwe Map",
+    "drive.upload": "Uploaden",
+    "drive.search_placeholder": "Zoek bestanden en mappen...",
+    "drive.empty_title": "Nog geen mappen",
+    "drive.empty_description": "Maak je eerste map om te beginnen"
 }

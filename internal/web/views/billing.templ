@@ -1,0 +1,196 @@
+package views
+
+import "github.com/gofiber/fiber/v2"
+import "hp/internal/web/views/component"
+import "hp/internal/web/translate"
+
+templ BillingPage(c *fiber.Ctx, t translate.Translate) {
+	@component.AppLayout("Billing - AskFrank", c, t) {
+		<div class="py-6">
+			<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+				<!-- Header -->
+				<div class="text-center mb-8">
+					<h1 class="text-2xl font-bold text-gray-900 mb-2">Choose Your Plan</h1>
+					<p class="text-gray-600 max-w-xl mx-auto">
+						Select the perfect subscription tier for your healthcare practice.
+					</p>
+				</div>
+				<!-- Pricing Cards -->
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+					<!-- Free Tier -->
+					<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 relative">
+						<div class="text-center">
+							<h3 class="text-lg font-semibold text-gray-900 mb-1">Free</h3>
+							<div class="mb-3">
+								<span class="text-3xl font-bold text-gray-900">$0</span>
+								<span class="text-gray-500">/month</span>
+							</div>
+							<p class="text-gray-600 text-sm mb-4">Perfect for getting started</p>
+						</div>
+						<ul class="space-y-2 mb-6">
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Up to 50 patients</span>
+							</li>
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Basic scheduling</span>
+							</li>
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Simple records</span>
+							</li>
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Email support</span>
+							</li>
+							<li class="flex items-center text-sm text-gray-400">
+								<i class="fas fa-times w-4 h-4 mr-2"></i>
+								<span>Advanced analytics</span>
+							</li>
+						</ul>
+						<form id="upgrade-free-form">
+							<input type="hidden" name="price" value="free"/>
+							<button id="upgrade-free-button" type="submit" class="w-full py-2 px-4 bg-gray-100 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors duration-200">
+								Current Plan
+							</button>
+						</form>
+					</div>
+					<!-- Pro Tier -->
+					<div class="bg-white border-2 border-ocean rounded-lg shadow-lg p-5 relative transform scale-105">
+						<div class="absolute -top-2 left-1/2 transform -translate-x-1/2">
+							<span class="bg-ocean text-white px-3 py-1 rounded-full text-xs font-medium">Most Popular</span>
+						</div>
+						<div class="text-center">
+							<h3 class="text-lg font-semibold text-gray-900 mb-1">Pro</h3>
+							<div class="mb-3">
+								<span class="text-3xl font-bold text-ocean">$29</span>
+								<span class="text-gray-500">/month</span>
+							</div>
+							<p class="text-gray-600 text-sm mb-4">Ideal for growing practices</p>
+						</div>
+						<ul class="space-y-2 mb-6">
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Up to 500 patients</span>
+							</li>
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Advanced scheduling</span>
+							</li>
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Complete records</span>
+							</li>
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Priority support</span>
+							</li>
+							<li class="flex items-center text-sm">
+								<i class="fas fa-check text-mint w-4 h-4 mr-2"></i>
+								<span class="text-gray-700">Advanced analytics</span>
+							</li>
+						</ul>
+						<form id="upgrade-pro-form">
+							<input type="hidden" name="price" value="pro"/>
+							<button id="upgrade-pay-as-you-go-button" type="submit" class="w-full py-2 px-4 bg-gray-100 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors duration-200">
+								Upgrade to Pay As You Go
+							</button>
+						</form>
+					</div>
+				</div>
+				<!-- Payment Information Section -->
+				<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+					<h2 class="text-lg font-semibold text-gray-900 mb-4">Payment Information</h2>
+					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+						<!-- Current Subscription -->
+						<div>
+							<h3 class="text-base font-medium text-gray-900 mb-3">Current Subscription</h3>
+							<div class="bg-gray-50 rounded-lg p-3">
+								<div class="flex items-center justify-between mb-1">
+									<span class="font-medium text-gray-900 text-sm">Free Plan</span>
+									<span class="text-xs text-gray-500">Active</span>
+								</div>
+								<div class="text-xs text-gray-600">
+									<p>Started: January 15, 2025</p>
+									<p>Next billing: No upcoming charges</p>
+								</div>
+							</div>
+						</div>
+						<!-- Payment Method -->
+						<div>
+							<h3 class="text-base font-medium text-gray-900 mb-3">Payment Method</h3>
+							<div class="bg-gray-50 rounded-lg p-3">
+								<div class="flex items-center justify-between mb-1">
+									<div class="flex items-center">
+										<i class="fas fa-credit-card text-gray-400 mr-2"></i>
+										<span class="text-gray-600 text-sm">No payment method on file</span>
+									</div>
+								</div>
+								<button class="text-xs text-ocean hover:text-deep-teal font-medium">
+									Add Payment Method
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+				<!-- Billing History -->
+				<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+					<h2 class="text-lg font-semibold text-gray-900 mb-4">Billing History</h2>
+					<div class="text-center py-6">
+						<i class="fas fa-receipt text-gray-300 text-3xl mb-3"></i>
+						<p class="text-gray-500 text-sm mb-1">No billing history available</p>
+						<p class="text-xs text-gray-400">Your invoices and payment history will appear here</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<script>
+			document.addEventListener('DOMContentLoaded', function() {
+				const upgradeFreeForm = document.getElementById('upgrade-free-form');
+				const upgradeProForm = document.getElementById('upgrade-pro-form');
+
+				upgradeProForm.addEventListener('submit', function(event) {
+					event.preventDefault();
+
+					const submitButton = document.getElementById('upgrade-pro-button');
+					const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+					const formData = new FormData(this);
+
+					fetch('/billing/update', {
+						method: 'POST',
+						headers: {
+							'X-Csrf-Token': csrfToken
+						},
+						body: formData
+					}).then(async response => {
+						if (response.ok) {
+							// successDiv.classList.remove('hidden');
+							// successText.textContent = 'Login successful! Redirecting...';
+
+							const json = await response.json();
+							if (json.redirect) {
+								setTimeout(() => {
+									window.location.href = json.redirect;
+								}, 1000); // Redirect after 1 second
+							}
+						} else {
+							const result = await response.json();
+
+							alert(result.error || 'Billing update failed');
+							// // Handle error response
+							// errorText.textContent = result.error || 'Login failed';
+							// errorDiv.classList.remove('hidden');
+						}
+					}).catch(error => {
+						alert('Network error. Please try again.');
+						// errorText.textContent = 'Network error. Please try again.';
+						// errorDiv.classList.remove('hidden');
+					}).finally(() => {
+						submitButton.disabled = false; // Re-enable submit button
+					});
+				});
+			});
+		</script>
+	}
+}

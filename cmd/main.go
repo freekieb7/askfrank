@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/gofiber/fiber/v2/utils"
@@ -61,9 +62,16 @@ func run(ctx context.Context) error {
 	})
 
 	pageHandler := web.NewPageHandler(logger, translator, sessionStore, db)
-	healthHandler := api.NewHealthHandler(db)
+	apiHandler := api.NewApiHandler(db)
 
 	// Middleware
+	// Enable gzip compression
+	if cfg.Server.Environment == "production" {
+		app.Use(compress.New(compress.Config{
+			Level: compress.LevelBestSpeed,
+		}))
+	}
+
 	// app.Use(middleware.Logger())
 	// app.Use(middleware.Recover())
 	// app.Use(middleware.RequestID())
@@ -83,11 +91,19 @@ func run(ctx context.Context) error {
 		ContextKey:        "csrf_token",
 	}))
 
-	// Static file serving
-	app.Static("/static", "./internal/web/static")
+	// Static file serving with compression and caching
+	app.Static("/static", "./internal/web/static", fiber.Static{
+		Compress:  true,
+		ByteRange: true,
+		Browse:    false,
+		MaxAge:    3600, // 1 hour cache
+	})
 
 	// Routes
 	app.Get("/", middleware.Authenticated(sessionStore), pageHandler.ShowHomePage)
+	app.Get("/billing", middleware.Authenticated(sessionStore), pageHandler.ShowBillingPage)
+	app.Post("/billing/update", middleware.Authenticated(sessionStore), pageHandler.UpdateBilling)
+	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowDrive)
 
 	app.Get("/login", pageHandler.ShowLoginPage)
 	app.Post("/login", pageHandler.Login)
@@ -97,7 +113,9 @@ func run(ctx context.Context) error {
 	app.Get("/register", pageHandler.ShowRegisterPage)
 	app.Post("/register", pageHandler.Register)
 
-	app.Get("/api/health", healthHandler.Healthy)
+	app.Get("/api/health", apiHandler.Healthy)
+	app.All("/api/stripe/webhook", apiHandler.StripeWebhook)
+	app.Post("/api/folders", middleware.Authenticated(sessionStore), apiHandler.CreateFolder)
 
 	// Start the server
 	go func() {

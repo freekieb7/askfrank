@@ -5,6 +5,7 @@ import (
 	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/web/views"
+	"log"
 	"log/slog"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v82"
+	stripeSession "github.com/stripe/stripe-go/v82/checkout/session"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -203,6 +206,131 @@ func (h *PageHandler) Register(c *fiber.Ctx) error {
 		"message":  "Registration successful! Continue to the app.",
 		"redirect": "/",
 	})
+}
+
+func (h *PageHandler) ShowBillingPage(c *fiber.Ctx) error {
+	return render(c, views.BillingPage(c, h.translate))
+}
+
+func (h *PageHandler) UpdateBilling(c *fiber.Ctx) error {
+	stripe.Key = "sk_test_51Rm9NXRpsw6KPSOTjxYsYKz1oMczIt9tbWJqYpS58mwkDyCcU6T5pDuMCOu5J1tisAzoxrUuXwjacjwaWxV1liad00S5SBnCid"
+
+	domain := "https://webhook.site/9c023c39-c641-4d41-97c9-850555964554" // Replace with your actual domain
+
+	priceTable := map[string]string{
+		"free":       "",
+		"pro":        "price_1Rrg4RRpsw6KPSOT3xe54iWO",
+		"enterprise": "price_1Rrg54Rpsw6KPSOTW3K8Ur3L",
+	}
+
+	priceID := c.FormValue("price")
+	price, exists := priceTable[priceID]
+	if !exists {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid price selected",
+		})
+	}
+
+	checkoutParams := &stripe.CheckoutSessionParams{
+		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			{
+				Price:    stripe.String(price),
+				Quantity: stripe.Int64(1),
+			},
+		},
+		SuccessURL: stripe.String(domain + "/success.html?session_id={CHECKOUT_SESSION_ID}"),
+		CancelURL:  stripe.String(domain + "/cancel.html"),
+	}
+
+	s, err := stripeSession.New(checkoutParams)
+	if err != nil {
+		log.Printf("session.New: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Failed to create checkout session",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":   "succeeded",
+		"redirect": s.URL,
+	})
+}
+
+func (h *PageHandler) ShowDrive(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	folders, err := h.db.GetFoldersByOwnerID(c.Context(), userID)
+	if err != nil {
+		h.logger.Error("Failed to get folders", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to load folders",
+		})
+	}
+
+	files, err := h.db.GetFilesByOwnerID(c.Context(), userID)
+	if err != nil {
+		h.logger.Error("Failed to get files", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to load files",
+		})
+	}
+
+	// Build folder tree structure
+	folderTree := h.buildFolderTree(folders, files)
+
+	return render(c, views.DrivePage(c, h.translate, folderTree))
+}
+
+// buildFolderTree creates a hierarchical tree structure from flat folder and file lists
+// Returns []views.Folder structure expected by the template
+func (h *PageHandler) buildFolderTree(folders []database.Folder, files []database.File) []views.Folder {
+	// Create a map to quickly find folders by ID
+	folderMap := make(map[uuid.UUID]*views.Folder)
+
+	// Create nodes for all folders
+	for _, folder := range folders {
+		folderMap[folder.ID] = &views.Folder{
+			ID:      folder.ID.String(),
+			Name:    folder.Name,
+			Folders: []views.Folder{},
+			Files:   []views.File{},
+		}
+	}
+
+	// Add files to their respective folders
+	for _, file := range files {
+		if file.FolderID.Valid {
+			if folderNode, exists := folderMap[file.FolderID.UUID]; exists {
+				folderNode.Files = append(folderNode.Files, views.File{
+					ID:       file.ID.String(),
+					Filename: file.Filename,
+					Size:     int64(file.SizeBytes),
+					MimeType: file.MimeType,
+				})
+			}
+		}
+	}
+
+	// Build the tree structure by connecting parents and children
+	var rootFolders []views.Folder
+
+	for _, folder := range folders {
+		folderNode := folderMap[folder.ID]
+
+		if !folder.ParentID.Valid {
+			// This is a root folder
+			rootFolders = append(rootFolders, *folderNode)
+		} else {
+			// This folder has a parent
+			if parentNode, exists := folderMap[folder.ParentID.UUID]; exists {
+				parentNode.Folders = append(parentNode.Folders, *folderNode)
+			}
+		}
+	}
+
+	return rootFolders
 }
 
 func render(c *fiber.Ctx, component templ.Component) error {

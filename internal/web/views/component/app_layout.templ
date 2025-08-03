@@ -7,53 +7,7 @@ import (
 
 templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 	@Layout(title, c) {
-		<style>
-			/* Additional styles for the dashboard layout */
-			.sidebar-link {
-				display: flex;
-				align-items: center;
-				padding: 0.5rem 0.75rem;
-				margin: 0 0.25rem;
-				color: #4B5563;
-				border-radius: 0.375rem;
-				text-decoration: none;
-				transition: all 0.15s ease-in-out;
-				font-size: 0.875rem;
-			}
-			
-			.sidebar-link:hover {
-				background-color: #F3F4F6;
-				color: #111827;
-			}
-			
-			.sidebar-link.active {
-				background: linear-gradient(90deg, var(--ocean-blue), var(--deep-teal));
-				color: white;
-			}
-			
-			.dropdown {
-				transform: scale(0.95);
-				opacity: 0;
-				transition: all 0.1s ease-out;
-			}
-			
-			.dropdown.show {
-				transform: scale(1);
-				opacity: 1;
-			}
-
-			/* Compact search bar */
-			.search-container {
-				max-width: 400px;
-				width: 100%;
-			}
-			
-			@media (max-width: 768px) {
-				.search-container {
-					max-width: 200px;
-				}
-			}
-		</style>
+		<link rel="stylesheet" href="/static/dashboard.css"/>
 		<div class="flex h-screen bg-gray-50">
 			<!-- Sidebar -->
 			<div class="hidden lg:flex lg:w-56 lg:flex-col lg:fixed lg:inset-y-0">
@@ -85,6 +39,10 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 						<a href="/records" class="sidebar-link">
 							<i class="fas fa-file-medical w-4 h-4 mr-2.5"></i>
 							Records
+						</a>
+						<a href="/drive" class="sidebar-link">
+							<i class="fas fa-cloud w-4 h-4 mr-2.5"></i>
+							Drive
 						</a>
 						<a href="/analytics" class="sidebar-link">
 							<i class="fas fa-chart-line w-4 h-4 mr-2.5"></i>

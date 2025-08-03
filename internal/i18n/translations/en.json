@@ -1,3 +1,10 @@
 {
-    "home.title": "Welcome to AskFrank"
+    "home.title": "Welcome to AskFrank",
+    "drive.title": "My Drive",
+    "drive.description": "Manage your files and folders",
+    "drive.new_folder": "New Folder",
+    "drive.upload": "Upload",
+    "drive.search_placeholder": "Search files and folders...",
+    "drive.empty_title": "No folders yet",
+    "drive.empty_description": "Create your first folder to get started"
 }

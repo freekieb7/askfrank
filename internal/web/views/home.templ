@@ -6,129 +6,34 @@ import "hp/internal/web/translate"
 
 templ HomePage(c *fiber.Ctx, t translate.Translate) {
 	@component.AppLayout("Dashboard - AskFrank", c, t) {
-		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+		<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 			<!-- Page header -->
-			<div class="md:flex md:items-center md:justify-between mb-8">
+			<div class="md:flex md:items-center md:justify-between mb-6">
 				<div class="min-w-0 flex-1">
-					<h2 class="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
-						Dashboard
-					</h2>
-					<p class="mt-1 text-sm text-gray-500">
-						Welcome back, Dr. Smith. Here's what's happening today.
-					</p>
+					<h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
+					<p class="mt-1 text-sm text-gray-500">Welcome back, Dr. Smith. Here's what's happening today.</p>
 				</div>
-				<div class="mt-4 flex md:ml-4 md:mt-0">
-					<button type="button" class="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+				<div class="mt-4 flex md:ml-4 md:mt-0 space-x-3">
+					<button type="button" class="inline-flex items-center rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
 						<i class="fas fa-download -ml-0.5 mr-1.5 h-4 w-4 text-gray-400"></i>
 						Export
 					</button>
-					<button type="button" class="ml-3 inline-flex items-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" style="background: linear-gradient(90deg, var(--ocean-blue), var(--deep-teal));">
+					<button type="button" class="inline-flex items-center rounded-lg px-3 py-2 text-sm font-medium text-white shadow-sm bg-ocean hover:bg-deep-teal">
 						<i class="fas fa-plus -ml-0.5 mr-1.5 h-4 w-4"></i>
 						New Appointment
 					</button>
 				</div>
 			</div>
-			<!-- Stats cards -->
-			<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-				<!-- Total Patients -->
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-									<i class="fas fa-users text-ocean text-sm"></i>
-								</div>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Total Patients</dt>
-									<dd class="text-lg font-medium text-gray-900">2,847</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
-					<div class="bg-gray-50 px-5 py-3">
-						<div class="text-sm">
-							<span class="font-medium text-green-600">+12%</span>
-							<span class="text-gray-500">from last month</span>
-						</div>
-					</div>
-				</div>
-				<!-- Today's Appointments -->
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-									<i class="fas fa-calendar-check text-mint text-sm"></i>
-								</div>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Today's Appointments</dt>
-									<dd class="text-lg font-medium text-gray-900">24</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
-					<div class="bg-gray-50 px-5 py-3">
-						<div class="text-sm">
-							<span class="font-medium text-green-600">3 completed</span>
-							<span class="text-gray-500">21 remaining</span>
-						</div>
-					</div>
-				</div>
-				<!-- Pending Reviews -->
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
-									<i class="fas fa-clock text-yellow-600 text-sm"></i>
-								</div>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Pending Reviews</dt>
-									<dd class="text-lg font-medium text-gray-900">7</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
-					<div class="bg-gray-50 px-5 py-3">
-						<div class="text-sm">
-							<span class="font-medium text-yellow-600">2 urgent</span>
-							<span class="text-gray-500">5 routine</span>
-						</div>
-					</div>
-				</div>
-				<!-- Revenue -->
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-									<i class="fas fa-dollar-sign text-purple-600 text-sm"></i>
-								</div>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Monthly Revenue</dt>
-									<dd class="text-lg font-medium text-gray-900">$48,390</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
-					<div class="bg-gray-50 px-5 py-3">
-						<div class="text-sm">
-							<span class="font-medium text-green-600">+8%</span>
-							<span class="text-gray-500">from last month</span>
-						</div>
-					</div>
-				</div>
+			<!-- Key Metrics - Load immediately -->
+			<div class="compact-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+				@component.MetricCard("Total Patients", "2,847", "+12% from last month", true)
+				@component.MetricCard("Today's Appointments", "24", "3 completed, 21 remaining", true)
+				@component.MetricCard("Pending Reviews", "7", "2 urgent, 5 routine", false)
+				@component.MetricCard("Monthly Revenue", "$48,390", "+8% from last month", true)
 			</div>
-			<!-- Main content grid -->
-			<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+			<!-- Main content - Lazy loaded -->
+			<div id="dashboard-content" class="compact-grid grid-cols-1 lg:grid-cols-3">
+				<!-- Loading skeletons -->
 				<!-- Recent Appointments -->
 				<div class="lg:col-span-2">
 					<div class="bg-white shadow rounded-lg">

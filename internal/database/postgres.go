@@ -102,3 +102,188 @@ func (db *PostgresDatabase) GetUserByEmail(ctx context.Context, email string) (U
 	}
 	return user, nil
 }
+
+func (db *PostgresDatabase) UpdateUser(ctx context.Context, user User) error {
+	if _, err := db.Exec(ctx, `UPDATE tbl_user SET name = $1, email = $2, password_hash = $3, is_email_verified = $4, updated_at = $5 WHERE id = $6`,
+		user.Name, user.Email, user.PasswordHash, user.IsEmailVerified, user.UpdatedAt, user.ID); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+func (db *PostgresDatabase) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	if _, err := db.Exec(ctx, `DELETE FROM tbl_user WHERE id = $1`, id); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+type Folder struct {
+	ID        uuid.UUID
+	Name      string
+	OwnerID   uuid.UUID
+	ParentID  uuid.NullUUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (db *PostgresDatabase) CreateFolder(ctx context.Context, folder Folder) error {
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_folder (id, name, owner_id, parent_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+		folder.ID, folder.Name, folder.OwnerID, folder.ParentID, folder.CreatedAt, folder.UpdatedAt); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+func (db *PostgresDatabase) GetFoldersByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]Folder, error) {
+	rows, err := db.Query(ctx, `SELECT id, name, owner_id, parent_id, created_at, updated_at FROM tbl_folder WHERE owner_id = $1`, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var folders []Folder
+	for rows.Next() {
+		var folder Folder
+		if err := rows.Scan(&folder.ID, &folder.Name, &folder.OwnerID, &folder.ParentID, &folder.CreatedAt, &folder.UpdatedAt); err != nil {
+			return nil, err
+		}
+		folders = append(folders, folder)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return folders, nil
+}
+
+func (db *PostgresDatabase) GetFolderByID(ctx context.Context, id uuid.UUID) (Folder, error) {
+	var folder Folder
+	err := db.QueryRow(ctx, `SELECT id, name, owner_id, parent_id, created_at, updated_at FROM tbl_folder WHERE id = $1`, id).Scan(
+		&folder.ID, &folder.Name, &folder.OwnerID, &folder.ParentID, &folder.CreatedAt, &folder.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return folder, errors.New("Folder not found")
+		}
+		return folder, err
+	}
+	return folder, nil
+}
+
+func (db *PostgresDatabase) UpdateFolder(ctx context.Context, folder Folder) error {
+	if _, err := db.Exec(ctx, `UPDATE tbl_folder SET name = $1, owner_id = $2, parent_id = $3, updated_at = $4 WHERE id = $5`,
+		folder.Name, folder.OwnerID, folder.ParentID, folder.UpdatedAt, folder.ID); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+func (db *PostgresDatabase) DeleteFolder(ctx context.Context, id uuid.UUID) error {
+	if _, err := db.Exec(ctx, `DELETE FROM tbl_folder WHERE id = $1`, id); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+type File struct {
+	ID        uuid.UUID
+	OwnerID   uuid.UUID
+	FolderID  uuid.NullUUID
+	Filename  string
+	MimeType  string
+	S3Key     string
+	SizeBytes uint64
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (db *PostgresDatabase) CreateFile(ctx context.Context, file File) error {
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_file (id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		file.ID, file.OwnerID, file.FolderID, file.Filename, file.MimeType, file.S3Key, file.SizeBytes, file.CreatedAt, file.UpdatedAt); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+func (db *PostgresDatabase) GetFilesByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]File, error) {
+	rows, err := db.Query(ctx, `SELECT id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE owner_id = $1`, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var file File
+		if err := rows.Scan(&file.ID, &file.OwnerID, &file.FolderID, &file.Filename, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
+func (db *PostgresDatabase) GetFilesByFolderID(ctx context.Context, folderID uuid.UUID) ([]File, error) {
+	rows, err := db.Query(ctx, `SELECT id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE folder_id = $1`, folderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var file File
+		if err := rows.Scan(&file.ID, &file.OwnerID, &file.FolderID, &file.Filename, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
+func (db *PostgresDatabase) GetFileByID(ctx context.Context, id uuid.UUID) (File, error) {
+	var file File
+	err := db.QueryRow(ctx, `SELECT id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE id = $1`, id).Scan(
+		&file.ID, &file.OwnerID, &file.FolderID, &file.Filename, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return file, errors.New("File not found")
+		}
+		return file, err
+	}
+	return file, nil
+}
+
+func (db *PostgresDatabase) UpdateFile(ctx context.Context, file File) error {
+	if _, err := db.Exec(ctx, `UPDATE tbl_file SET owner_id = $1, folder_id = $2, filename = $3, mime_type = $4, s3_key = $5, size_bytes = $6, updated_at = $7 WHERE id = $8`,
+		file.OwnerID, file.FolderID, file.Filename, file.MimeType, file.S3Key, file.SizeBytes, file.UpdatedAt, file.ID); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+func (db *PostgresDatabase) DeleteFile(ctx context.Context, id uuid.UUID) error {
+	if _, err := db.Exec(ctx, `DELETE FROM tbl_file WHERE id = $1`, id); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}

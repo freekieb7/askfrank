@@ -17,6 +17,8 @@ func Authenticated(sessionStore *session.Store) fiber.Handler {
 			return c.Redirect("/login", fiber.StatusFound)
 		}
 
+		c.Locals("user_id", session.Get("user_id"))
+
 		return c.Next()
 	}
 }

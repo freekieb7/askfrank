@@ -1,0 +1,290 @@
+package views
+
+import "github.com/gofiber/fiber/v2"
+import "hp/internal/web/views/component"
+import "hp/internal/web/translate"
+import "fmt"
+import "strings"
+
+type File struct {
+	ID       string
+	Filename string
+	Size     int64
+	MimeType string
+}
+
+type Folder struct {
+	ID      string
+	Name    string
+	Folders []Folder
+	Files   []File
+}
+
+func getFileIcon(mimeType string) string {
+	switch {
+	case strings.HasPrefix(mimeType, "image/"):
+		return "fas fa-image text-green-500"
+	case strings.HasPrefix(mimeType, "video/"):
+		return "fas fa-video text-red-500"
+	case strings.HasPrefix(mimeType, "audio/"):
+		return "fas fa-music text-purple-500"
+	case mimeType == "application/pdf":
+		return "fas fa-file-pdf text-red-500"
+	case strings.Contains(mimeType, "word") || strings.Contains(mimeType, "document"):
+		return "fas fa-file-word text-blue-500"
+	case strings.Contains(mimeType, "excel") || strings.Contains(mimeType, "spreadsheet"):
+		return "fas fa-file-excel text-green-500"
+	case strings.Contains(mimeType, "powerpoint") || strings.Contains(mimeType, "presentation"):
+		return "fas fa-file-powerpoint text-orange-500"
+	case strings.HasPrefix(mimeType, "text/"):
+		return "fas fa-file-alt text-gray-500"
+	default:
+		return "fas fa-file text-gray-500"
+	}
+}
+
+func formatFileSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder) {
+	@component.AppLayout("Drive - AskFrank", c, t) {
+		<div class="main-content">
+			<div class="p-6">
+				<div class="mb-6">
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-white">My Drive</h1>
+					<p class="text-gray-600 dark:text-gray-400">Manage your files and folders</p>
+				</div>
+				<!-- Toolbar -->
+				<div class="mb-6 flex justify-between items-center">
+					<div class="flex space-x-3">
+						<button id="new-folder-button" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+							<i class="fas fa-plus mr-2"></i>New Folder
+						</button>
+						<button class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+							<i class="fas fa-upload mr-2"></i>Upload
+						</button>
+					</div>
+					<div class="flex space-x-3">
+						<div class="relative">
+							<input
+								type="text"
+								placeholder="Search files and folders..."
+								class="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+							/>
+							<i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+						</div>
+						<button class="p-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" title="Grid view">
+							<i class="fas fa-th"></i>
+						</button>
+						<button class="p-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" title="List view">
+							<i class="fas fa-list"></i>
+						</button>
+					</div>
+				</div>
+				<!-- Drive Content -->
+				<div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+					if len(folders) == 0 {
+						<div class="p-12 text-center">
+							<i class="fas fa-folder-open text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
+							<h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No folders yet</h3>
+							<p class="text-gray-600 dark:text-gray-400">Create your first folder to get started</p>
+						</div>
+					} else {
+						<div class="p-6">
+							for _, folder := range folders {
+								@FolderItem(folder, t, c, 0)
+							}
+						</div>
+					}
+				</div>
+			</div>
+		</div>
+		<!-- New Folder Modal -->
+		<div id="new-folder-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+			<div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+				<div class="mt-3">
+					<!-- Modal Header -->
+					<div class="flex items-center justify-between mb-4">
+						<h3 class="text-lg font-medium text-gray-900 dark:text-white">Create New Folder</h3>
+						<button id="close-modal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+							<i class="fas fa-times text-xl"></i>
+						</button>
+					</div>
+					<!-- Modal Body -->
+					<form id="create-folder-form">
+						<div class="mb-4">
+							<label for="folder-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+								Folder Name
+							</label>
+							<input
+								type="text"
+								id="folder-name"
+								name="folder-name"
+								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+								placeholder="Enter folder name..."
+								required
+								maxlength="100"
+							/>
+						</div>
+						<!-- Modal Footer -->
+						<div class="flex justify-end space-x-3">
+							<button
+								type="button"
+								id="cancel-create"
+								class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+							>
+								Cancel
+							</button>
+							<button
+								type="submit"
+								class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+							>
+								Create Folder
+							</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+		<!-- JavaScript for folder functionality -->
+		<script>
+			document.addEventListener('DOMContentLoaded', function() {
+				// Folder toggle functionality
+				document.querySelectorAll('.folder-toggle').forEach(toggle => {
+					toggle.addEventListener('click', function() {
+						const folderItem = this.closest('.folder-item');
+						const contents = folderItem.querySelector('.folder-contents');
+						const arrow = this.querySelector('.folder-arrow');
+						
+						if (contents && contents.classList.contains('hidden')) {
+							contents.classList.remove('hidden');
+							if (arrow) arrow.style.transform = 'rotate(90deg)';
+						} else if (contents) {
+							contents.classList.add('hidden');
+							if (arrow) arrow.style.transform = 'rotate(0deg)';
+						}
+					});
+				});
+
+				// New folder functionality
+				document.getElementById('new-folder-button').addEventListener('click', function() {
+					document.getElementById('new-folder-modal').classList.remove('hidden');
+				});
+
+				// Close modal functionality
+				document.getElementById('close-modal').addEventListener('click', function() {
+					document.getElementById('new-folder-modal').classList.add('hidden');
+					document.getElementById('folder-name').value = '';
+				});
+
+				// Cancel button functionality
+				document.getElementById('cancel-create').addEventListener('click', function() {
+					document.getElementById('new-folder-modal').classList.add('hidden');
+					document.getElementById('folder-name').value = '';
+				});
+
+				// Close modal when clicking outside
+				document.getElementById('new-folder-modal').addEventListener('click', function(e) {
+					if (e.target === this) {
+						this.classList.add('hidden');
+						document.getElementById('folder-name').value = '';
+					}
+				});
+
+				// Create folder form submission
+				document.getElementById('create-folder-form').addEventListener('submit', function(e) {
+					e.preventDefault();
+					const folderName = document.getElementById('folder-name').value.trim();
+					
+					if (!folderName) {
+						alert('Please enter a folder name');
+						return;
+					}
+
+					// Send request to create folder
+					fetch('/api/folders', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+						},
+						body: JSON.stringify({
+							name: folderName,
+							parent_id: null // For now, create in root
+						})
+					})
+					.then(response => response.json())
+					.then(data => {
+						if (data.status === 'success') {
+							// Reload the page to show the new folder
+							window.location.reload();
+						} else {
+							alert(data.error || 'Failed to create folder');
+						}
+					})
+					.catch(error => {
+						console.error('Error:', error);
+						alert('Failed to create folder');
+					});
+				});
+			});
+		</script>
+	}
+}
+
+templ FolderItem(folder Folder, t translate.Translate, c *fiber.Ctx, level int) {
+	<div class={ "folder-item mb-1" } style={ fmt.Sprintf("margin-left: %dpx", level*20) }>
+		<!-- Folder Header -->
+		<div class="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer folder-toggle">
+			<i class="fas fa-folder text-blue-500 mr-3"></i>
+			<span class="font-medium text-gray-900 dark:text-white">{ folder.Name }</span>
+			if len(folder.Folders) > 0 || len(folder.Files) > 0 {
+				<i class="fas fa-chevron-right ml-auto text-gray-400 folder-arrow transition-transform duration-200"></i>
+			}
+		</div>
+		<!-- Folder Contents -->
+		if len(folder.Folders) > 0 || len(folder.Files) > 0 {
+			<div class="folder-contents hidden">
+				<!-- Subfolders -->
+				for _, subfolder := range folder.Folders {
+					@FolderItem(subfolder, t, c, level+1)
+				}
+				<!-- Files -->
+				for _, file := range folder.Files {
+					@FileItem(file, t, c, level+1)
+				}
+			</div>
+		}
+	</div>
+}
+
+templ FileItem(file File, t translate.Translate, c *fiber.Ctx, level int) {
+	<div
+		class={ "file-item flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer group mb-1" }
+		style={ fmt.Sprintf("margin-left: %dpx", level*20) }
+	>
+		<i class={ getFileIcon(file.MimeType) + " mr-3" }></i>
+		<div class="flex-1">
+			<span class="text-gray-900 dark:text-white">{ file.Filename }</span>
+			<span class="text-sm text-gray-500 dark:text-gray-400 ml-2">({ formatFileSize(file.Size) })</span>
+		</div>
+		<div class="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+			<button class="p-1 text-gray-400 hover:text-blue-500" title="Download">
+				<i class="fas fa-download"></i>
+			</button>
+			<button class="p-1 text-gray-400 hover:text-red-500" title="Delete">
+				<i class="fas fa-trash"></i>
+			</button>
+		</div>
+	</div>
+}
