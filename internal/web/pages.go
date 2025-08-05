@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/gob"
 	"hp/internal/database"
 	"hp/internal/i18n"
@@ -258,79 +259,98 @@ func (h *PageHandler) UpdateBilling(c *fiber.Ctx) error {
 	})
 }
 
-func (h *PageHandler) ShowDrive(c *fiber.Ctx) error {
+func (h *PageHandler) ShowFolder(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	folders, err := h.db.GetFoldersByOwnerID(c.Context(), userID)
+	var folderID uuid.NullUUID
+	if folderIDStr := c.Params("folder_id", ""); folderIDStr != "" {
+		id, err := uuid.Parse(folderIDStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid folder ID",
+			})
+		}
+		folderID = uuid.NullUUID{Valid: true, UUID: id}
+	}
+
+	folders, err := h.db.GetFoldersByParentID(c.Context(), userID, folderID)
 	if err != nil {
-		h.logger.Error("Failed to get folders", "error", err)
+		h.logger.Error("Failed to get folders", "error", err, "folder_id", folderID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to load folders",
 		})
 	}
 
-	files, err := h.db.GetFilesByOwnerID(c.Context(), userID)
+	files, err := h.db.GetFilesByFolderID(c.Context(), userID, folderID)
 	if err != nil {
-		h.logger.Error("Failed to get files", "error", err)
+		h.logger.Error("Failed to get files for folder", "error", err, "folder_id", folderID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to load files",
+			"error": "Failed to load files for folder",
 		})
 	}
 
-	// Build folder tree structure
-	folderTree := h.buildFolderTree(folders, files)
+	viewFolders := make([]views.Folder, 0, len(folders))
+	viewFiles := make([]views.File, 0, len(files))
+	for _, folder := range folders {
+		viewFolders = append(viewFolders, views.Folder{
+			ID:    folder.ID.String(),
+			Name:  folder.Name,
+			Files: []views.File{},
+		})
+	}
+	for _, file := range files {
+		viewFiles = append(viewFiles, views.File{
+			ID:       file.ID.String(),
+			Filename: file.Filename,
+			Size:     int64(file.SizeBytes),
+			MimeType: file.MimeType,
+		})
+	}
 
-	return render(c, views.DrivePage(c, h.translate, folderTree))
+	// Build breadcrumbs
+	breadcrumbs := h.buildBreadcrumbs(c.Context(), folderID)
+
+	folderIDStr := ""
+	if folderID.Valid {
+		folderIDStr = folderID.UUID.String()
+	}
+	return render(c, views.DrivePage(c, h.translate, viewFolders, viewFiles, breadcrumbs, folderIDStr))
 }
 
-// buildFolderTree creates a hierarchical tree structure from flat folder and file lists
-// Returns []views.Folder structure expected by the template
-func (h *PageHandler) buildFolderTree(folders []database.Folder, files []database.File) []views.Folder {
-	// Create a map to quickly find folders by ID
-	folderMap := make(map[uuid.UUID]*views.Folder)
-
-	// Create nodes for all folders
-	for _, folder := range folders {
-		folderMap[folder.ID] = &views.Folder{
-			ID:      folder.ID.String(),
-			Name:    folder.Name,
-			Folders: []views.Folder{},
-			Files:   []views.File{},
-		}
+// buildBreadcrumbs creates a breadcrumb navigation path for the current folder
+func (h *PageHandler) buildBreadcrumbs(ctx context.Context, folderID uuid.NullUUID) []views.Breadcrumb {
+	breadcrumbs := []views.Breadcrumb{
+		{Name: "My Drive", URL: "/drive"},
 	}
 
-	// Add files to their respective folders
-	for _, file := range files {
-		if file.FolderID.Valid {
-			if folderNode, exists := folderMap[file.FolderID.UUID]; exists {
-				folderNode.Files = append(folderNode.Files, views.File{
-					ID:       file.ID.String(),
-					Filename: file.Filename,
-					Size:     int64(file.SizeBytes),
-					MimeType: file.MimeType,
-				})
-			}
-		}
+	if !folderID.Valid {
+		return breadcrumbs
 	}
 
-	// Build the tree structure by connecting parents and children
-	var rootFolders []views.Folder
+	// Build the path by traversing up the folder hierarchy
+	var folderPath []database.Folder
+	currentFolderID := folderID
 
-	for _, folder := range folders {
-		folderNode := folderMap[folder.ID]
-
-		if !folder.ParentID.Valid {
-			// This is a root folder
-			rootFolders = append(rootFolders, *folderNode)
-		} else {
-			// This folder has a parent
-			if parentNode, exists := folderMap[folder.ParentID.UUID]; exists {
-				parentNode.Folders = append(parentNode.Folders, *folderNode)
-			}
+	for currentFolderID.Valid {
+		folder, err := h.db.GetFolderByID(ctx, currentFolderID.UUID)
+		if err != nil {
+			h.logger.Error("Failed to get folder for breadcrumb", "error", err, "folder_id", currentFolderID.UUID)
+			break
 		}
+
+		folderPath = append([]database.Folder{folder}, folderPath...)
+		currentFolderID = folder.ParentID
 	}
 
-	return rootFolders
+	// Convert folder path to breadcrumbs
+	for _, folder := range folderPath {
+		breadcrumbs = append(breadcrumbs, views.Breadcrumb{
+			Name: folder.Name,
+			URL:  "/drive/folder/" + folder.ID.String(),
+		})
+	}
+
+	return breadcrumbs
 }
 
 func render(c *fiber.Ctx, component templ.Component) error {

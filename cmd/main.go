@@ -103,7 +103,8 @@ func run(ctx context.Context) error {
 	app.Get("/", middleware.Authenticated(sessionStore), pageHandler.ShowHomePage)
 	app.Get("/billing", middleware.Authenticated(sessionStore), pageHandler.ShowBillingPage)
 	app.Post("/billing/update", middleware.Authenticated(sessionStore), pageHandler.UpdateBilling)
-	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowDrive)
+	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowFolder)
+	app.Get("/drive/folder/:folder_id", middleware.Authenticated(sessionStore), pageHandler.ShowFolder)
 
 	app.Get("/login", pageHandler.ShowLoginPage)
 	app.Post("/login", pageHandler.Login)
@@ -116,6 +117,10 @@ func run(ctx context.Context) error {
 	app.Get("/api/health", apiHandler.Healthy)
 	app.All("/api/stripe/webhook", apiHandler.StripeWebhook)
 	app.Post("/api/folders", middleware.Authenticated(sessionStore), apiHandler.CreateFolder)
+	app.Post("/api/upload", middleware.Authenticated(sessionStore), apiHandler.UploadFiles)
+	app.Post("/api/download", middleware.Authenticated(sessionStore), apiHandler.DownloadFile)
+	app.Post("/api/delete", middleware.Authenticated(sessionStore), apiHandler.DeleteFile)
+	app.Post("/api/delete-folder", middleware.Authenticated(sessionStore), apiHandler.DeleteFolder)
 
 	// Start the server
 	go func() {
