@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"hp/internal/database"
 	"log/slog"
 	"os"
@@ -80,71 +81,159 @@ func (h *ApiHandler) StripeWebhook(c *fiber.Ctx) error {
 	})
 }
 
-type CreateFolderRequest struct {
-	Name     string     `json:"name"`
-	ParentID *uuid.UUID `json:"parent_id"`
-}
-
-func (h *ApiHandler) CreateFolder(c *fiber.Ctx) error {
+func (h *ApiHandler) ListFiles(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	var req CreateFolderRequest
-	if err := c.BodyParser(&req); err != nil {
+	folderIDStr := c.FormValue("folder_id")
+
+	var options database.SearchFilesOptions
+	if folderIDStr != "" {
+		folderID, err := uuid.Parse(folderIDStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status": "error",
+				"error":  "Invalid folder ID",
+			})
+		}
+		options.InFolder = uuid.NullUUID{UUID: folderID, Valid: true}
+	}
+
+	files, err := h.db.SearchFiles(c.Context(), userID, options)
+	if err != nil {
+		slog.Error("Failed to list files", "error", err, "user_id", userID)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Failed to list files",
+		})
+	}
+
+	jsonFiles := make([]fiber.Map, 0, len(files))
+	for _, file := range files {
+		jsonFiles = append(jsonFiles, fiber.Map{
+			"id":            file.ID,
+			"name":          file.Name,
+			"mime_type":     file.MimeType,
+			"size_bytes":    file.SizeBytes,
+			"last_modified": file.UpdatedAt.Unix(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"files":  jsonFiles,
+	})
+}
+
+type CreateFileRequest struct {
+	Name     string        `json:"name"`
+	MimeType string        `json:"mime_type"`
+	Parent   uuid.NullUUID `json:"parent"` // Optional parent folder ID
+}
+
+func (h *ApiHandler) CreateFile(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	// Parse the request body into a File struct
+	var requestBody CreateFileRequest
+	if err := json.Unmarshal(c.Body(), &requestBody); err != nil {
+		slog.Error("Failed to parse request body", "error", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status": "error",
 			"error":  "Invalid request body",
 		})
 	}
 
-	// Validate folder name
-	if req.Name == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Folder name is required",
-		})
-	}
-
-	if len(req.Name) > 100 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Folder name too long (max 100 characters)",
-		})
-	}
-
-	// Create folder object
-	folder := database.Folder{
-		ID:      uuid.New(),
-		Name:    req.Name,
-		OwnerID: userID,
-		ParentID: uuid.NullUUID{Valid: req.ParentID != nil, UUID: func() uuid.UUID {
-			if req.ParentID != nil {
-				return *req.ParentID
-			}
-			return uuid.UUID{}
-		}()},
+	file := database.File{
+		ID:        uuid.New(),
+		OwnerID:   userID,
+		Name:      requestBody.Name,
+		MimeType:  requestBody.MimeType, // Assuming folder type
+		S3Key:     "",                   // S3 key is not applicable for folders
+		ParentID:  requestBody.Parent,
+		SizeBytes: 0,    // Folders don't have a size
+		IsFolder:  true, // Set IsFolder to true for folder creation
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 
-	// Save folder to database
-	if err := h.db.CreateFolder(c.Context(), folder); err != nil {
-		slog.Error("Failed to create folder", "error", err, "user_id", userID)
+	if err := h.db.CreateFile(c.Context(), file); err != nil {
+		slog.Error("Failed to create file", "error", err, "user_id", userID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status": "error",
-			"error":  "Failed to create folder",
+			"error":  "Failed to create file",
 		})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"status": "success",
-		"folder": fiber.Map{
-			"id":   folder.ID,
-			"name": folder.Name,
+		"file": fiber.Map{
+			"id":            file.ID,
+			"name":          file.Name,
+			"mime_type":     file.MimeType,
+			"size_bytes":    file.SizeBytes,
+			"last_modified": file.UpdatedAt.Unix(),
 		},
 	})
 }
 
-func (h *ApiHandler) UploadFiles(c *fiber.Ctx) error {
+func (h *ApiHandler) GetFile(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	fileID := c.Params("file_id")
+	if fileID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": "error",
+			"error":  "File ID is required",
+		})
+	}
+
+	file, err := h.db.GetFileByID(c.Context(), userID, uuid.MustParse(fileID))
+	if err != nil {
+		slog.Error("Failed to get file", "error", err, "file_id", fileID)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Failed to get file",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"file": fiber.Map{
+			"id":            file.ID,
+			"name":          file.Name,
+			"mime_type":     file.MimeType,
+			"size_bytes":    file.SizeBytes,
+			"last_modified": file.UpdatedAt.Unix(),
+		},
+	})
+}
+
+func (h *ApiHandler) DeleteFile(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	fileID := c.Params("file_id")
+	if fileID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": "error",
+			"error":  "File ID is required",
+		})
+	}
+
+	if err := h.db.DeleteFile(c.Context(), userID, uuid.MustParse(fileID)); err != nil {
+		slog.Error("Failed to delete file", "error", err, "file_id", fileID)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Failed to delete file",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "File deleted successfully",
+	})
+}
+
+func (h *ApiHandler) UploadFile(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	// Get folder ID from form data (optional)
@@ -212,11 +301,11 @@ func (h *ApiHandler) UploadFiles(c *fiber.Ctx) error {
 		fileRecord := database.File{
 			ID:        uuid.New(),
 			OwnerID:   userID,
-			FolderID:  folderID, // Use the provided folder ID
-			Filename:  fileHeader.Filename,
+			ParentID:  folderID, // Use the provided folder ID
+			Name:      fileHeader.Filename,
 			MimeType:  mimeType,
 			S3Key:     filePath, // Store local path for now
-			SizeBytes: uint64(fileHeader.Size),
+			SizeBytes: fileHeader.Size,
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
@@ -230,7 +319,7 @@ func (h *ApiHandler) UploadFiles(c *fiber.Ctx) error {
 
 		uploadedFiles = append(uploadedFiles, fiber.Map{
 			"id":       fileRecord.ID,
-			"filename": fileRecord.Filename,
+			"name":     fileRecord.Name,
 			"size":     fileRecord.SizeBytes,
 			"mimeType": fileRecord.MimeType,
 		})
@@ -251,7 +340,8 @@ func (h *ApiHandler) UploadFiles(c *fiber.Ctx) error {
 
 func (h *ApiHandler) DownloadFile(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
-	fileIDStr := c.FormValue("file_id")
+
+	fileIDStr := c.Query("file_id")
 	if fileIDStr == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status": "error",
@@ -291,93 +381,8 @@ func (h *ApiHandler) DownloadFile(c *fiber.Ctx) error {
 		})
 	}
 
-	c.Set("Content-Disposition", `attachment; filename="`+file.Filename+`"`)
+	c.Set("Content-Disposition", `attachment; filename="`+file.Name+`"`)
 	c.Set("Content-Type", file.MimeType)
 
 	return c.SendFile(file.S3Key, false)
-}
-
-func (h *ApiHandler) DeleteFile(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
-	fileIDStr := c.FormValue("file_id")
-	if fileIDStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": "error",
-			"error":  "File ID is required",
-		})
-	}
-
-	fileID, err := uuid.Parse(fileIDStr)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Invalid file ID",
-		})
-	}
-
-	// Get file info before deleting to remove physical file
-	file, err := h.db.GetFileByID(c.Context(), userID, fileID)
-	if err != nil {
-		if err == database.ErrFileNotFound {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"status": "error",
-				"error":  "File not found",
-			})
-		}
-		slog.Error("Failed to get file for deletion", "error", err, "file_id", fileID)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Failed to delete file",
-		})
-	}
-
-	// Delete from database first
-	if err := h.db.DeleteFile(c.Context(), userID, fileID); err != nil {
-		slog.Error("Failed to delete file from database", "error", err, "file_id", fileID)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Failed to delete file",
-		})
-	}
-
-	// Try to delete physical file (non-critical if it fails)
-	if err := os.Remove(file.S3Key); err != nil {
-		slog.Warn("Failed to delete physical file", "error", err, "file_path", file.S3Key)
-		// Don't return error as database deletion succeeded
-	}
-
-	return c.JSON(fiber.Map{
-		"status": "success",
-	})
-}
-
-func (h *ApiHandler) DeleteFolder(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
-	folderIDStr := c.FormValue("folder_id")
-	if folderIDStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Folder ID is required",
-		})
-	}
-
-	folderID, err := uuid.Parse(folderIDStr)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Invalid folder ID",
-		})
-	}
-
-	if err := h.db.DeleteFolder(c.Context(), userID, folderID); err != nil {
-		slog.Error("Failed to delete folder", "error", err, "folder_id", folderID)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Failed to delete folder",
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"status": "success",
-	})
 }

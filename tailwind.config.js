@@ -1,7 +1,27 @@
 module.exports = {
     content: [
         "./internal/web/**/*.templ",  // Your templ components
-        "./internal/web/**/*.go",     // Go handlers if they include inline HTML // maybe not needed
+        "./internal/web/**/*.go",     // Go handlers if they include inline HTML
+        "./internal/web/**/*.html",   // Any HTML files
+    ],
+    darkMode: 'class', // Enable class-based dark mode
+    safelist: [
+        // Ensure dark mode classes are included
+        'dark:bg-gray-900',
+        'dark:bg-gray-800',
+        'dark:bg-gray-700',
+        'dark:text-gray-100',
+        'dark:text-gray-300',
+        'dark:text-gray-400',
+        'dark:text-gray-500',
+        'dark:border-gray-700',
+        'dark:hover:bg-gray-700',
+        'dark:hover:text-gray-400',
+        'dark:ring-gray-600',
+        'dark:placeholder:text-gray-500',
+        'dark:focus:bg-gray-600',
+        'dark:focus:ring-aqua',
+        'dark:text-aqua',
     ],
     theme: {
         extend: {

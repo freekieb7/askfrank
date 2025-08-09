@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"encoding/gob"
 	"hp/internal/database"
 	"hp/internal/i18n"
@@ -171,6 +170,7 @@ func (h *PageHandler) Register(c *fiber.Ctx) error {
 		})
 	}
 	if err != database.ErrUserNotFound {
+		h.logger.Error("Failed to check if user exists", "error", err, "email", email)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Something went wrong, please try again later",
 		})
@@ -178,6 +178,7 @@ func (h *PageHandler) Register(c *fiber.Ctx) error {
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
+		h.logger.Error("Failed to hash password", "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to hash password, please try again later",
 		})
@@ -194,6 +195,7 @@ func (h *PageHandler) Register(c *fiber.Ctx) error {
 	}
 
 	if err := h.db.CreateUser(c.Context(), user); err != nil {
+		h.logger.Error("Failed to create user", "error", err, "user", user)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to create user, please try again later",
 		})
@@ -259,98 +261,67 @@ func (h *PageHandler) UpdateBilling(c *fiber.Ctx) error {
 	})
 }
 
-func (h *PageHandler) ShowFolder(c *fiber.Ctx) error {
+func (h *PageHandler) ShowFilePage(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	var folderID uuid.NullUUID
-	if folderIDStr := c.Params("folder_id", ""); folderIDStr != "" {
-		id, err := uuid.Parse(folderIDStr)
+	var options database.SearchFilesOptions
+
+	if fileIDStr := c.Params("file_id", ""); fileIDStr != "" {
+		id, err := uuid.Parse(fileIDStr)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid folder ID",
+				"error": "Invalid file ID",
 			})
 		}
-		folderID = uuid.NullUUID{Valid: true, UUID: id}
+		options.InFolder = uuid.NullUUID{Valid: true, UUID: id}
 	}
 
-	folders, err := h.db.GetFoldersByParentID(c.Context(), userID, folderID)
+	files, err := h.db.SearchFiles(c.Context(), userID, options)
 	if err != nil {
-		h.logger.Error("Failed to get folders", "error", err, "folder_id", folderID)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to load folders",
-		})
-	}
-
-	files, err := h.db.GetFilesByFolderID(c.Context(), userID, folderID)
-	if err != nil {
-		h.logger.Error("Failed to get files for folder", "error", err, "folder_id", folderID)
+		h.logger.Error("Failed to get files for folder", "error", err, "options", options)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to load files for folder",
 		})
 	}
 
-	viewFolders := make([]views.Folder, 0, len(folders))
 	viewFiles := make([]views.File, 0, len(files))
-	for _, folder := range folders {
-		viewFolders = append(viewFolders, views.Folder{
-			ID:    folder.ID.String(),
-			Name:  folder.Name,
-			Files: []views.File{},
-		})
-	}
 	for _, file := range files {
 		viewFiles = append(viewFiles, views.File{
 			ID:       file.ID.String(),
-			Filename: file.Filename,
-			Size:     int64(file.SizeBytes),
+			Name:     file.Name,
+			Size:     file.SizeBytes,
 			MimeType: file.MimeType,
+			IsFolder: file.IsFolder,
 		})
 	}
 
 	// Build breadcrumbs
-	breadcrumbs := h.buildBreadcrumbs(c.Context(), folderID)
+	breadcrumbs := make([]views.Breadcrumb, 0)
+	if options.InFolder.Valid {
+		parentFiles, err := h.db.GetParentFolders(c.Context(), userID, options.InFolder.UUID)
+		if err != nil {
+			h.logger.Error("Failed to get parent folders for breadcrumb", "error", err, "file_id", options.InFolder.UUID)
+			// If we can't get parent folders, just show the file name
+			breadcrumbs = append(breadcrumbs, views.Breadcrumb{
+				Name: options.InFolder.UUID.String(),
+				URL:  "/drive/folder/" + options.InFolder.UUID.String(),
+			})
+		} else {
+			for _, parentFile := range parentFiles {
+				breadcrumbs = append(breadcrumbs, views.Breadcrumb{
+					Name: parentFile.Name,
+					URL:  "/drive/folder/" + parentFile.ID.String(),
+				})
+			}
+		}
+	}
 
 	folderIDStr := ""
-	if folderID.Valid {
-		folderIDStr = folderID.UUID.String()
-	}
-	return render(c, views.DrivePage(c, h.translate, viewFolders, viewFiles, breadcrumbs, folderIDStr))
-}
-
-// buildBreadcrumbs creates a breadcrumb navigation path for the current folder
-func (h *PageHandler) buildBreadcrumbs(ctx context.Context, folderID uuid.NullUUID) []views.Breadcrumb {
-	breadcrumbs := []views.Breadcrumb{
-		{Name: "My Drive", URL: "/drive"},
+	if options.InFolder.Valid {
+		folderIDStr = options.InFolder.UUID.String()
 	}
 
-	if !folderID.Valid {
-		return breadcrumbs
-	}
-
-	// Build the path by traversing up the folder hierarchy
-	var folderPath []database.Folder
-	currentFolderID := folderID
-
-	for currentFolderID.Valid {
-		folder, err := h.db.GetFolderByID(ctx, currentFolderID.UUID)
-		if err != nil {
-			h.logger.Error("Failed to get folder for breadcrumb", "error", err, "folder_id", currentFolderID.UUID)
-			break
-		}
-
-		folderPath = append([]database.Folder{folder}, folderPath...)
-		currentFolderID = folder.ParentID
-	}
-
-	// Convert folder path to breadcrumbs
-	for _, folder := range folderPath {
-		breadcrumbs = append(breadcrumbs, views.Breadcrumb{
-			Name: folder.Name,
-			URL:  "/drive/folder/" + folder.ID.String(),
-		})
-	}
-
-	return breadcrumbs
+	return render(c, views.DrivePage(c, h.translate, viewFiles, breadcrumbs, folderIDStr))
 }
 
 func render(c *fiber.Ctx, component templ.Component) error {

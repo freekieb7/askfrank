@@ -3,11 +3,11 @@
 
 # Tailwind dev mode
 tailwind:
-	npx @tailwindcss/cli -c tailwind.config.js -i ./internal/web/static/input.css -o ./internal/web/static/output.css
+	npx tailwindcss -c tailwind.config.js -i ./internal/web/static/css/input.css -o ./internal/web/static/css/tailwind.css
 
 # Tailwind build for production
 tailwind-minify:
-	npx @tailwindcss/cli -i ./internal/web/static/input.css -o ./internal/web/static/output.css --minify
+	npx tailwindcss -i ./internal/web/static/css/input.css -o ./internal/web/static/css/tailwind.css --minify
 
 # Go dev mode with Air
 air:

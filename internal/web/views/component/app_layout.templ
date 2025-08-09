@@ -7,18 +7,18 @@ import (
 
 templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 	@Layout(title, c) {
-		<link rel="stylesheet" href="/static/dashboard.css"/>
-		<div class="flex h-screen bg-gray-50">
+		<link rel="stylesheet" href="/static/css/dashboard.css"/>
+		<div class="flex h-screen bg-gray-50 dark:bg-gray-900">
 			<!-- Sidebar -->
 			<div class="hidden lg:flex lg:w-56 lg:flex-col lg:fixed lg:inset-y-0">
-				<div class="flex flex-col flex-grow pt-4 bg-white border-r border-gray-200 overflow-y-auto">
+				<div class="flex flex-col flex-grow pt-4 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
 					<!-- Logo -->
 					<div class="flex items-center flex-shrink-0 px-3 pb-4">
 						<div class="flex items-center">
-							<i class="fas fa-heartbeat text-2xl mr-2 text-ocean"></i>
+							<i class="fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua"></i>
 							<div>
-								<h1 class="text-lg font-bold text-ocean">AskFrank</h1>
-								<p class="text-xs text-gray-500">Healthcare</p>
+								<h1 class="text-lg font-bold text-ocean dark:text-aqua">AskFrank</h1>
+								<p class="text-xs text-gray-500 dark:text-gray-400">Healthcare</p>
 							</div>
 						</div>
 					</div>
@@ -52,7 +52,7 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 							<i class="fas fa-file-alt w-4 h-4 mr-2.5"></i>
 							Reports
 						</a>
-						<div class="border-t border-gray-200 mt-4 pt-4">
+						<div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4">
 							<a href="/settings" class="sidebar-link">
 								<i class="fas fa-cog w-4 h-4 mr-2.5"></i>
 								Settings
@@ -61,6 +61,15 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 								<i class="fas fa-question-circle w-4 h-4 mr-2.5"></i>
 								Help
 							</a>
+							<!-- Theme Toggle -->
+							<div class="px-3 py-2 mt-2">
+								<div class="flex items-center justify-between">
+									<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</span>
+									<button type="button" class="theme-toggle" onclick="toggleTheme()">
+										<span class="theme-toggle-dot"></span>
+									</button>
+								</div>
+							</div>
 						</div>
 					</nav>
 				</div>
@@ -68,20 +77,20 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 			<!-- Main content -->
 			<div class="flex flex-col flex-1 lg:pl-56">
 				<!-- Top bar -->
-				<div class="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-3 border-b border-gray-200 bg-white px-3 shadow-sm sm:gap-x-4 sm:px-4">
+				<div class="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 shadow-sm sm:gap-x-4 sm:px-4">
 					<!-- Mobile menu button -->
-					<button type="button" class="lg:hidden p-2 text-gray-700" id="mobile-menu-button">
+					<button type="button" class="lg:hidden p-2 text-gray-700 dark:text-gray-300" id="mobile-menu-button">
 						<i class="fas fa-bars w-4 h-4"></i>
 					</button>
 					<!-- Search bar -->
 					<div class="flex flex-1 justify-center">
 						<div class="search-container relative">
 							<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-								<i class="fas fa-search text-gray-400 w-4 h-4"></i>
+								<i class="fas fa-search text-gray-400 dark:text-gray-500 w-4 h-4"></i>
 							</div>
 							<input
 								type="text"
-								class="block w-full rounded-lg border-0 py-2 pl-9 pr-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-ocean bg-gray-50 focus:bg-white"
+								class="block w-full rounded-lg border-0 py-2 pl-9 pr-3 text-sm text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-ocean dark:focus:ring-aqua bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600"
 								placeholder="Search..."
 							/>
 						</div>
@@ -89,7 +98,7 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 					<!-- Right side items -->
 					<div class="flex items-center gap-x-2">
 						<!-- Notifications -->
-						<button type="button" class="relative p-2 text-gray-400 hover:text-gray-500 rounded-lg hover:bg-gray-100">
+						<button type="button" class="relative p-2 text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
 							<i class="fas fa-bell w-5 h-5"></i>
 							<!-- Notification badge -->
 							<span class="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-red-400 flex items-center justify-center">
@@ -98,28 +107,28 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 						</button>
 						<!-- Profile dropdown -->
 						<div class="relative">
-							<button type="button" class="flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 rounded-lg p-1.5 hover:bg-gray-100" id="profile-menu-button">
+							<button type="button" class="flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700" id="profile-menu-button">
 								<img class="h-7 w-7 rounded-full bg-gray-50" src="https://ui-avatars.com/api/?name=Dr+Smith&background=05668D&color=fff" alt="Profile"/>
 								<span class="hidden sm:flex sm:items-center">
-									<span class="text-sm font-medium text-gray-700">Dr. Smith</span>
-									<i class="fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400"></i>
+									<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Dr. Smith</span>
+									<i class="fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400 dark:text-gray-500"></i>
 								</span>
 							</button>
 							<!-- Dropdown menu -->
-							<div class="dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white py-1.5 shadow-lg ring-1 ring-gray-900/5 hidden" id="profile-dropdown">
-								<a href="/profile" class="block px-3 py-2 text-sm leading-6 text-gray-900 hover:bg-gray-50 rounded-md mx-1">
-									<i class="fas fa-user w-4 h-4 mr-2 text-gray-400"></i>
+							<div class="dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1.5 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-700/50 hidden" id="profile-dropdown">
+								<a href="/profile" class="block px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1">
+									<i class="fas fa-user w-4 h-4 mr-2 text-gray-400 dark:text-gray-500"></i>
 									Profile
 								</a>
-								<a href="/settings" class="block px-3 py-2 text-sm leading-6 text-gray-900 hover:bg-gray-50 rounded-md mx-1">
-									<i class="fas fa-cog w-4 h-4 mr-2 text-gray-400"></i>
+								<a href="/settings" class="block px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1">
+									<i class="fas fa-cog w-4 h-4 mr-2 text-gray-400 dark:text-gray-500"></i>
 									Settings
 								</a>
-								<div class="border-t border-gray-100 my-1"></div>
+								<div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
 								<form method="POST" action="/logout">
 									<input type="hidden" name="csrf_token" value={ c.Locals("csrf_token").(string) }/>
-									<button type="submit" class="block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 hover:bg-gray-50 rounded-md mx-1">
-										<i class="fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400"></i>
+									<button type="submit" class="block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1">
+										<i class="fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500"></i>
 										Sign out
 									</button>
 								</form>
@@ -136,20 +145,20 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 		<!-- Mobile sidebar overlay -->
 		<div class="lg:hidden hidden fixed inset-0 z-50" id="mobile-sidebar-overlay">
 			<div class="fixed inset-0 bg-gray-600 bg-opacity-75"></div>
-			<div class="relative flex w-full max-w-xs flex-col bg-white pb-3 shadow-xl">
+			<div class="relative flex w-full max-w-xs flex-col bg-white dark:bg-gray-800 pb-3 shadow-xl">
 				<div class="absolute top-0 right-0 -mr-12 pt-2">
 					<button type="button" class="ml-1 flex h-8 w-8 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white" id="close-sidebar">
 						<i class="fas fa-times text-white w-4 h-4"></i>
 					</button>
 				</div>
 				<!-- Mobile navigation content same as desktop but in overlay -->
-				<div class="flex flex-col flex-grow pt-4 bg-white overflow-y-auto">
+				<div class="flex flex-col flex-grow pt-4 bg-white dark:bg-gray-800 overflow-y-auto">
 					<div class="flex items-center flex-shrink-0 px-3 pb-4">
 						<div class="flex items-center">
-							<i class="fas fa-heartbeat text-2xl mr-2.5 text-ocean"></i>
+							<i class="fas fa-heartbeat text-2xl mr-2.5 text-ocean dark:text-aqua"></i>
 							<div>
-								<h1 class="text-lg font-bold text-ocean">AskFrank</h1>
-								<p class="text-xs text-gray-500">Healthcare</p>
+								<h1 class="text-lg font-bold text-ocean dark:text-aqua">AskFrank</h1>
+								<p class="text-xs text-gray-500 dark:text-gray-400">Healthcare</p>
 							</div>
 						</div>
 					</div>
@@ -178,7 +187,7 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 							<i class="fas fa-file-alt w-4 h-4 mr-2.5"></i>
 							Reports
 						</a>
-						<div class="border-t border-gray-200 mt-4 pt-4">
+						<div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4">
 							<a href="/settings" class="sidebar-link">
 								<i class="fas fa-cog w-4 h-4 mr-2.5"></i>
 								Settings
@@ -187,12 +196,68 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 								<i class="fas fa-question-circle w-4 h-4 mr-2.5"></i>
 								Help
 							</a>
+							<!-- Theme Toggle -->
+							<div class="px-3 py-2 mt-2">
+								<div class="flex items-center justify-between">
+									<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</span>
+									<button type="button" class="theme-toggle" onclick="toggleTheme()">
+										<span class="theme-toggle-dot"></span>
+									</button>
+								</div>
+							</div>
 						</div>
 					</nav>
 				</div>
 			</div>
 		</div>
 		<script>
+			// Theme management
+			function toggleTheme() {
+				const html = document.documentElement;
+				const currentTheme = html.classList.contains('dark') ? 'dark' : 'light';
+				const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+				
+				// Toggle dark class
+				if (newTheme === 'dark') {
+					html.classList.add('dark');
+				} else {
+					html.classList.remove('dark');
+				}
+				
+				// Save to localStorage
+				localStorage.setItem('theme', newTheme);
+				
+				// Update theme toggle appearance
+				updateThemeToggle();
+				
+				console.log('Theme switched to:', newTheme);
+			}
+
+			function updateThemeToggle() {
+				const toggles = document.querySelectorAll('.theme-toggle');
+				const isDark = document.documentElement.classList.contains('dark');
+				
+				toggles.forEach(toggle => {
+					if (isDark) {
+						toggle.classList.add('dark');
+					} else {
+						toggle.classList.remove('dark');
+					}
+				});
+			}
+
+			// Initialize theme toggle appearance when DOM is loaded
+			document.addEventListener('DOMContentLoaded', function() {
+				updateThemeToggle();
+			});
+
+			// Also update immediately if called after DOM is ready
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', updateThemeToggle);
+			} else {
+				updateThemeToggle();
+			}
+
 			// Profile dropdown functionality
 			const profileButton = document.getElementById('profile-menu-button');
 			const profileDropdown = document.getElementById('profile-dropdown');

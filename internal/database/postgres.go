@@ -120,31 +120,34 @@ func (db *PostgresDatabase) DeleteUser(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
-type Folder struct {
+var (
+	ErrFileNotFound = errors.New("File not found")
+)
+
+type File struct {
 	ID        uuid.UUID
-	Name      string
 	OwnerID   uuid.UUID
 	ParentID  uuid.NullUUID
+	Name      string
+	MimeType  string
+	S3Key     string
+	SizeBytes int64
+	IsFolder  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-func (db *PostgresDatabase) CreateFolder(ctx context.Context, folder Folder) error {
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_folder (id, name, owner_id, parent_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-		folder.ID, folder.Name, folder.OwnerID, folder.ParentID, folder.CreatedAt, folder.UpdatedAt); err != nil {
-		// Handle error
-		return err
-	}
-	return nil
+type SearchFilesOptions struct {
+	InFolder uuid.NullUUID // Optional folder ID to search within
 }
 
-func (db *PostgresDatabase) GetFoldersByParentID(ctx context.Context, ownerID uuid.UUID, parentID uuid.NullUUID) ([]Folder, error) {
-	query := `SELECT id, name, owner_id, parent_id, created_at, updated_at FROM tbl_folder WHERE owner_id = $1`
+func (db *PostgresDatabase) SearchFiles(ctx context.Context, ownerID uuid.UUID, options SearchFilesOptions) ([]File, error) {
+	query := `SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at FROM tbl_file WHERE owner_id = $1`
 	args := []any{ownerID}
 
-	if parentID.Valid {
+	if options.InFolder.Valid {
 		query += ` AND parent_id = $2`
-		args = append(args, parentID)
+		args = append(args, options.InFolder.UUID)
 	} else {
 		query += ` AND parent_id IS NULL`
 	}
@@ -155,73 +158,10 @@ func (db *PostgresDatabase) GetFoldersByParentID(ctx context.Context, ownerID uu
 	}
 	defer rows.Close()
 
-	var folders []Folder
-	for rows.Next() {
-		var folder Folder
-		if err := rows.Scan(&folder.ID, &folder.Name, &folder.OwnerID, &folder.ParentID, &folder.CreatedAt, &folder.UpdatedAt); err != nil {
-			return nil, err
-		}
-		folders = append(folders, folder)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return folders, nil
-}
-
-func (db *PostgresDatabase) GetFolderByID(ctx context.Context, id uuid.UUID) (Folder, error) {
-	var folder Folder
-	err := db.QueryRow(ctx, `SELECT id, name, owner_id, parent_id, created_at, updated_at FROM tbl_folder WHERE id = $1`, id).Scan(
-		&folder.ID, &folder.Name, &folder.OwnerID, &folder.ParentID, &folder.CreatedAt, &folder.UpdatedAt)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return folder, errors.New("Folder not found")
-		}
-		return folder, err
-	}
-	return folder, nil
-}
-
-func (db *PostgresDatabase) GetFoldersByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]Folder, error) {
-	query := `SELECT id, name, owner_id, parent_id, created_at, updated_at FROM tbl_folder WHERE owner_id = $1`
-
-	rows, err := db.Query(ctx, query, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var folders []Folder
-	for rows.Next() {
-		var folder Folder
-		if err := rows.Scan(&folder.ID, &folder.Name, &folder.OwnerID, &folder.ParentID, &folder.CreatedAt, &folder.UpdatedAt); err != nil {
-			return nil, err
-		}
-		folders = append(folders, folder)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return folders, nil
-}
-
-func (db *PostgresDatabase) GetFilesByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]File, error) {
-	query := `SELECT id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE owner_id = $1`
-
-	rows, err := db.Query(ctx, query, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var files []File
 	for rows.Next() {
 		var file File
-		if err := rows.Scan(&file.ID, &file.OwnerID, &file.FolderID, &file.Filename, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
+		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.IsFolder, &file.CreatedAt, &file.UpdatedAt); err != nil {
 			return nil, err
 		}
 		files = append(files, file)
@@ -232,133 +172,21 @@ func (db *PostgresDatabase) GetFilesByOwnerID(ctx context.Context, ownerID uuid.
 	}
 
 	return files, nil
-}
-
-func (db *PostgresDatabase) UpdateFolder(ctx context.Context, folder Folder) error {
-	if _, err := db.Exec(ctx, `UPDATE tbl_folder SET name = $1, owner_id = $2, parent_id = $3, updated_at = $4 WHERE id = $5`,
-		folder.Name, folder.OwnerID, folder.ParentID, folder.UpdatedAt, folder.ID); err != nil {
-		// Handle error
-		return err
-	}
-	return nil
-}
-
-func (db *PostgresDatabase) DeleteFolder(ctx context.Context, ownerID, folderID uuid.UUID) error {
-	// Start a transaction to ensure atomicity
-	tx, err := db.Pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	// First, recursively delete all child folders and their contents
-	if err := db.deleteFolderRecursively(ctx, tx, ownerID, folderID); err != nil {
-		return err
-	}
-
-	// Commit the transaction
-	return tx.Commit(ctx)
-}
-
-// deleteFolderRecursively deletes a folder and all its contents recursively
-func (db *PostgresDatabase) deleteFolderRecursively(ctx context.Context, tx pgx.Tx, ownerID, folderID uuid.UUID) error {
-	// First, get all child folders
-	rows, err := tx.Query(ctx, `SELECT id FROM tbl_folder WHERE parent_id = $1 AND owner_id = $2`, folderID, ownerID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var childFolderIDs []uuid.UUID
-	for rows.Next() {
-		var childID uuid.UUID
-		if err := rows.Scan(&childID); err != nil {
-			return err
-		}
-		childFolderIDs = append(childFolderIDs, childID)
-	}
-
-	// Recursively delete all child folders
-	for _, childID := range childFolderIDs {
-		if err := db.deleteFolderRecursively(ctx, tx, ownerID, childID); err != nil {
-			return err
-		}
-	}
-
-	// Delete all files in this folder
-	if _, err := tx.Exec(ctx, `DELETE FROM tbl_file WHERE folder_id = $1 AND owner_id = $2`, folderID, ownerID); err != nil {
-		return err
-	}
-
-	// Finally, delete the folder itself
-	if _, err := tx.Exec(ctx, `DELETE FROM tbl_folder WHERE id = $1 AND owner_id = $2`, folderID, ownerID); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-var (
-	ErrFileNotFound = errors.New("File not found")
-)
-
-type File struct {
-	ID        uuid.UUID
-	OwnerID   uuid.UUID
-	FolderID  uuid.NullUUID
-	Filename  string
-	MimeType  string
-	S3Key     string
-	SizeBytes uint64
-	CreatedAt time.Time
-	UpdatedAt time.Time
 }
 
 func (db *PostgresDatabase) CreateFile(ctx context.Context, file File) error {
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_file (id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		file.ID, file.OwnerID, file.FolderID, file.Filename, file.MimeType, file.S3Key, file.SizeBytes, file.CreatedAt, file.UpdatedAt); err != nil {
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_file (id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		file.ID, file.OwnerID, file.ParentID, file.Name, file.MimeType, file.S3Key, file.SizeBytes, file.IsFolder, file.CreatedAt, file.UpdatedAt); err != nil {
 		// Handle error
 		return err
 	}
 	return nil
 }
 
-func (db *PostgresDatabase) GetFilesByFolderID(ctx context.Context, ownerID uuid.UUID, folderID uuid.NullUUID) ([]File, error) {
-	query := `SELECT id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE owner_id = $1`
-	args := []any{ownerID}
-	if folderID.Valid {
-		query += ` AND folder_id = $2`
-		args = append(args, folderID)
-	} else {
-		query += ` AND folder_id IS NULL`
-	}
-
-	rows, err := db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var files []File
-	for rows.Next() {
-		var file File
-		if err := rows.Scan(&file.ID, &file.OwnerID, &file.FolderID, &file.Filename, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
-			return nil, err
-		}
-		files = append(files, file)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return files, nil
-}
-
-func (db *PostgresDatabase) GetFileByID(ctx context.Context, ownerID, fileID uuid.UUID) (File, error) {
+func (db *PostgresDatabase) GetFileByID(ctx context.Context, ownerID, id uuid.UUID) (File, error) {
 	var file File
-	err := db.QueryRow(ctx, `SELECT id, owner_id, folder_id, filename, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE id = $1 AND owner_id = $2`, fileID, ownerID).Scan(
-		&file.ID, &file.OwnerID, &file.FolderID, &file.Filename, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt)
+	err := db.QueryRow(ctx, `SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at FROM tbl_file WHERE id = $1 AND owner_id = $2`, id, ownerID).Scan(
+		&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.IsFolder, &file.CreatedAt, &file.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return file, ErrFileNotFound
@@ -368,13 +196,42 @@ func (db *PostgresDatabase) GetFileByID(ctx context.Context, ownerID, fileID uui
 	return file, nil
 }
 
-func (db *PostgresDatabase) UpdateFile(ctx context.Context, file File) error {
-	if _, err := db.Exec(ctx, `UPDATE tbl_file SET owner_id = $1, folder_id = $2, filename = $3, mime_type = $4, s3_key = $5, size_bytes = $6, updated_at = $7 WHERE id = $8`,
-		file.OwnerID, file.FolderID, file.Filename, file.MimeType, file.S3Key, file.SizeBytes, file.UpdatedAt, file.ID); err != nil {
-		// Handle error
-		return err
+func (db *PostgresDatabase) GetParentFolders(ctx context.Context, ownerID, fileID uuid.UUID) ([]File, error) {
+	var parents []File
+	rows, err := db.Query(ctx, `
+		WITH RECURSIVE folder_path AS (
+			SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at
+			FROM tbl_file
+			WHERE id = $1 AND owner_id = $2
+			UNION ALL
+			SELECT f.id, f.owner_id, f.parent_id, f.name, f.mime_type, f.s3_key, f.size_bytes, f.is_folder, f.created_at, f.updated_at
+			FROM tbl_file f
+			INNER JOIN folder_path fp ON f.id = fp.parent_id
+		)
+		SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at
+		FROM folder_path
+		ORDER BY created_at DESC
+	`, fileID, ownerID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return parents, ErrFileNotFound
+		}
+		return parents, err
 	}
-	return nil
+	defer rows.Close()
+
+	for rows.Next() {
+		var file File
+		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.IsFolder, &file.CreatedAt, &file.UpdatedAt); err != nil {
+			return parents, err
+		}
+		parents = append(parents, file)
+	}
+	if err := rows.Err(); err != nil {
+		return parents, err
+	}
+
+	return parents, nil
 }
 
 func (db *PostgresDatabase) DeleteFile(ctx context.Context, ownerID, id uuid.UUID) error {

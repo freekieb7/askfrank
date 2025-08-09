@@ -13,19 +13,17 @@ type Breadcrumb struct {
 
 type File struct {
 	ID       string
-	Filename string
+	Name     string
 	Size     int64
 	MimeType string
+	IsFolder bool
 }
 
-type Folder struct {
-	ID      string
-	Name    string
-	Folders []Folder
-	Files   []File
-}
+func getFileIcon(mimeType string, isFolder bool) string {
+	if isFolder {
+		return "fas fa-folder text-blue-500"
+	}
 
-func getFileIcon(mimeType string) string {
 	switch {
 	case strings.HasPrefix(mimeType, "image/"):
 		return "fas fa-image text-green-500"
@@ -43,6 +41,8 @@ func getFileIcon(mimeType string) string {
 		return "fas fa-file-powerpoint text-orange-500"
 	case strings.HasPrefix(mimeType, "text/"):
 		return "fas fa-file-alt text-gray-500"
+	case mimeType == "application/vnd.google-apps.folder":
+		return "fas fa-folder text-blue-500"
 	default:
 		return "fas fa-file text-gray-500"
 	}
@@ -61,7 +61,7 @@ func formatFileSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []File, breadcrumbs []Breadcrumb, currentFolderID string) {
+templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs []Breadcrumb, currentFolderID string) {
 	@component.AppLayout("Drive - AskFrank", c, t) {
 		<div class="main-content" data-current-folder-id={ currentFolderID }>
 			<div class="p-6">
@@ -124,7 +124,7 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 				</div>
 				<!-- Drive Content -->
 				<div class="bg-white dark:bg-gray-800 rounded-lg shadow">
-					if len(folders) == 0 && len(files) == 0 {
+					if len(files) == 0 {
 						<div class="p-12 text-center">
 							<i class="fas fa-folder-open text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
 							<h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No files or folders yet</h3>
@@ -133,13 +133,58 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 					} else {
 						<!-- Drive Content Grid -->
 						<div id="drive-grid" class="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3">
-							<!-- Folders -->
-							for _, folder := range folders {
-								@FolderGridItem(folder, t, c)
-							}
-							<!-- Files -->
+							<!-- Files and Folders -->
 							for _, file := range files {
-								@FileGridItem(file, t, c)
+								if file.IsFolder {
+									<div class="folder-item group cursor-pointer" data-folder-id={ file.ID } title="Double-click to open folder">
+										<div class="p-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-2 border-transparent hover:border-blue-200 dark:hover:border-blue-700">
+											<div class="flex flex-col items-center text-center">
+												<div class="relative mb-2">
+													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " text-3xl" }></i>
+													<div class="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+														<div class="flex space-x-1">
+															<button class="delete-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600" title="Delete Folder">
+																<i class="fas fa-trash text-xs"></i>
+															</button>
+														</div>
+													</div>
+												</div>
+												<span class="text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1" title={ file.Name }>
+													{ file.Name }
+												</span>
+												<span class="text-xs text-blue-600 dark:text-blue-400 mt-1">
+													Folder
+												</span>
+											</div>
+										</div>
+									</div>
+								} else {
+									<div class="file-item group cursor-pointer" data-file-id={ file.ID } title="Double-click to open file">
+										<div class="p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-600">
+											<div class="flex flex-col items-center text-center">
+												<div class="relative mb-2">
+													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " text-3xl" }></i>
+													<div class="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+														<div class="flex space-x-1">
+															<button class="download-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-blue-500 border border-gray-200 dark:border-gray-600" title="Download">
+																<i class="fas fa-download text-xs"></i>
+															</button>
+															<button class="delete-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600" title="Delete">
+																<i class="fas fa-trash text-xs"></i>
+															</button>
+														</div>
+													</div>
+												</div>
+												<span class="text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1" title={ file.Name }>
+													{ file.Name }
+												</span>
+												<span class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+													{ formatFileSize(file.Size) }
+												</span>
+											</div>
+										</div>
+									</div>
+								}
 							}
 						</div>
 						<!-- Drive Content List -->
@@ -154,13 +199,58 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 								</div>
 							</div>
 							<div class="divide-y divide-gray-200 dark:divide-gray-700">
-								<!-- Folders -->
-								for _, folder := range folders {
-									@FolderListItem(folder, t, c)
-								}
-								<!-- Files -->
+								<!-- Files and Folders -->
 								for _, file := range files {
-									@FileListItem(file, t, c)
+									if file.IsFolder {
+										<div class="folder-item group hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors cursor-pointer" data-folder-id={ file.ID } title="Double-click to open folder">
+											<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
+												<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
+													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0" }></i>
+													<span class="font-medium text-gray-900 dark:text-white truncate">{ file.Name }</span>
+												</div>
+												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
+													Me
+												</div>
+												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block">
+													—
+												</div>
+												<div class="col-span-1 text-sm text-blue-600 dark:text-blue-400 hidden lg:block">
+													Folder
+												</div>
+												<div class="col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+													<button class="delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Delete Folder">
+														<i class="fas fa-trash text-sm"></i>
+													</button>
+												</div>
+											</div>
+										</div>
+									} else {
+										<div class="file-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" data-file-id={ file.ID } title="Double-click to open file">
+											<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
+												<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
+													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0" }></i>
+													<span class="font-medium text-gray-900 dark:text-white truncate">{ file.Name }</span>
+												</div>
+												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
+													Me
+												</div>
+												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block">
+													—
+												</div>
+												<div class="col-span-1 text-sm text-gray-500 dark:text-gray-400 hidden lg:block">
+													{ formatFileSize(file.Size) }
+												</div>
+												<div class="col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+													<button class="download-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Download">
+														<i class="fas fa-download text-sm"></i>
+													</button>
+													<button class="delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Delete">
+														<i class="fas fa-trash text-sm"></i>
+													</button>
+												</div>
+											</div>
+										</div>
+									}
 								}
 							</div>
 						</div>
@@ -317,14 +407,49 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 					gridViewBtn.classList.add('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');
 				});
 
-				// Folder double-click navigation
+				// Double-click navigation and file opening
 				document.addEventListener('dblclick', function(e) {
-					const folderItem = e.target.closest('.folder-item');
-					if (folderItem) {
-						e.preventDefault();
-						const folderId = folderItem.dataset.folderId;
-						if (folderId) {
-							window.location.href = `/drive/folder/${folderId}`;
+					e.preventDefault(); // Prevent any default behavior
+					
+					// Check if the clicked element is specifically a folder or file
+					const clickedElement = e.target.closest('.folder-item, .file-item');
+					
+					if (!clickedElement) {
+						return; // Not clicking on a file or folder
+					}
+					
+					if (clickedElement.classList.contains('folder-item')) {
+						// Handle folder navigation
+						const folderId = clickedElement.dataset.folderId;
+						if (folderId && folderId.trim() !== '') {
+							// Navigate to folder content - same page navigation
+							window.location.href = `/drive/files/${folderId}`;
+						} else {
+							console.warn('Folder ID not found for folder item');
+						}
+					} else if (clickedElement.classList.contains('file-item')) {
+						// Handle file opening
+						const fileId = clickedElement.dataset.fileId;
+						if (fileId && fileId.trim() !== '') {
+							// Get file information from the DOM to determine how to handle it
+							const fileNameElement = clickedElement.querySelector('.font-medium');
+							const fileName = fileNameElement ? fileNameElement.textContent.trim() : 'unknown';
+							const fileIcon = clickedElement.querySelector('i');
+							const isImage = fileIcon && fileIcon.classList.contains('fa-image');
+							const isPdf = fileIcon && fileIcon.classList.contains('fa-file-pdf');
+							const isText = fileIcon && fileIcon.classList.contains('fa-file-alt');
+							
+							// For viewable files, try to open in new tab, otherwise download
+							if (isImage || isPdf || isText) {
+								// Try to open in new tab first
+								const viewUrl = `/api/drive/v1/files/${fileId}/download`;
+								window.open(viewUrl, '_blank');
+							} else {
+								// For other file types, download directly
+								downloadFile(fileId);
+							}
+						} else {
+							console.warn('File ID not found for file item');
 						}
 					}
 				});
@@ -434,13 +559,9 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 				}
 
 				// Start upload functionality
-				document.getElementById('start-upload').addEventListener('click', function() {
+				document.getElementById('start-upload').addEventListener('click', async function() {
 					if (selectedFiles.length === 0) return;
 					
-					uploadFiles();
-				});
-
-				function uploadFiles() {
 					const progressDiv = document.getElementById('upload-progress');
 					const progressBar = document.getElementById('progress-bar');
 					const progressText = document.getElementById('progress-text');
@@ -456,39 +577,35 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 					if (currentFolderID) {
 						formData.append('folder_id', currentFolderID);
 					}
-					
-					fetch('/api/upload', {
+
+					const response = await fetch('/api/drive/v1/upload', {
 						method: 'POST',
 						headers: {
 							'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
 						},
 						body: formData
-					})
-					.then(response => {
-						if (!response.ok) {
-							throw new Error('Upload failed');
-						}
-						return response.json();
-					})
-					.then(data => {
-						if (data.status === 'success') {
-							progressBar.style.width = '100%';
-							progressText.textContent = '100%';
-							
-							setTimeout(() => {
-								closeUploadModal();
-								window.location.reload();
-							}, 1000);
-						} else {
-							throw new Error(data.error || 'Upload failed');
-						}
-					})
-					.catch(error => {
-						console.error('Error:', error);
-						alert('Upload failed: ' + error.message);
-						progressDiv.classList.add('hidden');
 					});
-				}
+
+					if (!response.ok) {
+						const errorData = await response.json();
+						alert(errorData.error || 'Failed to upload files');
+						progressDiv.classList.add('hidden');
+						return;
+					}
+
+					const data = await response.json();
+					if (data.status === 'success') {
+						progressBar.style.width = '100%';
+						progressText.textContent = '100%';
+						
+						setTimeout(() => {
+							closeUploadModal();
+							window.location.reload();
+						}, 1000);
+					} else {
+						throw new Error(data.error || 'Upload failed');
+					}
+				});
 
 				// Close modal functionality
 				document.getElementById('close-modal').addEventListener('click', function() {
@@ -511,7 +628,7 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 				});
 
 				// Create folder form submission
-				document.getElementById('create-folder-form').addEventListener('submit', function(e) {
+				document.getElementById('create-folder-form').addEventListener('submit', async function(e) {
 					e.preventDefault();
 					const folderName = document.getElementById('folder-name').value.trim();
 					
@@ -521,7 +638,7 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 					}
 
 					// Send request to create folder
-					fetch('/api/folders', {
+					const response = await fetch('/api/drive/v1/files', {
 						method: 'POST',
 						headers: {
 							'Content-Type': 'application/json',
@@ -529,26 +646,28 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 						},
 						body: JSON.stringify({
 							name: folderName,
-							parent_id: currentFolderID // Use current folder as parent
+							mime_type: 'application/vnd.google-apps.folder', // Proper MIME type for folders
+							parent: currentFolderID // Use current folder as parent
 						})
-					})
-					.then(response => response.json())
-					.then(data => {
-						if (data.status === 'success') {
-							// Reload the page to show the new folder
-							window.location.reload();
-						} else {
-							alert(data.error || 'Failed to create folder');
-						}
-					})
-					.catch(error => {
-						console.error('Error:', error);
-						alert('Failed to create folder');
 					});
+
+					if (!response.ok) {
+						const errorData = await response.json();
+						alert(errorData.error || 'Failed to create folder');
+						return;
+					}
+
+					const data = await response.json();
+					if (data.status === 'success') {
+						// Reload the page to show the new folder
+						window.location.reload();
+					} else {
+						alert(data.error || 'Failed to create folder');
+					}
 				});
 
 				// File download functionality
-				document.addEventListener('click', function(e) {
+				document.addEventListener('click', async function(e) {
 					if (e.target.closest('.download-btn')) {
 						e.preventDefault();
 						e.stopPropagation();
@@ -561,72 +680,108 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 							alert('File ID not found');
 							return;
 						}
-						
-						downloadFile(fileId);
+
+						const response = await fetch(`/api/drive/v1/files/${fileId}/download`, {
+							method: 'GET',
+							headers: {
+								'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+							},
+						})
+
+						if (!response.ok) {
+							throw new Error('Failed to download file');
+						}
+
+						// Convert response to Blob
+						const blob = await response.blob();
+
+						// Create a download link
+						const url = window.URL.createObjectURL(blob);
+						const a = document.createElement('a');
+						a.href = url;
+						a.download = 'downloaded_file'; // You can optionally set the real name
+						a.click();
+
+						// Cleanup
+						window.URL.revokeObjectURL(url);
 					}
 
-					// File delete functionality
+					// File and folder delete functionality
 					if (e.target.closest('.delete-btn')) {
 						e.preventDefault();
 						e.stopPropagation();
 						
 						const deleteBtn = e.target.closest('.delete-btn');
 						const fileItem = deleteBtn.closest('.file-item');
-						const fileId = fileItem.dataset.fileId;
-						const fileName = fileItem.querySelector('.text-gray-900').textContent;
-						
-						if (!fileId) {
-							alert('File ID not found');
-							return;
-						}
-						
-						// Confirm deletion
-						if (confirm(`Are you sure you want to delete "${fileName}"? This action cannot be undone.`)) {
-							deleteFile(fileId);
-						}
-					}
-
-					// Folder delete functionality
-					if (e.target.closest('.delete-folder-btn')) {
-						e.preventDefault();
-						e.stopPropagation();
-						
-						const deleteBtn = e.target.closest('.delete-folder-btn');
 						const folderItem = deleteBtn.closest('.folder-item');
-						const folderId = folderItem.dataset.folderId;
-						const folderName = folderItem.querySelector('.font-medium').textContent;
 						
-						if (!folderId) {
-							alert('Folder ID not found');
+						let itemId, itemName, itemType;
+						
+						if (fileItem) {
+							itemId = fileItem.dataset.fileId;
+							itemName = fileItem.querySelector('.text-gray-900, .font-medium').textContent;
+							itemType = 'file';
+						} else if (folderItem) {
+							itemId = folderItem.dataset.folderId;
+							itemName = folderItem.querySelector('.text-gray-900, .font-medium').textContent;
+							itemType = 'folder';
+						}
+						
+						if (!itemId) {
+							alert('Item ID not found');
 							return;
 						}
 						
 						// Confirm deletion
-						if (confirm(`Are you sure you want to delete folder "${folderName}" and all its contents? This action cannot be undone.`)) {
-							deleteFolder(folderId);
+						const confirmed = confirm(`Are you sure you want to delete "${itemName}"? This action cannot be undone.`);
+						if (!confirmed) {
+							return;
 						}
+						
+						const csrfToken = document.querySelector('meta[name="csrf-token"]');
+						if (!csrfToken) {
+							alert('CSRF token not found');
+							return;
+						}
+
+						fetch(`/api/drive/v1/files/${itemId}`, {
+							method: 'DELETE',
+							headers: {
+								'X-Csrf-Token': csrfToken.getAttribute('content')
+							}
+						})
+						.then(response => {
+							if (!response.ok) {
+								throw new Error('Delete failed');
+							}
+							return response.json();
+						})
+						.then(data => {
+							if (data.status === 'success') {
+								// Reload the page to reflect the deletion
+								window.location.reload();
+							} else {
+								throw new Error(data.error || 'Delete failed');
+							}
+						})
+						.catch(error => {
+							console.error('Error:', error);
+							alert('Delete failed: ' + error.message);
+						});
 					}
 				});
 
 				function downloadFile(fileId) {
-					// Create a temporary form to send POST request for download
-					const form = document.createElement('form');
-					form.method = 'POST';
-					form.action = '/api/download';
-					form.style.display = 'none';
-					
 					// Add CSRF token as header approach through hidden input
 					const csrfToken = document.querySelector('meta[name="csrf-token"]');
 					if (csrfToken) {
 						// Since this is a form submission, we'll include the token as a header approach
 						// by creating the request through fetch first to get the file blob
-						fetch('/api/download', {
-							method: 'POST',
+						fetch(`/api/drive/v1/files/${fileId}/download`, {
+							method: 'GET',
 							headers: {
-								'X-Csrf-Token': csrfToken.getAttribute('content'),
-								'Content-Type': 'application/x-www-form-urlencoded',
-							},
-							body: `file_id=${encodeURIComponent(fileId)}`
+								'X-Csrf-Token': csrfToken.getAttribute('content')
+							}
 						})
 						.then(response => {
 							if (!response.ok) {
@@ -662,178 +817,7 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, folders []Folder, files []F
 						alert('CSRF token not found');
 					}
 				}
-
-				function deleteFile(fileId) {
-					const csrfToken = document.querySelector('meta[name="csrf-token"]');
-					if (!csrfToken) {
-						alert('CSRF token not found');
-						return;
-					}
-
-					fetch('/api/delete', {
-						method: 'POST',
-						headers: {
-							'X-Csrf-Token': csrfToken.getAttribute('content'),
-							'Content-Type': 'application/x-www-form-urlencoded',
-						},
-						body: `file_id=${encodeURIComponent(fileId)}`
-					})
-					.then(response => {
-						if (!response.ok) {
-							throw new Error('Delete failed');
-						}
-						return response.json();
-					})
-					.then(data => {
-						if (data.status === 'success') {
-							// Reload the page to reflect the deletion
-							window.location.reload();
-						} else {
-							throw new Error(data.error || 'Delete failed');
-						}
-					})
-					.catch(error => {
-						console.error('Error:', error);
-						alert('Delete failed: ' + error.message);
-					});
-				}
-
-				function deleteFolder(folderId) {
-					const csrfToken = document.querySelector('meta[name="csrf-token"]');
-					if (!csrfToken) {
-						alert('CSRF token not found');
-						return;
-					}
-
-					fetch('/api/delete-folder', {
-						method: 'POST',
-						headers: {
-							'X-Csrf-Token': csrfToken.getAttribute('content'),
-							'Content-Type': 'application/x-www-form-urlencoded',
-						},
-						body: `folder_id=${encodeURIComponent(folderId)}`
-					})
-					.then(response => {
-						if (!response.ok) {
-							throw new Error('Delete failed');
-						}
-						return response.json();
-					})
-					.then(data => {
-						if (data.status === 'success') {
-							// Reload the page to reflect the deletion
-							window.location.reload();
-						} else {
-							throw new Error(data.error || 'Delete failed');
-						}
-					})
-					.catch(error => {
-						console.error('Error:', error);
-						alert('Delete failed: ' + error.message);
-					});
-				}
 			});
 		</script>
 	}
-}
-
-templ FolderGridItem(folder Folder, t translate.Translate, c *fiber.Ctx) {
-	<div class="folder-item group cursor-pointer" data-folder-id={ folder.ID }>
-		<div class="p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-600">
-			<div class="flex flex-col items-center text-center">
-				<div class="relative mb-2">
-					<i class="fas fa-folder text-blue-500 text-3xl"></i>
-					<div class="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-						<button class="delete-folder-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600" title="Delete folder">
-							<i class="fas fa-trash text-xs"></i>
-						</button>
-					</div>
-				</div>
-				<span class="text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1" title={ folder.Name }>
-					{ folder.Name }
-				</span>
-			</div>
-		</div>
-	</div>
-}
-
-templ FileGridItem(file File, t translate.Translate, c *fiber.Ctx) {
-	<div class="file-item group cursor-pointer" data-file-id={ file.ID }>
-		<div class="p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-600">
-			<div class="flex flex-col items-center text-center">
-				<div class="relative mb-2">
-					<i class={ getFileIcon(file.MimeType) + " text-3xl" }></i>
-					<div class="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-						<div class="flex space-x-1">
-							<button class="download-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-blue-500 border border-gray-200 dark:border-gray-600" title="Download">
-								<i class="fas fa-download text-xs"></i>
-							</button>
-							<button class="delete-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600" title="Delete">
-								<i class="fas fa-trash text-xs"></i>
-							</button>
-						</div>
-					</div>
-				</div>
-				<span class="text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1" title={ file.Filename }>
-					{ file.Filename }
-				</span>
-				<span class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-					{ formatFileSize(file.Size) }
-				</span>
-			</div>
-		</div>
-	</div>
-}
-
-templ FolderListItem(folder Folder, t translate.Translate, c *fiber.Ctx) {
-	<div class="folder-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" data-folder-id={ folder.ID }>
-		<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
-			<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
-				<i class="fas fa-folder text-blue-500 mr-3 flex-shrink-0"></i>
-				<span class="font-medium text-gray-900 dark:text-white truncate">{ folder.Name }</span>
-			</div>
-			<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
-				Me
-			</div>
-			<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block">
-				—
-			</div>
-			<div class="col-span-1 text-sm text-gray-500 dark:text-gray-400 hidden lg:block">
-				—
-			</div>
-			<div class="col-span-6 sm:col-span-1 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-				<button class="delete-folder-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Delete folder">
-					<i class="fas fa-trash text-sm"></i>
-				</button>
-			</div>
-		</div>
-	</div>
-}
-
-templ FileListItem(file File, t translate.Translate, c *fiber.Ctx) {
-	<div class="file-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" data-file-id={ file.ID }>
-		<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
-			<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
-				<i class={ getFileIcon(file.MimeType) + " mr-3 flex-shrink-0" }></i>
-				<span class="font-medium text-gray-900 dark:text-white truncate">{ file.Filename }</span>
-			</div>
-			<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
-				Me
-			</div>
-			<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block">
-				—
-			</div>
-			<div class="col-span-1 text-sm text-gray-500 dark:text-gray-400 hidden lg:block">
-				{ formatFileSize(file.Size) }
-			</div>
-			<div class="col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-				<button class="download-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Download">
-					<i class="fas fa-download text-sm"></i>
-				</button>
-				<button class="delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Delete">
-					<i class="fas fa-trash text-sm"></i>
-				</button>
-			</div>
-		</div>
-	</div>
 }

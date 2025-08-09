@@ -6,7 +6,7 @@ import "hp/internal/i18n"
 // todo add language
 templ Layout(title string, c *fiber.Ctx) {
 	<!DOCTYPE html>
-	<html lang={ c.Locals("lang").(i18n.Language).String() }>
+	<html lang={ c.Locals("lang").(i18n.Language).String() } id="html-root" class="light" data-theme="light">
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -15,12 +15,20 @@ templ Layout(title string, c *fiber.Ctx) {
 				<meta name="csrf-token" content={ csrfToken }/>
 			}
 			<title>{ title }</title>
-			<link rel="icon" href="static/favicon.ico" type="image/x-icon"/>
+			<link rel="icon" href="/static/favicon.ico" type="image/x-icon"/>
 			<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ==" crossorigin="anonymous" referrerpolicy="no-referrer"/>
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<link rel="stylesheet" href="/static/css/tailwind.css"/>
+			<script>
+				// Theme initialization before DOM loads to prevent flash
+				(function() {
+					const theme = localStorage.getItem('theme') || 
+						(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+					document.documentElement.classList.toggle('dark', theme === 'dark');
+				})();
+			</script>
 			<style>
 				/* Custom styles following the style guide */
 				body {
@@ -34,6 +42,14 @@ templ Layout(title string, c *fiber.Ctx) {
 					--deep-teal: #028090;
 					--mint-green: #00A896;
 					--aqua-green: #02C39A;
+				}
+
+				/* Dark mode color adjustments */
+				:root.dark {
+					--ocean-blue: #0EA5E9;
+					--deep-teal: #06B6D4;
+					--mint-green: #10B981;
+					--aqua-green: #34D399;
 				}
 				
 				.text-ocean { color: var(--ocean-blue); }
@@ -73,9 +89,40 @@ templ Layout(title string, c *fiber.Ctx) {
 				.shadow-compact {
 					box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 				}
+
+				/* Theme toggle styles */
+				.theme-toggle {
+					position: relative;
+					display: inline-flex;
+					height: 1.5rem;
+					width: 2.75rem;
+					cursor: pointer;
+					border-radius: 9999px;
+					background-color: #D1D5DB;
+					transition: all 0.2s ease-in-out;
+				}
+
+				.theme-toggle.dark {
+					background-color: var(--ocean-blue);
+				}
+
+				.theme-toggle-dot {
+					display: inline-block;
+					height: 1.25rem;
+					width: 1.25rem;
+					border-radius: 9999px;
+					background-color: white;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+					transition: transform 0.2s ease-in-out;
+					transform: translateX(0.125rem);
+				}
+
+				.theme-toggle.dark .theme-toggle-dot {
+					transform: translateX(1.375rem);
+				}
 			</style>
 		</head>
-		<body>
+		<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
 			{ children... }
 		</body>
 	</html>

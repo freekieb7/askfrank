@@ -103,8 +103,8 @@ func run(ctx context.Context) error {
 	app.Get("/", middleware.Authenticated(sessionStore), pageHandler.ShowHomePage)
 	app.Get("/billing", middleware.Authenticated(sessionStore), pageHandler.ShowBillingPage)
 	app.Post("/billing/update", middleware.Authenticated(sessionStore), pageHandler.UpdateBilling)
-	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowFolder)
-	app.Get("/drive/folder/:folder_id", middleware.Authenticated(sessionStore), pageHandler.ShowFolder)
+	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowFilePage)
+	app.Get("/drive/files/:file_id", middleware.Authenticated(sessionStore), pageHandler.ShowFilePage)
 
 	app.Get("/login", pageHandler.ShowLoginPage)
 	app.Post("/login", pageHandler.Login)
@@ -116,11 +116,41 @@ func run(ctx context.Context) error {
 
 	app.Get("/api/health", apiHandler.Healthy)
 	app.All("/api/stripe/webhook", apiHandler.StripeWebhook)
-	app.Post("/api/folders", middleware.Authenticated(sessionStore), apiHandler.CreateFolder)
-	app.Post("/api/upload", middleware.Authenticated(sessionStore), apiHandler.UploadFiles)
-	app.Post("/api/download", middleware.Authenticated(sessionStore), apiHandler.DownloadFile)
-	app.Post("/api/delete", middleware.Authenticated(sessionStore), apiHandler.DeleteFile)
-	app.Post("/api/delete-folder", middleware.Authenticated(sessionStore), apiHandler.DeleteFolder)
+
+	app.Get("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.ListFiles)        // List files and folders (supports search query filter).
+	app.Get("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.GetFile) // Get metadata for a specific file.
+	app.Post("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.CreateFile)      // Create a folder.
+	// app.Patch("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.UpdateFile) // Update metadata.
+	app.Delete("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.DeleteFile)         // Permanently delete a file.
+	app.Get("/api/drive/v1/files/:file_id/download", middleware.Authenticated(sessionStore), apiHandler.DownloadFile) // Download a file.
+	app.Post("/api/drive/v1/upload", middleware.Authenticated(sessionStore), apiHandler.UploadFile)                   // Upload a file.
+
+	// GET /drive/v3/files/{fileId}/permissions — List permissions for a file.
+	// POST /drive/v3/files/{fileId}/permissions — Add sharing permissions.
+	// DELETE /drive/v3/files/{fileId}/permissions/{permissionId} — Remove permission.
+
+	// GET /drive/v3/files/{fileId}/comments — List comments.
+	// POST /drive/v3/files/{fileId}/comments — Add new comment.
+	// PATCH /drive/v3/files/{fileId}/comments/{commentId} — Update comment.
+	// DELETE /drive/v3/files/{fileId}/comments/{commentId} — Delete comment.
+
+	// Nested under comments:
+	// GET /drive/v3/files/{fileId}/comments/{commentId}/replies — List replies.
+	// POST /…/replies — Create reply.
+	// PATCH / DELETE for reply operations.
+
+	// GET /drive/v3/changes/startPageToken — Obtain token for listing incremental changes.
+	// GET /drive/v3/changes — List changes since token.
+	// POST /drive/v3/changes/watch — Subscribe to drive changes via push notifications.
+
+	// For Shared Drives:
+	// GET /drive/v3/drives — List drives.
+	// GET /drive/v3/drives/{driveId} — Get metadata for a shared drive.
+	// POST /drives — Create new shared drive.
+	// PATCH, DELETE, hide, unhide actions supported.
+
+	// GET /drive/v3/apps — List installed Drive apps for the user.
+	// GET /drive/v3/apps/{appId} — Retrieve metadata for a Drive app.
 
 	// Start the server
 	go func() {
