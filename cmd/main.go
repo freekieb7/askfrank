@@ -7,6 +7,7 @@ import (
 	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/middleware"
+	"hp/internal/openfga"
 	"hp/internal/web"
 	"log/slog"
 	"os"
@@ -35,6 +36,12 @@ func run(ctx context.Context) error {
 		Level: slog.LevelInfo,
 	}))
 
+	fgaClient, err := openfga.NewClient(cfg.OpenFGA)
+	if err != nil {
+		logger.Error("Failed to create OpenFGA client", "error", err)
+		return err
+	}
+
 	translator := i18n.NewTranslator(i18n.NL)
 	if err := translator.LoadTranslations(); err != nil {
 		logger.Error("Failed to load translations", "error", err)
@@ -61,7 +68,7 @@ func run(ctx context.Context) error {
 		WriteTimeout: cfg.Server.WriteTimeout,
 	})
 
-	pageHandler := web.NewPageHandler(logger, translator, sessionStore, db)
+	pageHandler := web.NewPageHandler(logger, translator, sessionStore, db, fgaClient)
 	apiHandler := api.NewApiHandler(db)
 
 	// Middleware
@@ -103,8 +110,10 @@ func run(ctx context.Context) error {
 	app.Get("/", middleware.Authenticated(sessionStore), pageHandler.ShowHomePage)
 	app.Get("/billing", middleware.Authenticated(sessionStore), pageHandler.ShowBillingPage)
 	app.Post("/billing/update", middleware.Authenticated(sessionStore), pageHandler.UpdateBilling)
-	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowFilePage)
-	app.Get("/drive/files/:file_id", middleware.Authenticated(sessionStore), pageHandler.ShowFilePage)
+	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowMyDrivePage)
+	app.Get("/drive/shared", middleware.Authenticated(sessionStore), pageHandler.ShowSharedFilePage)
+	app.Get("/drive/recent", middleware.Authenticated(sessionStore), pageHandler.ShowRecentFilePage)
+	app.Get("/drive/folder/:folder_id", middleware.Authenticated(sessionStore), pageHandler.ShowFolderPage)
 
 	app.Get("/login", pageHandler.ShowLoginPage)
 	app.Post("/login", pageHandler.Login)
@@ -117,9 +126,10 @@ func run(ctx context.Context) error {
 	app.Get("/api/health", apiHandler.Healthy)
 	app.All("/api/stripe/webhook", apiHandler.StripeWebhook)
 
-	app.Get("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.ListFiles)        // List files and folders (supports search query filter).
-	app.Get("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.GetFile) // Get metadata for a specific file.
-	app.Post("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.CreateFile)      // Create a folder.
+	app.Get("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.ListFiles)                 // List files and folders (supports search query filter).
+	app.Get("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.GetFile)          // Get metadata for a specific file.
+	app.Post("/api/drive/v1/files/:file_id/share", middleware.Authenticated(sessionStore), apiHandler.ShareFile) // Share a file with another user.
+	app.Post("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.CreateFile)               // Create a folder.
 	// app.Patch("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.UpdateFile) // Update metadata.
 	app.Delete("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.DeleteFile)         // Permanently delete a file.
 	app.Get("/api/drive/v1/files/:file_id/download", middleware.Authenticated(sessionStore), apiHandler.DownloadFile) // Download a file.
@@ -163,7 +173,7 @@ func run(ctx context.Context) error {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM) // When an interrupt or termination signal is sent, notify the channel
 
 	<-c // This blocks the main thread until an interrupt is received
-	err := app.Shutdown()
+	err = app.Shutdown()
 	if err != nil {
 		slog.Error("Error shutting down", "error", err)
 	}

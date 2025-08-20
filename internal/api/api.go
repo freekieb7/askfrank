@@ -84,21 +84,9 @@ func (h *ApiHandler) StripeWebhook(c *fiber.Ctx) error {
 func (h *ApiHandler) ListFiles(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	folderIDStr := c.FormValue("folder_id")
+	var params database.GetFilesParams
 
-	var options database.SearchFilesOptions
-	if folderIDStr != "" {
-		folderID, err := uuid.Parse(folderIDStr)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status": "error",
-				"error":  "Invalid folder ID",
-			})
-		}
-		options.InFolder = uuid.NullUUID{UUID: folderID, Valid: true}
-	}
-
-	files, err := h.db.SearchFiles(c.Context(), userID, options)
+	files, err := h.db.GetFiles(c.Context(), params)
 	if err != nil {
 		slog.Error("Failed to list files", "error", err, "user_id", userID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -143,20 +131,26 @@ func (h *ApiHandler) CreateFile(c *fiber.Ctx) error {
 		})
 	}
 
-	file := database.File{
-		ID:        uuid.New(),
+	params := database.CreateFileParams{
 		OwnerID:   userID,
-		Name:      requestBody.Name,
-		MimeType:  requestBody.MimeType, // Assuming folder type
-		S3Key:     "",                   // S3 key is not applicable for folders
 		ParentID:  requestBody.Parent,
-		SizeBytes: 0,    // Folders don't have a size
-		IsFolder:  true, // Set IsFolder to true for folder creation
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Name:      requestBody.Name,
+		MimeType:  requestBody.MimeType,
+		S3Key:     "",
+		SizeBytes: 0,
 	}
 
-	if err := h.db.CreateFile(c.Context(), file); err != nil {
+	// For now we only support creating folder through this endpoint
+	// In the future, files should also be supported
+	// if !file.IsFolder() {
+	// 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+	// 		"status": "error",
+	// 		"error":  "Invalid mime type for folder",
+	// 	})
+	// }
+
+	file, err := h.db.CreateFile(c.Context(), params)
+	if err != nil {
 		slog.Error("Failed to create file", "error", err, "user_id", userID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status": "error",
@@ -177,7 +171,7 @@ func (h *ApiHandler) CreateFile(c *fiber.Ctx) error {
 }
 
 func (h *ApiHandler) GetFile(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	// userID := c.Locals("user_id").(uuid.UUID)
 
 	fileID := c.Params("file_id")
 	if fileID == "" {
@@ -187,7 +181,9 @@ func (h *ApiHandler) GetFile(c *fiber.Ctx) error {
 		})
 	}
 
-	file, err := h.db.GetFileByID(c.Context(), userID, uuid.MustParse(fileID))
+	// todo check permissions
+
+	file, err := h.db.GetFileByID(c.Context(), uuid.MustParse(fileID), database.GetFileByIDParams{})
 	if err != nil {
 		slog.Error("Failed to get file", "error", err, "file_id", fileID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -209,7 +205,7 @@ func (h *ApiHandler) GetFile(c *fiber.Ctx) error {
 }
 
 func (h *ApiHandler) DeleteFile(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	// userID := c.Locals("user_id").(uuid.UUID)
 
 	fileID := c.Params("file_id")
 	if fileID == "" {
@@ -219,7 +215,9 @@ func (h *ApiHandler) DeleteFile(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.db.DeleteFile(c.Context(), userID, uuid.MustParse(fileID)); err != nil {
+	// todo check permission
+
+	if err := h.db.DeleteFile(c.Context(), uuid.MustParse(fileID), database.DeleteFileParams{}); err != nil {
 		slog.Error("Failed to delete file", "error", err, "file_id", fileID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status": "error",
@@ -298,19 +296,16 @@ func (h *ApiHandler) UploadFile(c *fiber.Ctx) error {
 		}
 
 		// Create file record in database
-		fileRecord := database.File{
-			ID:        uuid.New(),
-			OwnerID:   userID,
-			ParentID:  folderID, // Use the provided folder ID
-			Name:      fileHeader.Filename,
-			MimeType:  mimeType,
-			S3Key:     filePath, // Store local path for now
-			SizeBytes: fileHeader.Size,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		var params database.CreateFileParams
+		params.OwnerID = userID
+		params.ParentID = folderID
+		params.Name = fileHeader.Filename
+		params.MimeType = mimeType
+		params.S3Key = filePath
+		params.SizeBytes = fileHeader.Size
 
-		if err := h.db.CreateFile(c.Context(), fileRecord); err != nil {
+		file, err := h.db.CreateFile(c.Context(), params)
+		if err != nil {
 			slog.Error("Failed to create file record", "error", err, "filename", fileHeader.Filename)
 			// Try to delete the saved file
 			os.Remove(filePath)
@@ -318,10 +313,10 @@ func (h *ApiHandler) UploadFile(c *fiber.Ctx) error {
 		}
 
 		uploadedFiles = append(uploadedFiles, fiber.Map{
-			"id":       fileRecord.ID,
-			"name":     fileRecord.Name,
-			"size":     fileRecord.SizeBytes,
-			"mimeType": fileRecord.MimeType,
+			"id":       file.ID,
+			"name":     file.Name,
+			"size":     file.SizeBytes,
+			"mimeType": file.MimeType,
 		})
 	}
 
@@ -339,16 +334,9 @@ func (h *ApiHandler) UploadFile(c *fiber.Ctx) error {
 }
 
 func (h *ApiHandler) DownloadFile(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	// userID := c.Locals("user_id").(uuid.UUID)
 
-	fileIDStr := c.Query("file_id")
-	if fileIDStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": "error",
-			"error":  "File ID is required",
-		})
-	}
-
+	fileIDStr := c.Params("file_id")
 	fileID, err := uuid.Parse(fileIDStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -357,7 +345,9 @@ func (h *ApiHandler) DownloadFile(c *fiber.Ctx) error {
 		})
 	}
 
-	file, err := h.db.GetFileByID(c.Context(), userID, fileID)
+	// todo check file access
+
+	file, err := h.db.GetFileByID(c.Context(), fileID, database.GetFileByIDParams{})
 	if err != nil {
 		if err == database.ErrFileNotFound {
 			slog.Error("File not found", "file_id", fileID)
@@ -385,4 +375,81 @@ func (h *ApiHandler) DownloadFile(c *fiber.Ctx) error {
 	c.Set("Content-Type", file.MimeType)
 
 	return c.SendFile(file.S3Key, false)
+}
+
+type ShareFileRequest struct {
+	Email string `json:"email"`
+}
+
+func (h *ApiHandler) ShareFile(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uuid.UUID)
+	// Get file ID from URL parameter
+	fileIDStr := c.Params("file_id")
+	fileID, err := uuid.Parse(fileIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Invalid file ID",
+		})
+	}
+
+	var req ShareFileRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Invalid request",
+		})
+	}
+
+	// Check if the file exists
+	file, err := h.db.GetFileByID(c.Context(), fileID, database.GetFileByIDParams{})
+	if err != nil {
+		if err == database.ErrFileNotFound {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"status": "error",
+				"error":  "File not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Failed to retrieve file",
+		})
+	}
+
+	var retrieveUserParams database.RetrieveUserParams
+	retrieveUserParams.Email = req.Email
+
+	targetUser, err := h.db.RetrieveUser(c.Context(), retrieveUserParams)
+	if err != nil {
+		if err == database.ErrUserNotFound {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"status": "error",
+				"error":  "User not found",
+			})
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Failed to retrieve user",
+		})
+	}
+
+	// Create a shared file record
+	var createSharedFileParams database.CreateSharedFileParams
+	createSharedFileParams.FileID = file.ID
+	createSharedFileParams.SharingUserID = userID
+	createSharedFileParams.ReceivingUserID = targetUser.ID
+	createSharedFileParams.GrantedAt = time.Now()
+
+	if err := h.db.CreateSharedFile(c.Context(), createSharedFileParams); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Failed to share file",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "File shared successfully",
+	})
 }

@@ -23,7 +23,7 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 						</div>
 					</div>
 					<!-- Navigation -->
-					<nav class="flex-1 pb-3 space-y-0.5">
+					<nav class="flex-1 pb-3 space-y-1">
 						<a href="/" class="sidebar-link active">
 							<i class="fas fa-home w-4 h-4 mr-2.5"></i>
 							Dashboard
@@ -40,14 +40,173 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 							<i class="fas fa-file-medical w-4 h-4 mr-2.5"></i>
 							Records
 						</a>
-						<a href="/drive" class="sidebar-link">
-							<i class="fas fa-cloud w-4 h-4 mr-2.5"></i>
-							Drive
+						<!-- Drive Dropdown -->
+						<details class="sidebar-dropdown group">
+							<summary class="sidebar-link cursor-pointer flex items-center justify-between w-full">
+								<div class="flex items-center">
+									<i class="fas fa-cloud w-4 h-4 mr-2.5"></i>
+									<span>Drive</span>
+								</div>
+								<svg class="w-4 h-4 transform group-open:rotate-90 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+								</svg>
+							</summary>
+							<nav class="pl-8 mt-1 space-y-1">
+								<a href="/drive" class="sidebar-link submenu-link">
+									<i class="fas fa-folder w-4 h-4 mr-2.5"></i>
+									My Files
+								</a>
+								<a href="/drive/shared" class="sidebar-link submenu-link">
+									<i class="fas fa-share-alt w-4 h-4 mr-2.5"></i>
+									Shared Files
+								</a>
+								<a href="/drive/recent" class="sidebar-link submenu-link">
+									<i class="fas fa-clock w-4 h-4 mr-2.5"></i>
+									Recent
+								</a>
+							</nav>
+						</details>
+						<!-- Analytics Dropdown -->
+						<details class="sidebar-dropdown group">
+							<summary class="sidebar-link cursor-pointer flex items-center justify-between w-full">
+								<div class="flex items-center">
+									<i class="fas fa-chart-line w-4 h-4 mr-2.5"></i>
+									<span>Analytics</span>
+								</div>
+								<svg class="w-4 h-4 transform group-open:rotate-90 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+								</svg>
+							</summary>
+							<nav class="pl-8 mt-1 space-y-1">
+								<a href="/analytics" class="sidebar-link submenu-link">
+									<i class="fas fa-chart-bar w-4 h-4 mr-2.5"></i>
+									Overview
+								</a>
+								<a href="/analytics/patients" class="sidebar-link submenu-link">
+									<i class="fas fa-user-chart w-4 h-4 mr-2.5"></i>
+									Patient Analytics
+								</a>
+								<a href="/analytics/revenue" class="sidebar-link submenu-link">
+									<i class="fas fa-dollar-sign w-4 h-4 mr-2.5"></i>
+									Revenue
+								</a>
+							</nav>
+						</details>
+						<a href="/reports" class="sidebar-link">
+							<i class="fas fa-file-alt w-4 h-4 mr-2.5"></i>
+							Reports
 						</a>
-						<a href="/analytics" class="sidebar-link">
-							<i class="fas fa-chart-line w-4 h-4 mr-2.5"></i>
-							Analytics
+						<div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4">
+							<a href="/settings" class="sidebar-link">
+								<i class="fas fa-cog w-4 h-4 mr-2.5"></i>
+								Settings
+							</a>
+							<a href="/help" class="sidebar-link">
+								<i class="fas fa-question-circle w-4 h-4 mr-2.5"></i>
+								Help
+							</a>
+							<!-- Theme Toggle -->
+							<div class="px-3 py-2 mt-2">
+								<div class="flex items-center justify-between">
+									<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</span>
+									<button type="button" class="theme-toggle" onclick="toggleTheme()">
+										<span class="theme-toggle-dot"></span>
+									</button>
+								</div>
+							</div>
+						</div>
+					</nav>
+				</div>
+			</div>
+			<!-- Mobile sidebar overlay -->
+			<div class="lg:hidden fixed inset-0 z-50 hidden" id="mobile-sidebar-overlay">
+				<!-- Overlay background -->
+				<div class="fixed inset-0 bg-gray-600 bg-opacity-75"></div>
+				<!-- Mobile sidebar -->
+				<div class="relative flex flex-col w-full max-w-xs bg-white dark:bg-gray-800 shadow-xl">
+					<!-- Mobile sidebar header -->
+					<div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+						<div class="flex items-center">
+							<i class="fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua"></i>
+							<div>
+								<h1 class="text-lg font-bold text-ocean dark:text-aqua">AskFrank</h1>
+								<p class="text-xs text-gray-500 dark:text-gray-400">Healthcare</p>
+							</div>
+						</div>
+						<button type="button" class="p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" id="close-sidebar">
+							<i class="fas fa-times w-5 h-5"></i>
+						</button>
+					</div>
+					<!-- Mobile navigation -->
+					<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+						<a href="/" class="sidebar-link active">
+							<i class="fas fa-home w-4 h-4 mr-2.5"></i>
+							Dashboard
 						</a>
+						<a href="/patients" class="sidebar-link">
+							<i class="fas fa-users w-4 h-4 mr-2.5"></i>
+							Patients
+						</a>
+						<a href="/appointments" class="sidebar-link">
+							<i class="fas fa-calendar-alt w-4 h-4 mr-2.5"></i>
+							Appointments
+						</a>
+						<a href="/records" class="sidebar-link">
+							<i class="fas fa-file-medical w-4 h-4 mr-2.5"></i>
+							Records
+						</a>
+						<!-- Mobile Drive Dropdown -->
+						<details class="sidebar-dropdown group">
+							<summary class="sidebar-link cursor-pointer flex items-center justify-between w-full">
+								<div class="flex items-center">
+									<i class="fas fa-cloud w-4 h-4 mr-2.5"></i>
+									<span>Drive</span>
+								</div>
+								<svg class="w-4 h-4 transform group-open:rotate-90 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+								</svg>
+							</summary>
+							<nav class="pl-8 mt-1 space-y-1">
+								<a href="/drive" class="sidebar-link submenu-link">
+									<i class="fas fa-folder w-4 h-4 mr-2.5"></i>
+									My Files
+								</a>
+								<a href="/drive/shared" class="sidebar-link submenu-link">
+									<i class="fas fa-share-alt w-4 h-4 mr-2.5"></i>
+									Shared Files
+								</a>
+								<a href="/drive/recent" class="sidebar-link submenu-link">
+									<i class="fas fa-clock w-4 h-4 mr-2.5"></i>
+									Recent
+								</a>
+							</nav>
+						</details>
+						<!-- Mobile Analytics Dropdown -->
+						<details class="sidebar-dropdown group">
+							<summary class="sidebar-link cursor-pointer flex items-center justify-between w-full">
+								<div class="flex items-center">
+									<i class="fas fa-chart-line w-4 h-4 mr-2.5"></i>
+									<span>Analytics</span>
+								</div>
+								<svg class="w-4 h-4 transform group-open:rotate-90 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+								</svg>
+							</summary>
+							<nav class="pl-8 mt-1 space-y-1">
+								<a href="/analytics" class="sidebar-link submenu-link">
+									<i class="fas fa-chart-bar w-4 h-4 mr-2.5"></i>
+									Overview
+								</a>
+								<a href="/analytics/patients" class="sidebar-link submenu-link">
+									<i class="fas fa-user-chart w-4 h-4 mr-2.5"></i>
+									Patient Analytics
+								</a>
+								<a href="/analytics/revenue" class="sidebar-link submenu-link">
+									<i class="fas fa-dollar-sign w-4 h-4 mr-2.5"></i>
+									Revenue
+								</a>
+							</nav>
+						</details>
 						<a href="/reports" class="sidebar-link">
 							<i class="fas fa-file-alt w-4 h-4 mr-2.5"></i>
 							Reports
@@ -125,13 +284,10 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 									Settings
 								</a>
 								<div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-								<form method="POST" action="/logout">
-									<input type="hidden" name="csrf_token" value={ c.Locals("csrf_token").(string) }/>
-									<button type="submit" class="block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1">
-										<i class="fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500"></i>
-										Sign out
-									</button>
-								</form>
+								<button type="button" id="logout-button" class="block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1">
+									<i class="fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500"></i>
+									Sign out
+								</button>
 							</div>
 						</div>
 					</div>
@@ -142,75 +298,64 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 				</main>
 			</div>
 		</div>
-		<!-- Mobile sidebar overlay -->
-		<div class="lg:hidden hidden fixed inset-0 z-50" id="mobile-sidebar-overlay">
-			<div class="fixed inset-0 bg-gray-600 bg-opacity-75"></div>
-			<div class="relative flex w-full max-w-xs flex-col bg-white dark:bg-gray-800 pb-3 shadow-xl">
-				<div class="absolute top-0 right-0 -mr-12 pt-2">
-					<button type="button" class="ml-1 flex h-8 w-8 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white" id="close-sidebar">
-						<i class="fas fa-times text-white w-4 h-4"></i>
-					</button>
-				</div>
-				<!-- Mobile navigation content same as desktop but in overlay -->
-				<div class="flex flex-col flex-grow pt-4 bg-white dark:bg-gray-800 overflow-y-auto">
-					<div class="flex items-center flex-shrink-0 px-3 pb-4">
-						<div class="flex items-center">
-							<i class="fas fa-heartbeat text-2xl mr-2.5 text-ocean dark:text-aqua"></i>
-							<div>
-								<h1 class="text-lg font-bold text-ocean dark:text-aqua">AskFrank</h1>
-								<p class="text-xs text-gray-500 dark:text-gray-400">Healthcare</p>
-							</div>
-						</div>
-					</div>
-					<nav class="flex-1 pb-3 space-y-0.5 px-2">
-						<a href="/" class="sidebar-link active">
-							<i class="fas fa-home w-4 h-4 mr-2.5"></i>
-							Dashboard
-						</a>
-						<a href="/patients" class="sidebar-link">
-							<i class="fas fa-users w-4 h-4 mr-2.5"></i>
-							Patients
-						</a>
-						<a href="/appointments" class="sidebar-link">
-							<i class="fas fa-calendar-alt w-4 h-4 mr-2.5"></i>
-							Appointments
-						</a>
-						<a href="/records" class="sidebar-link">
-							<i class="fas fa-file-medical w-4 h-4 mr-2.5"></i>
-							Records
-						</a>
-						<a href="/analytics" class="sidebar-link">
-							<i class="fas fa-chart-line w-4 h-4 mr-2.5"></i>
-							Analytics
-						</a>
-						<a href="/reports" class="sidebar-link">
-							<i class="fas fa-file-alt w-4 h-4 mr-2.5"></i>
-							Reports
-						</a>
-						<div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4">
-							<a href="/settings" class="sidebar-link">
-								<i class="fas fa-cog w-4 h-4 mr-2.5"></i>
-								Settings
-							</a>
-							<a href="/help" class="sidebar-link">
-								<i class="fas fa-question-circle w-4 h-4 mr-2.5"></i>
-								Help
-							</a>
-							<!-- Theme Toggle -->
-							<div class="px-3 py-2 mt-2">
-								<div class="flex items-center justify-between">
-									<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</span>
-									<button type="button" class="theme-toggle" onclick="toggleTheme()">
-										<span class="theme-toggle-dot"></span>
-									</button>
-								</div>
-							</div>
-						</div>
-					</nav>
-				</div>
-			</div>
-		</div>
 		<script>
+			// Set active menu item based on current URL
+			function setActiveMenuItem() {
+				const currentPath = window.location.pathname;
+				const menuLinks = document.querySelectorAll('.sidebar-link');
+				
+				// Remove active class from all links
+				menuLinks.forEach(link => {
+					link.classList.remove('active');
+				});
+				
+				// Handle drive submenu items
+				if (currentPath.startsWith('/drive')) {
+					// Open the drive details elements
+					const driveDetails = document.querySelectorAll('details.sidebar-dropdown');
+					driveDetails.forEach(detail => {
+						const summary = detail.querySelector('summary');
+						if (summary && summary.textContent.includes('Drive')) {
+							detail.open = true;
+						}
+					});
+					
+					// Set active submenu item
+					if (currentPath === '/drive/shared') {
+						document.querySelectorAll('a[href="/drive/shared"]').forEach(link => {
+							link.classList.add('active');
+						});
+					} else if (currentPath === '/drive/recent') {
+						document.querySelectorAll('a[href="/drive/recent"]').forEach(link => {
+							link.classList.add('active');
+						});
+					} else {
+						document.querySelectorAll('a[href="/drive"]').forEach(link => {
+							link.classList.add('active');
+						});
+					}
+				} else if (currentPath.startsWith('/analytics')) {
+					// Open the analytics details elements
+					const analyticsDetails = document.querySelectorAll('details.sidebar-dropdown');
+					analyticsDetails.forEach(detail => {
+						const summary = detail.querySelector('summary');
+						if (summary && summary.textContent.includes('Analytics')) {
+							detail.open = true;
+						}
+					});
+					
+					// Set active submenu item based on specific path
+					document.querySelectorAll(`a[href="${currentPath}"]`).forEach(link => {
+						link.classList.add('active');
+					});
+				} else {
+					// For other menu items, just match the exact path
+					document.querySelectorAll(`a[href="${currentPath}"]`).forEach(link => {
+						link.classList.add('active');
+					});
+				}
+			}
+
 			// Theme management
 			function toggleTheme() {
 				const html = document.documentElement;
@@ -249,6 +394,36 @@ templ AppLayout(title string, c *fiber.Ctx, t translate.Translate) {
 			// Initialize theme toggle appearance when DOM is loaded
 			document.addEventListener('DOMContentLoaded', function() {
 				updateThemeToggle();
+				setActiveMenuItem();
+
+				const logoutButton = document.getElementById('logout-button');
+
+				if (logoutButton) {
+					logoutButton.addEventListener('click', async function() {
+						const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+
+						const response = await fetch('/logout', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'X-Csrf-Token': csrfToken
+							}
+						});
+
+						if (response.ok) {
+							const json = await response.json();
+
+							if (json.redirect) {
+								setTimeout(() => {
+									window.location.href = json.redirect;
+								}, 1000); // Redirect after 1 second
+							}
+						} else {
+							const result = await response.json();
+							alert(result.error || 'Logout failed');
+						}
+					});
+				}
 			});
 
 			// Also update immediately if called after DOM is ready

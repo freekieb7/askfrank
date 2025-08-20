@@ -20,11 +20,13 @@ type Breadcrumb struct {
 }
 
 type File struct {
-	ID       string
-	Name     string
-	Size     int64
-	MimeType string
-	IsFolder bool
+	ID          string
+	Name        string
+	Size        int64
+	MimeType    string
+	IsFolder    bool
+	IsViewable  bool
+	DownloadURL string
 }
 
 func getFileIcon(mimeType string, isFolder bool) string {
@@ -49,7 +51,7 @@ func getFileIcon(mimeType string, isFolder bool) string {
 		return "fas fa-file-powerpoint text-orange-500"
 	case strings.HasPrefix(mimeType, "text/"):
 		return "fas fa-file-alt text-gray-500"
-	case mimeType == "application/vnd.google-apps.folder":
+	case mimeType == "application/askfrank.folder":
 		return "fas fa-folder text-blue-500"
 	default:
 		return "fas fa-file text-gray-500"
@@ -69,7 +71,7 @@ func formatFileSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-func DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs []Breadcrumb, currentFolderID string) templ.Component {
+func DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs []Breadcrumb, currentFileID string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -102,14 +104,14 @@ func DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs []
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"main-content\" data-current-folder-id=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"main-content\" data-current-file-id=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var3 string
-			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(currentFolderID)
+			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(currentFileID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 66, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 68, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -124,371 +126,169 @@ func DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs []
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				for i, breadcrumb := range breadcrumbs {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<li class=\"inline-flex items-center\">")
+				for _, breadcrumb := range breadcrumbs {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<li class=\"inline-flex items-center\"><i class=\"fas fa-chevron-right text-gray-400 mx-2\"></i> <a href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					if i > 0 {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<i class=\"fas fa-chevron-right text-gray-400 mx-2\"></i> ")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
+					var templ_7745c5c3_Var4 templ.SafeURL
+					templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(breadcrumb.URL))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 82, Col: 45}
 					}
-					if i == len(breadcrumbs)-1 {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<span class=\"text-gray-500 dark:text-gray-400\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var4 string
-						templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(breadcrumb.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 83, Col: 75}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</span>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<a href=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var5 templ.SafeURL
-						templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(breadcrumb.URL))
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 85, Col: 46}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\" class=\"text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var6 string
-						templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(breadcrumb.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 86, Col: 29}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</a>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</li>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var5 string
+					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(breadcrumb.Name)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 83, Col: 28}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</a></li>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</ol></nav></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</ol></nav></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<!-- Toolbar --><div class=\"mb-6 flex justify-between items-center\"><div class=\"flex space-x-3\"><button id=\"new-folder-button\" class=\"px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors\"><i class=\"fas fa-plus mr-2\"></i>New Folder</button><div class=\"relative\"><input type=\"file\" id=\"file-upload\" multiple class=\"hidden\" accept=\"*/*\"> <button id=\"upload-button\" class=\"px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\"><i class=\"fas fa-upload mr-2\"></i>Upload</button></div></div><div class=\"flex space-x-3\"><div class=\"relative\"><input type=\"text\" placeholder=\"Search files and folders...\" class=\"pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent\"> <i class=\"fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400\"></i></div><button id=\"grid-view-btn\" class=\"p-2 border border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors\" title=\"Grid view\"><i class=\"fas fa-th\"></i></button> <button id=\"list-view-btn\" class=\"p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\" title=\"List view\"><i class=\"fas fa-list\"></i></button></div></div><!-- Drive Content --><div class=\"bg-white dark:bg-gray-800 rounded-lg shadow\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<!-- Toolbar --><div class=\"mb-6 flex justify-between items-center\"><div class=\"flex space-x-3\"><button id=\"new-folder-button\" class=\"px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors\"><i class=\"fas fa-plus mr-2\"></i>New Folder</button><div class=\"relative\"><input type=\"file\" id=\"file-upload\" multiple class=\"hidden\" accept=\"*/*\"> <button id=\"upload-button\" class=\"px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\"><i class=\"fas fa-upload mr-2\"></i>Upload</button></div></div><div class=\"flex space-x-3\"><!-- Search Bar (hidden for now) --><div class=\"relative\" hidden><input type=\"text\" placeholder=\"Search files and folders...\" class=\"pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent\"> <i class=\"fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400\"></i></div></div></div><!-- Drive Content --><div class=\"bg-white dark:bg-gray-800 rounded-lg shadow\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(files) == 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"p-12 text-center\"><i class=\"fas fa-folder-open text-6xl text-gray-300 dark:text-gray-600 mb-4\"></i><h3 class=\"text-lg font-medium text-gray-900 dark:text-white mb-2\">No files or folders yet</h3><p class=\"text-gray-600 dark:text-gray-400\">Upload files or create folders to get started</p></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"p-12 text-center\"><i class=\"fas fa-folder-open text-6xl text-gray-300 dark:text-gray-600 mb-4\"></i><h3 class=\"text-lg font-medium text-gray-900 dark:text-white mb-2\">No files or folders yet</h3><p class=\"text-gray-600 dark:text-gray-400\">Upload files or create folders to get started</p></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<!-- Drive Content Grid --> <div id=\"drive-grid\" class=\"p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3\"><!-- Files and Folders -->")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<!-- Drive Content List --> <div id=\"drive-list\"><div class=\"px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900\"><div class=\"grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\"><div class=\"col-span-6\">Name</div><div class=\"col-span-2 hidden sm:block\">Owner</div><div class=\"col-span-2 hidden md:block\">Last modified</div><div class=\"col-span-1 hidden lg:block\">Size</div><div class=\"col-span-1\"></div></div></div><div class=\"divide-y divide-gray-200 dark:divide-gray-700\"><!-- Files and Folders -->")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				for _, file := range files {
-					if file.IsFolder {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"folder-item group cursor-pointer\" data-folder-id=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var7 string
-						templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(file.ID)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 139, Col: 79}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" title=\"Double-click to open folder\"><div class=\"p-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-2 border-transparent hover:border-blue-200 dark:hover:border-blue-700\"><div class=\"flex flex-col items-center text-center\"><div class=\"relative mb-2\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var8 = []any{getFileIcon(file.MimeType, file.IsFolder) + " text-3xl"}
-						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var8...)
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<i class=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var9 string
-						templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var8).String())
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 1, Col: 0}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\"></i><div class=\"absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity\"><div class=\"flex space-x-1\"><button class=\"delete-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600\" title=\"Delete Folder\"><i class=\"fas fa-trash text-xs\"></i></button></div></div></div><span class=\"text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1\" title=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var10 string
-						templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(file.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 152, Col: 114}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var11 string
-						templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(file.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 153, Col: 24}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</span> <span class=\"text-xs text-blue-600 dark:text-blue-400 mt-1\">Folder</span></div></div></div>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<div class=\"file-item group cursor-pointer\" data-file-id=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var12 string
-						templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(file.ID)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 162, Col: 75}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\" title=\"Double-click to open file\"><div class=\"p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-600\"><div class=\"flex flex-col items-center text-center\"><div class=\"relative mb-2\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var13 = []any{getFileIcon(file.MimeType, file.IsFolder) + " text-3xl"}
-						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var13...)
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<i class=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var14 string
-						templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var13).String())
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 1, Col: 0}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\"></i><div class=\"absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity\"><div class=\"flex space-x-1\"><button class=\"download-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-blue-500 border border-gray-200 dark:border-gray-600\" title=\"Download\"><i class=\"fas fa-download text-xs\"></i></button> <button class=\"delete-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600\" title=\"Delete\"><i class=\"fas fa-trash text-xs\"></i></button></div></div></div><span class=\"text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1\" title=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var15 string
-						templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(file.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 178, Col: 114}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var16 string
-						templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(file.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 179, Col: 24}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</span> <span class=\"text-xs text-gray-500 dark:text-gray-400 mt-1\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var17 string
-						templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(formatFileSize(file.Size))
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 182, Col: 40}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span></div></div></div>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"file-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer\" data-file-id=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var6 string
+					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(file.ID)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 139, Col: 133}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" data-is-folder=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var7 string
+					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(file.IsFolder)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 139, Col: 166}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" data-is-viewable=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var8 string
+					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(file.IsViewable)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 139, Col: 203}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\" data-download-url=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var9 string
+					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(file.DownloadURL)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 139, Col: 242}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" title=\"Double-click to open file\"><div class=\"px-6 py-3 grid grid-cols-12 gap-4 items-center\"><div class=\"col-span-6 sm:col-span-6 flex items-center min-w-0\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var10 = []any{getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0"}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var10...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<i class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var11 string
+					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var10).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\"></i> <span class=\"font-medium text-gray-900 dark:text-white truncate\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var12 string
+					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(file.Name)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 143, Col: 88}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</span></div><div class=\"col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block\">Me</div><div class=\"col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block\">—</div><div class=\"col-span-1 text-sm text-gray-500 dark:text-gray-400 hidden lg:block\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var13 string
+					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(formatFileSize(file.Size))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 152, Col: 39}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div><div class=\"col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity\"><button class=\"share-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors\" title=\"Share\"><i class=\"fas fa-share text-sm\"></i></button> <button class=\"download-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors\" title=\"Download\"><i class=\"fas fa-download text-sm\"></i></button> <button class=\"delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors\" title=\"Delete\"><i class=\"fas fa-trash text-sm\"></i></button></div></div></div>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div><!-- Drive Content List --> <div id=\"drive-list\" class=\"hidden\"><div class=\"px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900\"><div class=\"grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\"><div class=\"col-span-6\">Name</div><div class=\"col-span-2 hidden sm:block\">Owner</div><div class=\"col-span-2 hidden md:block\">Last modified</div><div class=\"col-span-1 hidden lg:block\">Size</div><div class=\"col-span-1\"></div></div></div><div class=\"divide-y divide-gray-200 dark:divide-gray-700\"><!-- Files and Folders -->")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				for _, file := range files {
-					if file.IsFolder {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div class=\"folder-item group hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors cursor-pointer\" data-folder-id=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var18 string
-						templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(file.ID)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 205, Col: 141}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\" title=\"Double-click to open folder\"><div class=\"px-6 py-3 grid grid-cols-12 gap-4 items-center\"><div class=\"col-span-6 sm:col-span-6 flex items-center min-w-0\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var19 = []any{getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0"}
-						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var19...)
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<i class=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var20 string
-						templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var19).String())
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 1, Col: 0}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\"></i> <span class=\"font-medium text-gray-900 dark:text-white truncate\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var21 string
-						templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(file.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 209, Col: 89}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</span></div><div class=\"col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block\">Me</div><div class=\"col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block\">—</div><div class=\"col-span-1 text-sm text-blue-600 dark:text-blue-400 hidden lg:block\">Folder</div><div class=\"col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity\"><button class=\"delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors\" title=\"Delete Folder\"><i class=\"fas fa-trash text-sm\"></i></button></div></div></div>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<div class=\"file-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer\" data-file-id=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var22 string
-						templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(file.ID)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 228, Col: 134}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" title=\"Double-click to open file\"><div class=\"px-6 py-3 grid grid-cols-12 gap-4 items-center\"><div class=\"col-span-6 sm:col-span-6 flex items-center min-w-0\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var23 = []any{getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0"}
-						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var23...)
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<i class=\"")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var24 string
-						templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var23).String())
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 1, Col: 0}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\"></i> <span class=\"font-medium text-gray-900 dark:text-white truncate\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var25 string
-						templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(file.Name)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 232, Col: 89}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</span></div><div class=\"col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block\">Me</div><div class=\"col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block\">—</div><div class=\"col-span-1 text-sm text-gray-500 dark:text-gray-400 hidden lg:block\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var26 string
-						templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(formatFileSize(file.Size))
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/drive.templ`, Line: 241, Col: 40}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</div><div class=\"col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity\"><button class=\"download-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors\" title=\"Download\"><i class=\"fas fa-download text-sm\"></i></button> <button class=\"delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors\" title=\"Delete\"><i class=\"fas fa-trash text-sm\"></i></button></div></div></div>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</div></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</div></div></div><!-- File Upload Modal --> <div id=\"upload-modal\" class=\"fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50\"><div class=\"relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800\"><div class=\"mt-3\"><!-- Modal Header --><div class=\"flex items-center justify-between mb-4\"><h3 class=\"text-lg font-medium text-gray-900 dark:text-white\">Upload Files</h3><button id=\"close-upload-modal\" class=\"text-gray-400 hover:text-gray-600 dark:hover:text-gray-300\"><i class=\"fas fa-times text-xl\"></i></button></div><!-- Upload Area --><div id=\"upload-area\" class=\"border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center mb-4\"><i class=\"fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4\"></i><p class=\"text-gray-600 dark:text-gray-400 mb-2\">Drag and drop files here or</p><button type=\"button\" id=\"select-files-btn\" class=\"text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium\">Browse Files</button></div><!-- Selected Files List --><div id=\"selected-files\" class=\"mb-4 hidden\"><h4 class=\"text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Selected Files:</h4><div id=\"files-list\" class=\"space-y-2 max-h-32 overflow-y-auto\"></div></div><!-- Upload Progress --><div id=\"upload-progress\" class=\"mb-4 hidden\"><div class=\"flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-1\"><span>Uploading...</span> <span id=\"progress-text\">0%</span></div><div class=\"w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2\"><div id=\"progress-bar\" class=\"bg-blue-600 h-2 rounded-full transition-all duration-300\" style=\"width: 0%\"></div></div></div><!-- Modal Footer --><div class=\"flex justify-end space-x-3\"><button type=\"button\" id=\"cancel-upload\" class=\"px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\">Cancel</button> <button type=\"button\" id=\"start-upload\" class=\"px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed\" disabled>Upload Files</button></div></div></div></div><!-- New Folder Modal --> <div id=\"new-folder-modal\" class=\"fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50\"><div class=\"relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800\"><div class=\"mt-3\"><!-- Modal Header --><div class=\"flex items-center justify-between mb-4\"><h3 class=\"text-lg font-medium text-gray-900 dark:text-white\">Create New Folder</h3><button id=\"close-modal\" class=\"text-gray-400 hover:text-gray-600 dark:hover:text-gray-300\"><i class=\"fas fa-times text-xl\"></i></button></div><!-- Modal Body --><form id=\"create-folder-form\"><div class=\"mb-4\"><label for=\"folder-name\" class=\"block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Folder Name</label> <input type=\"text\" id=\"folder-name\" name=\"folder-name\" class=\"w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent\" placeholder=\"Enter folder name...\" required maxlength=\"100\"></div><!-- Modal Footer --><div class=\"flex justify-end space-x-3\"><button type=\"button\" id=\"cancel-create\" class=\"px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\">Cancel</button> <button type=\"submit\" class=\"px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors\">Create Folder</button></div></form></div></div></div><!-- JavaScript for folder functionality --> <script>\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\t// Get current folder ID from backend-provided data attribute\n\t\t\t\tconst getCurrentFolderID = function() {\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst mainContent = document.querySelector('.main-content');\n\t\t\t\t\t\tif (!mainContent) {\n\t\t\t\t\t\t\treturn null;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst folderId = mainContent.dataset.currentFolderId;\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Return null for empty string or undefined, otherwise return the folder ID\n\t\t\t\t\t\treturn folderId && folderId.trim() !== '' ? folderId.trim() : null;\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\tconsole.warn('Error getting current folder ID:', error);\n\t\t\t\t\t\treturn null;\n\t\t\t\t\t}\n\t\t\t\t};\n\n\t\t\t\tconst currentFolderID = getCurrentFolderID();\n\n\t\t\t\t// View switching functionality\n\t\t\t\tconst gridViewBtn = document.getElementById('grid-view-btn');\n\t\t\t\tconst listViewBtn = document.getElementById('list-view-btn');\n\t\t\t\tconst driveGrid = document.getElementById('drive-grid');\n\t\t\t\tconst driveList = document.getElementById('drive-list');\n\n\t\t\t\tgridViewBtn.addEventListener('click', function() {\n\t\t\t\t\tdriveGrid.classList.remove('hidden');\n\t\t\t\t\tdriveList.classList.add('hidden');\n\t\t\t\t\tgridViewBtn.classList.add('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');\n\t\t\t\t\tgridViewBtn.classList.remove('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');\n\t\t\t\t\tlistViewBtn.classList.remove('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');\n\t\t\t\t\tlistViewBtn.classList.add('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');\n\t\t\t\t});\n\n\t\t\t\tlistViewBtn.addEventListener('click', function() {\n\t\t\t\t\tdriveList.classList.remove('hidden');\n\t\t\t\t\tdriveGrid.classList.add('hidden');\n\t\t\t\t\tlistViewBtn.classList.add('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');\n\t\t\t\t\tlistViewBtn.classList.remove('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');\n\t\t\t\t\tgridViewBtn.classList.remove('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');\n\t\t\t\t\tgridViewBtn.classList.add('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');\n\t\t\t\t});\n\n\t\t\t\t// Double-click navigation and file opening\n\t\t\t\tdocument.addEventListener('dblclick', function(e) {\n\t\t\t\t\te.preventDefault(); // Prevent any default behavior\n\t\t\t\t\t\n\t\t\t\t\t// Check if the clicked element is specifically a folder or file\n\t\t\t\t\tconst clickedElement = e.target.closest('.folder-item, .file-item');\n\t\t\t\t\t\n\t\t\t\t\tif (!clickedElement) {\n\t\t\t\t\t\treturn; // Not clicking on a file or folder\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tif (clickedElement.classList.contains('folder-item')) {\n\t\t\t\t\t\t// Handle folder navigation\n\t\t\t\t\t\tconst folderId = clickedElement.dataset.folderId;\n\t\t\t\t\t\tif (folderId && folderId.trim() !== '') {\n\t\t\t\t\t\t\t// Navigate to folder content - same page navigation\n\t\t\t\t\t\t\twindow.location.href = `/drive/files/${folderId}`;\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\tconsole.warn('Folder ID not found for folder item');\n\t\t\t\t\t\t}\n\t\t\t\t\t} else if (clickedElement.classList.contains('file-item')) {\n\t\t\t\t\t\t// Handle file opening\n\t\t\t\t\t\tconst fileId = clickedElement.dataset.fileId;\n\t\t\t\t\t\tif (fileId && fileId.trim() !== '') {\n\t\t\t\t\t\t\t// Get file information from the DOM to determine how to handle it\n\t\t\t\t\t\t\tconst fileNameElement = clickedElement.querySelector('.font-medium');\n\t\t\t\t\t\t\tconst fileName = fileNameElement ? fileNameElement.textContent.trim() : 'unknown';\n\t\t\t\t\t\t\tconst fileIcon = clickedElement.querySelector('i');\n\t\t\t\t\t\t\tconst isImage = fileIcon && fileIcon.classList.contains('fa-image');\n\t\t\t\t\t\t\tconst isPdf = fileIcon && fileIcon.classList.contains('fa-file-pdf');\n\t\t\t\t\t\t\tconst isText = fileIcon && fileIcon.classList.contains('fa-file-alt');\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// For viewable files, try to open in new tab, otherwise download\n\t\t\t\t\t\t\tif (isImage || isPdf || isText) {\n\t\t\t\t\t\t\t\t// Try to open in new tab first\n\t\t\t\t\t\t\t\tconst viewUrl = `/api/drive/v1/files/${fileId}/download`;\n\t\t\t\t\t\t\t\twindow.open(viewUrl, '_blank');\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t// For other file types, download directly\n\t\t\t\t\t\t\t\tdownloadFile(fileId);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\tconsole.warn('File ID not found for file item');\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// New folder functionality\n\t\t\t\tdocument.getElementById('new-folder-button').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('new-folder-modal').classList.remove('hidden');\n\t\t\t\t});\n\n\t\t\t\t// File upload functionality\n\t\t\t\tlet selectedFiles = [];\n\t\t\t\t\n\t\t\t\tdocument.getElementById('upload-button').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('upload-modal').classList.remove('hidden');\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('select-files-btn').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('file-upload').click();\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('file-upload').addEventListener('change', function(e) {\n\t\t\t\t\tselectedFiles = Array.from(e.target.files);\n\t\t\t\t\tupdateFilesList();\n\t\t\t\t});\n\n\t\t\t\t// Drag and drop functionality\n\t\t\t\tconst uploadArea = document.getElementById('upload-area');\n\t\t\t\t\n\t\t\t\tuploadArea.addEventListener('dragover', function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tuploadArea.classList.add('bg-blue-50', 'border-blue-300');\n\t\t\t\t});\n\n\t\t\t\tuploadArea.addEventListener('dragleave', function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tuploadArea.classList.remove('bg-blue-50', 'border-blue-300');\n\t\t\t\t});\n\n\t\t\t\tuploadArea.addEventListener('drop', function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tuploadArea.classList.remove('bg-blue-50', 'border-blue-300');\n\t\t\t\t\tselectedFiles = Array.from(e.dataTransfer.files);\n\t\t\t\t\tupdateFilesList();\n\t\t\t\t});\n\n\t\t\t\tfunction updateFilesList() {\n\t\t\t\t\tconst filesList = document.getElementById('files-list');\n\t\t\t\t\tconst selectedFilesDiv = document.getElementById('selected-files');\n\t\t\t\t\tconst startUploadBtn = document.getElementById('start-upload');\n\t\t\t\t\t\n\t\t\t\t\tif (selectedFiles.length > 0) {\n\t\t\t\t\t\tselectedFilesDiv.classList.remove('hidden');\n\t\t\t\t\t\tstartUploadBtn.disabled = false;\n\t\t\t\t\t\t\n\t\t\t\t\t\tfilesList.innerHTML = '';\n\t\t\t\t\t\tselectedFiles.forEach((file, index) => {\n\t\t\t\t\t\t\tconst fileItem = document.createElement('div');\n\t\t\t\t\t\t\tfileItem.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded';\n\t\t\t\t\t\t\tfileItem.innerHTML = `\n\t\t\t\t\t\t\t\t<div class=\"flex items-center\">\n\t\t\t\t\t\t\t\t\t<i class=\"fas fa-file text-gray-400 mr-2\"></i>\n\t\t\t\t\t\t\t\t\t<span class=\"text-sm text-gray-700 dark:text-gray-300\">${file.name}</span>\n\t\t\t\t\t\t\t\t\t<span class=\"text-xs text-gray-500 dark:text-gray-400 ml-2\">(${formatFileSize(file.size)})</span>\n\t\t\t\t\t\t\t\t</div>\n\t\t\t\t\t\t\t\t<button type=\"button\" onclick=\"removeFile(${index})\" class=\"text-red-500 hover:text-red-700\">\n\t\t\t\t\t\t\t\t\t<i class=\"fas fa-times\"></i>\n\t\t\t\t\t\t\t\t</button>\n\t\t\t\t\t\t\t`;\n\t\t\t\t\t\t\tfilesList.appendChild(fileItem);\n\t\t\t\t\t\t});\n\t\t\t\t\t} else {\n\t\t\t\t\t\tselectedFilesDiv.classList.add('hidden');\n\t\t\t\t\t\tstartUploadBtn.disabled = true;\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\twindow.removeFile = function(index) {\n\t\t\t\t\tselectedFiles.splice(index, 1);\n\t\t\t\t\tupdateFilesList();\n\t\t\t\t};\n\n\t\t\t\t// File size formatting utility\n\t\t\t\tfunction formatFileSize(bytes) {\n\t\t\t\t\tif (bytes === 0) return '0 Bytes';\n\t\t\t\t\tconst k = 1024;\n\t\t\t\t\tconst sizes = ['Bytes', 'KB', 'MB', 'GB'];\n\t\t\t\t\tconst i = Math.floor(Math.log(bytes) / Math.log(k));\n\t\t\t\t\treturn parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];\n\t\t\t\t}\n\n\t\t\t\t// Upload modal close functionality\n\t\t\t\tdocument.getElementById('close-upload-modal').addEventListener('click', function() {\n\t\t\t\t\tcloseUploadModal();\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('cancel-upload').addEventListener('click', function() {\n\t\t\t\t\tcloseUploadModal();\n\t\t\t\t});\n\n\t\t\t\tfunction closeUploadModal() {\n\t\t\t\t\tdocument.getElementById('upload-modal').classList.add('hidden');\n\t\t\t\t\tselectedFiles = [];\n\t\t\t\t\tdocument.getElementById('file-upload').value = '';\n\t\t\t\t\tdocument.getElementById('selected-files').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('upload-progress').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('start-upload').disabled = true;\n\t\t\t\t}\n\n\t\t\t\t// Start upload functionality\n\t\t\t\tdocument.getElementById('start-upload').addEventListener('click', async function() {\n\t\t\t\t\tif (selectedFiles.length === 0) return;\n\t\t\t\t\t\n\t\t\t\t\tconst progressDiv = document.getElementById('upload-progress');\n\t\t\t\t\tconst progressBar = document.getElementById('progress-bar');\n\t\t\t\t\tconst progressText = document.getElementById('progress-text');\n\t\t\t\t\t\n\t\t\t\t\tprogressDiv.classList.remove('hidden');\n\t\t\t\t\t\n\t\t\t\t\tconst formData = new FormData();\n\t\t\t\t\tselectedFiles.forEach(file => {\n\t\t\t\t\t\tformData.append('files', file);\n\t\t\t\t\t});\n\t\t\t\t\t\n\t\t\t\t\t// Add current folder ID if we're in a specific folder\n\t\t\t\t\tif (currentFolderID) {\n\t\t\t\t\t\tformData.append('folder_id', currentFolderID);\n\t\t\t\t\t}\n\n\t\t\t\t\tconst response = await fetch('/api/drive/v1/upload', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'X-Csrf-Token': document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: formData\n\t\t\t\t\t});\n\n\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\tconst errorData = await response.json();\n\t\t\t\t\t\talert(errorData.error || 'Failed to upload files');\n\t\t\t\t\t\tprogressDiv.classList.add('hidden');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\tconst data = await response.json();\n\t\t\t\t\tif (data.status === 'success') {\n\t\t\t\t\t\tprogressBar.style.width = '100%';\n\t\t\t\t\t\tprogressText.textContent = '100%';\n\t\t\t\t\t\t\n\t\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\t\tcloseUploadModal();\n\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t}, 1000);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tthrow new Error(data.error || 'Upload failed');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Close modal functionality\n\t\t\t\tdocument.getElementById('close-modal').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('new-folder-modal').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('folder-name').value = '';\n\t\t\t\t});\n\n\t\t\t\t// Cancel button functionality\n\t\t\t\tdocument.getElementById('cancel-create').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('new-folder-modal').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('folder-name').value = '';\n\t\t\t\t});\n\n\t\t\t\t// Close modal when clicking outside\n\t\t\t\tdocument.getElementById('new-folder-modal').addEventListener('click', function(e) {\n\t\t\t\t\tif (e.target === this) {\n\t\t\t\t\t\tthis.classList.add('hidden');\n\t\t\t\t\t\tdocument.getElementById('folder-name').value = '';\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Create folder form submission\n\t\t\t\tdocument.getElementById('create-folder-form').addEventListener('submit', async function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tconst folderName = document.getElementById('folder-name').value.trim();\n\t\t\t\t\t\n\t\t\t\t\tif (!folderName) {\n\t\t\t\t\t\talert('Please enter a folder name');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\t// Send request to create folder\n\t\t\t\t\tconst response = await fetch('/api/drive/v1/files', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t\t'X-Csrf-Token': document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\t\tname: folderName,\n\t\t\t\t\t\t\tmime_type: 'application/vnd.google-apps.folder', // Proper MIME type for folders\n\t\t\t\t\t\t\tparent: currentFolderID // Use current folder as parent\n\t\t\t\t\t\t})\n\t\t\t\t\t});\n\n\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\tconst errorData = await response.json();\n\t\t\t\t\t\talert(errorData.error || 'Failed to create folder');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\tconst data = await response.json();\n\t\t\t\t\tif (data.status === 'success') {\n\t\t\t\t\t\t// Reload the page to show the new folder\n\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t} else {\n\t\t\t\t\t\talert(data.error || 'Failed to create folder');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// File download functionality\n\t\t\t\tdocument.addEventListener('click', async function(e) {\n\t\t\t\t\tif (e.target.closest('.download-btn')) {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\te.stopPropagation();\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst downloadBtn = e.target.closest('.download-btn');\n\t\t\t\t\t\tconst fileItem = downloadBtn.closest('.file-item');\n\t\t\t\t\t\tconst fileId = fileItem.dataset.fileId;\n\t\t\t\t\t\t\n\t\t\t\t\t\tif (!fileId) {\n\t\t\t\t\t\t\talert('File ID not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tconst response = await fetch(`/api/drive/v1/files/${fileId}/download`, {\n\t\t\t\t\t\t\tmethod: 'GET',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-Csrf-Token': document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content'),\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t})\n\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tthrow new Error('Failed to download file');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\t// Convert response to Blob\n\t\t\t\t\t\tconst blob = await response.blob();\n\n\t\t\t\t\t\t// Create a download link\n\t\t\t\t\t\tconst url = window.URL.createObjectURL(blob);\n\t\t\t\t\t\tconst a = document.createElement('a');\n\t\t\t\t\t\ta.href = url;\n\t\t\t\t\t\ta.download = 'downloaded_file'; // You can optionally set the real name\n\t\t\t\t\t\ta.click();\n\n\t\t\t\t\t\t// Cleanup\n\t\t\t\t\t\twindow.URL.revokeObjectURL(url);\n\t\t\t\t\t}\n\n\t\t\t\t\t// File and folder delete functionality\n\t\t\t\t\tif (e.target.closest('.delete-btn')) {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\te.stopPropagation();\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst deleteBtn = e.target.closest('.delete-btn');\n\t\t\t\t\t\tconst fileItem = deleteBtn.closest('.file-item');\n\t\t\t\t\t\tconst folderItem = deleteBtn.closest('.folder-item');\n\t\t\t\t\t\t\n\t\t\t\t\t\tlet itemId, itemName, itemType;\n\t\t\t\t\t\t\n\t\t\t\t\t\tif (fileItem) {\n\t\t\t\t\t\t\titemId = fileItem.dataset.fileId;\n\t\t\t\t\t\t\titemName = fileItem.querySelector('.text-gray-900, .font-medium').textContent;\n\t\t\t\t\t\t\titemType = 'file';\n\t\t\t\t\t\t} else if (folderItem) {\n\t\t\t\t\t\t\titemId = folderItem.dataset.folderId;\n\t\t\t\t\t\t\titemName = folderItem.querySelector('.text-gray-900, .font-medium').textContent;\n\t\t\t\t\t\t\titemType = 'folder';\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\tif (!itemId) {\n\t\t\t\t\t\t\talert('Item ID not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Confirm deletion\n\t\t\t\t\t\tconst confirmed = confirm(`Are you sure you want to delete \"${itemName}\"? This action cannot be undone.`);\n\t\t\t\t\t\tif (!confirmed) {\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tfetch(`/api/drive/v1/files/${itemId}`, {\n\t\t\t\t\t\t\tmethod: 'DELETE',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-Csrf-Token': csrfToken.getAttribute('content')\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(response => {\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tthrow new Error('Delete failed');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn response.json();\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(data => {\n\t\t\t\t\t\t\tif (data.status === 'success') {\n\t\t\t\t\t\t\t\t// Reload the page to reflect the deletion\n\t\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tthrow new Error(data.error || 'Delete failed');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(error => {\n\t\t\t\t\t\t\tconsole.error('Error:', error);\n\t\t\t\t\t\t\talert('Delete failed: ' + error.message);\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\tfunction downloadFile(fileId) {\n\t\t\t\t\t// Add CSRF token as header approach through hidden input\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\tif (csrfToken) {\n\t\t\t\t\t\t// Since this is a form submission, we'll include the token as a header approach\n\t\t\t\t\t\t// by creating the request through fetch first to get the file blob\n\t\t\t\t\t\tfetch(`/api/drive/v1/files/${fileId}/download`, {\n\t\t\t\t\t\t\tmethod: 'GET',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-Csrf-Token': csrfToken.getAttribute('content')\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(response => {\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tthrow new Error('Download failed');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t// Get the filename from the Content-Disposition header\n\t\t\t\t\t\t\tconst contentDisposition = response.headers.get('Content-Disposition');\n\t\t\t\t\t\t\tlet filename = 'download';\n\t\t\t\t\t\t\tif (contentDisposition) {\n\t\t\t\t\t\t\t\tconst filenameMatch = contentDisposition.match(/filename=\"(.+)\"/);\n\t\t\t\t\t\t\t\tif (filenameMatch) {\n\t\t\t\t\t\t\t\t\tfilename = filenameMatch[1];\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn response.blob().then(blob => ({ blob, filename }));\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(({ blob, filename }) => {\n\t\t\t\t\t\t\t// Create a download link and trigger download\n\t\t\t\t\t\t\tconst url = window.URL.createObjectURL(blob);\n\t\t\t\t\t\t\tconst a = document.createElement('a');\n\t\t\t\t\t\t\ta.href = url;\n\t\t\t\t\t\t\ta.download = filename;\n\t\t\t\t\t\t\tdocument.body.appendChild(a);\n\t\t\t\t\t\t\ta.click();\n\t\t\t\t\t\t\twindow.URL.revokeObjectURL(url);\n\t\t\t\t\t\t\tdocument.body.removeChild(a);\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(error => {\n\t\t\t\t\t\t\tconsole.error('Error:', error);\n\t\t\t\t\t\t\talert('Download failed: ' + error.message);\n\t\t\t\t\t\t});\n\t\t\t\t\t} else {\n\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t});\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</div></div></div><!-- File Upload Modal --> <div id=\"upload-modal\" class=\"fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50\"><div class=\"relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800\"><div class=\"mt-3\"><!-- Modal Header --><div class=\"flex items-center justify-between mb-4\"><h3 class=\"text-lg font-medium text-gray-900 dark:text-white\">Upload Files</h3><button id=\"close-upload-modal\" class=\"text-gray-400 hover:text-gray-600 dark:hover:text-gray-300\"><i class=\"fas fa-times text-xl\"></i></button></div><!-- Upload Area --><div id=\"upload-area\" class=\"border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-lg p-6 text-center mb-4\"><i class=\"fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4\"></i><p class=\"text-gray-600 dark:text-gray-400 mb-2\">Drag and drop files here or</p><button type=\"button\" id=\"select-files-btn\" class=\"text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium\">Browse Files</button></div><!-- Selected Files List --><div id=\"selected-files\" class=\"mb-4 hidden\"><h4 class=\"text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Selected Files:</h4><div id=\"files-list\" class=\"space-y-2 max-h-32 overflow-y-auto\"></div></div><!-- Upload Progress --><div id=\"upload-progress\" class=\"mb-4 hidden\"><div class=\"flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-1\"><span>Uploading...</span> <span id=\"progress-text\">0%</span></div><div class=\"w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2\"><div id=\"progress-bar\" class=\"bg-blue-600 h-2 rounded-full transition-all duration-300\" style=\"width: 0%\"></div></div></div><!-- Modal Footer --><div class=\"flex justify-end space-x-3\"><button type=\"button\" id=\"cancel-upload\" class=\"px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\">Cancel</button> <button type=\"button\" id=\"start-upload\" class=\"px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed\" disabled>Upload Files</button></div></div></div></div><!-- New Folder Modal --> <div id=\"new-folder-modal\" class=\"fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50\"><div class=\"relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800\"><div class=\"mt-3\"><!-- Modal Header --><div class=\"flex items-center justify-between mb-4\"><h3 class=\"text-lg font-medium text-gray-900 dark:text-white\">Create New Folder</h3><button id=\"close-modal\" class=\"text-gray-400 hover:text-gray-600 dark:hover:text-gray-300\"><i class=\"fas fa-times text-xl\"></i></button></div><!-- Modal Body --><form id=\"create-folder-form\"><div class=\"mb-4\"><label for=\"folder-name\" class=\"block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Folder Name</label> <input type=\"text\" id=\"folder-name\" name=\"folder-name\" class=\"w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent\" placeholder=\"Enter folder name...\" required maxlength=\"100\"></div><!-- Modal Footer --><div class=\"flex justify-end space-x-3\"><button type=\"button\" id=\"cancel-create\" class=\"px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\">Cancel</button> <button type=\"submit\" class=\"px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors\">Create Folder</button></div></form></div></div></div><!-- Share File Modal --> <div id=\"share-modal\" class=\"fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 hidden\"><div class=\"relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800\"><div class=\"mt-3\"><!-- Modal Header --><div class=\"flex items-center justify-between mb-4\"><h3 class=\"text-lg font-medium text-gray-900 dark:text-white\">Share File</h3><button id=\"close-share-modal\" class=\"text-gray-400 hover:text-gray-600 dark:hover:text-gray-300\"><i class=\"fas fa-times text-xl\"></i></button></div><!-- Modal Body --><form id=\"share-file-form\"><div class=\"mb-4\"><label for=\"recipient-email\" class=\"block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Recipient Email</label> <input type=\"email\" id=\"recipient-email\" name=\"recipient-email\" class=\"w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent\" placeholder=\"Enter email address...\" required></div><div class=\"mb-4\"><p class=\"text-sm text-gray-600 dark:text-gray-400\">The recipient will be able to view and download this file.</p></div><!-- Modal Footer --><div class=\"flex justify-end space-x-3\"><button type=\"button\" id=\"cancel-share\" class=\"px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors\">Cancel</button> <button type=\"submit\" class=\"px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors\">Share File</button></div></form></div></div></div><script>\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\tconst currentFileID = document.querySelector('.main-content').dataset.currentFileId;\n\n\t\t\t\t// Double-click navigation and file opening\n\t\t\t\tdocument.addEventListener('dblclick', function(e) {\n\t\t\t\t\te.preventDefault(); // Prevent any default behavior\n\t\t\t\t\t\n\t\t\t\t\t// Check if the clicked element is specifically a folder or file\n\t\t\t\t\tconst clickedElement = e.target.closest('.file-item');\n\t\t\t\t\t\n\t\t\t\t\tif (!clickedElement) {\n\t\t\t\t\t\treturn; // Not clicking on a file or folder\n\t\t\t\t\t}\n\n\t\t\t\t\tconst fileID = clickedElement.dataset.fileId;\n\t\t\t\t\tconst downloadURL = clickedElement.dataset.downloadUrl;\n\t\t\t\t\tconst isViewable = clickedElement.dataset.isViewable === 'true';\n\t\t\t\t\tconst isFolder = clickedElement.dataset.isFolder === 'true';\n\n\t\t\t\t\t// Handle folder\n\t\t\t\t\tif (isFolder) {\n\t\t\t\t\t\t// Navigate to folder content - same page navigation\n\t\t\t\t\t\twindow.location.href = `/drive/files/${fileID}`;\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\t// Handle file\n\t\t\t\t\tif (isViewable) {\n\t\t\t\t\t\twindow.open(downloadURL, '_blank');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t} \n\n\t\t\t\t\tif (downloadURL !== '') {\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]');\n\n\t\t\t\t\t\tfetch(downloadURL, {\n\t\t\t\t\t\t\tmethod: 'GET',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-Csrf-Token': csrfToken.getAttribute('content')\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(response => {\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tthrow new Error('Download failed');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t// Get the filename from the Content-Disposition header\n\t\t\t\t\t\t\tconst contentDisposition = response.headers.get('Content-Disposition');\n\t\t\t\t\t\t\tlet filename = 'download';\n\t\t\t\t\t\t\tif (contentDisposition) {\n\t\t\t\t\t\t\t\tconst filenameMatch = contentDisposition.match(/filename=\"(.+)\"/);\n\t\t\t\t\t\t\t\tif (filenameMatch) {\n\t\t\t\t\t\t\t\t\tfilename = filenameMatch[1];\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn response.blob().then(blob => ({ blob, filename }));\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(({ blob, filename }) => {\n\t\t\t\t\t\t\t// Create a download link and trigger download\n\t\t\t\t\t\t\tconst url = window.URL.createObjectURL(blob);\n\t\t\t\t\t\t\tconst a = document.createElement('a');\n\t\t\t\t\t\t\ta.href = url;\n\t\t\t\t\t\t\ta.download = filename;\n\t\t\t\t\t\t\tdocument.body.appendChild(a);\n\t\t\t\t\t\t\ta.click();\n\t\t\t\t\t\t\twindow.URL.revokeObjectURL(url);\n\t\t\t\t\t\t\tdocument.body.removeChild(a);\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(error => {\n\t\t\t\t\t\t\tconsole.error('Error:', error);\n\t\t\t\t\t\t\talert('Download failed: ' + error.message);\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\t// if (clickedElement.classList.contains('folder-item')) {\n\t\t\t\t\t// \t// Handle folder navigation\n\t\t\t\t\t// \tconst folderId = clickedElement.dataset.folderId;\n\t\t\t\t\t// \tif (folderId && folderId.trim() !== '') {\n\t\t\t\t\t// \t\t// Navigate to folder content - same page navigation\n\t\t\t\t\t// \t\twindow.location.href = `/drive/files/${folderId}`;\n\t\t\t\t\t// \t} else {\n\t\t\t\t\t// \t\tconsole.warn('Folder ID not found for folder item');\n\t\t\t\t\t// \t}\n\t\t\t\t\t// } else if (clickedElement.classList.contains('file-item')) {\n\t\t\t\t\t// \t// Handle file opening\n\t\t\t\t\t// \tconst fileId = clickedElement.dataset.fileId;\n\t\t\t\t\t// \tif (fileId && fileId.trim() !== '') {\n\t\t\t\t\t// \t\t// Get file information from the DOM to determine how to handle it\n\t\t\t\t\t// \t\tconst fileNameElement = clickedElement.querySelector('.font-medium');\n\t\t\t\t\t// \t\tconst fileName = fileNameElement ? fileNameElement.textContent.trim() : 'unknown';\n\t\t\t\t\t// \t\tconst fileIcon = clickedElement.querySelector('i');\n\t\t\t\t\t// \t\tconst isImage = fileIcon && fileIcon.classList.contains('fa-image');\n\t\t\t\t\t// \t\tconst isPdf = fileIcon && fileIcon.classList.contains('fa-file-pdf');\n\t\t\t\t\t// \t\tconst isText = fileIcon && fileIcon.classList.contains('fa-file-alt');\n\t\t\t\t\t\t\t\n\t\t\t\t\t// \t\t// For viewable files, try to open in new tab, otherwise download\n\t\t\t\t\t// \t\tif (isImage || isPdf || isText) {\n\t\t\t\t\t// \t\t\t// Try to open in new tab first\n\t\t\t\t\t// \t\t\tconst viewUrl = `/api/drive/v1/files/${fileId}/download`;\n\t\t\t\t\t// \t\t\twindow.open(viewUrl, '_blank');\n\t\t\t\t\t// \t\t} else {\n\t\t\t\t\t// \t\t\t// For other file types, download directly\n\t\t\t\t\t// \t\t\tdownloadFile(fileId);\n\t\t\t\t\t// \t\t}\n\t\t\t\t\t// \t} else {\n\t\t\t\t\t// \t\tconsole.warn('File ID not found for file item');\n\t\t\t\t\t// \t}\n\t\t\t\t\t// }\n\t\t\t\t});\n\n\t\t\t\t// New folder functionality\n\t\t\t\tdocument.getElementById('new-folder-button').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('new-folder-modal').classList.remove('hidden');\n\t\t\t\t});\n\n\t\t\t\t// Share file functionality\n\t\t\t\tlet currentFileIdToShare = null;\n\n\t\t\t\t// Share modal event handlers\n\t\t\t\tdocument.getElementById('close-share-modal').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('share-modal').classList.add('hidden');\n\t\t\t\t\tcurrentFileIdToShare = null;\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('cancel-share').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('share-modal').classList.add('hidden');\n\t\t\t\t\tcurrentFileIdToShare = null;\n\t\t\t\t});\n\n\t\t\t\t// Close modal when clicking outside\n\t\t\t\tdocument.getElementById('share-modal').addEventListener('click', function(e) {\n\t\t\t\t\tif (e.target === this) {\n\t\t\t\t\t\tthis.classList.add('hidden');\n\t\t\t\t\t\tcurrentFileIdToShare = null;\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Handle share form submission\n\t\t\t\tdocument.getElementById('share-file-form').addEventListener('submit', async function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\n\t\t\t\t\tconst email = document.getElementById('recipient-email').value.trim();\n\t\t\t\t\tif (!email || !currentFileIdToShare) {\n\t\t\t\t\t\talert('Please enter a valid email address');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');\n\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch(`/api/drive/v1/files/${currentFileIdToShare}/share`, {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t\t\t'X-Csrf-Token': csrfToken\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\t\t\temail: email\n\t\t\t\t\t\t\t})\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tconst result = await response.json();\n\n\t\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\t\talert('File shared successfully!');\n\t\t\t\t\t\t\tdocument.getElementById('share-modal').classList.add('hidden');\n\t\t\t\t\t\t\tdocument.getElementById('recipient-email').value = '';\n\t\t\t\t\t\t\tcurrentFileIdToShare = null;\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\talert(result.error || 'Failed to share file');\n\t\t\t\t\t\t}\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\tconsole.error('Error sharing file:', error);\n\t\t\t\t\t\talert('Failed to share file: ' + error.message);\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// File upload functionality\n\t\t\t\tlet selectedFiles = [];\n\t\t\t\t\n\t\t\t\tdocument.getElementById('upload-button').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('upload-modal').classList.remove('hidden');\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('select-files-btn').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('file-upload').click();\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('file-upload').addEventListener('change', function(e) {\n\t\t\t\t\tselectedFiles = Array.from(e.target.files);\n\t\t\t\t\tupdateFilesList();\n\t\t\t\t});\n\n\t\t\t\t// Drag and drop functionality\n\t\t\t\tconst uploadArea = document.getElementById('upload-area');\n\t\t\t\t\n\t\t\t\tuploadArea.addEventListener('dragover', function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tuploadArea.classList.add('bg-blue-50', 'border-blue-300');\n\t\t\t\t});\n\n\t\t\t\tuploadArea.addEventListener('dragleave', function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tuploadArea.classList.remove('bg-blue-50', 'border-blue-300');\n\t\t\t\t});\n\n\t\t\t\tuploadArea.addEventListener('drop', function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tuploadArea.classList.remove('bg-blue-50', 'border-blue-300');\n\t\t\t\t\tselectedFiles = Array.from(e.dataTransfer.files);\n\t\t\t\t\tupdateFilesList();\n\t\t\t\t});\n\n\t\t\t\tfunction updateFilesList() {\n\t\t\t\t\tconst filesList = document.getElementById('files-list');\n\t\t\t\t\tconst selectedFilesDiv = document.getElementById('selected-files');\n\t\t\t\t\tconst startUploadBtn = document.getElementById('start-upload');\n\t\t\t\t\t\n\t\t\t\t\tif (selectedFiles.length > 0) {\n\t\t\t\t\t\tselectedFilesDiv.classList.remove('hidden');\n\t\t\t\t\t\tstartUploadBtn.disabled = false;\n\t\t\t\t\t\t\n\t\t\t\t\t\tfilesList.innerHTML = '';\n\t\t\t\t\t\tselectedFiles.forEach((file, index) => {\n\t\t\t\t\t\t\tconst fileItem = document.createElement('div');\n\t\t\t\t\t\t\tfileItem.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded';\n\t\t\t\t\t\t\tfileItem.innerHTML = `\n\t\t\t\t\t\t\t\t<div class=\"flex items-center\">\n\t\t\t\t\t\t\t\t\t<i class=\"fas fa-file text-gray-400 mr-2\"></i>\n\t\t\t\t\t\t\t\t\t<span class=\"text-sm text-gray-700 dark:text-gray-300\">${file.name}</span>\n\t\t\t\t\t\t\t\t\t<span class=\"text-xs text-gray-500 dark:text-gray-400 ml-2\">(${formatFileSize(file.size)})</span>\n\t\t\t\t\t\t\t\t</div>\n\t\t\t\t\t\t\t\t<button type=\"button\" onclick=\"removeFile(${index})\" class=\"text-red-500 hover:text-red-700\">\n\t\t\t\t\t\t\t\t\t<i class=\"fas fa-times\"></i>\n\t\t\t\t\t\t\t\t</button>\n\t\t\t\t\t\t\t`;\n\t\t\t\t\t\t\tfilesList.appendChild(fileItem);\n\t\t\t\t\t\t});\n\t\t\t\t\t} else {\n\t\t\t\t\t\tselectedFilesDiv.classList.add('hidden');\n\t\t\t\t\t\tstartUploadBtn.disabled = true;\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\twindow.removeFile = function(index) {\n\t\t\t\t\tselectedFiles.splice(index, 1);\n\t\t\t\t\tupdateFilesList();\n\t\t\t\t};\n\n\t\t\t\t// File size formatting utility\n\t\t\t\tfunction formatFileSize(bytes) {\n\t\t\t\t\tif (bytes === 0) return '0 Bytes';\n\t\t\t\t\tconst k = 1024;\n\t\t\t\t\tconst sizes = ['Bytes', 'KB', 'MB', 'GB'];\n\t\t\t\t\tconst i = Math.floor(Math.log(bytes) / Math.log(k));\n\t\t\t\t\treturn parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];\n\t\t\t\t}\n\n\t\t\t\t// Upload modal close functionality\n\t\t\t\tdocument.getElementById('close-upload-modal').addEventListener('click', function() {\n\t\t\t\t\tcloseUploadModal();\n\t\t\t\t});\n\n\t\t\t\tdocument.getElementById('cancel-upload').addEventListener('click', function() {\n\t\t\t\t\tcloseUploadModal();\n\t\t\t\t});\n\n\t\t\t\tfunction closeUploadModal() {\n\t\t\t\t\tdocument.getElementById('upload-modal').classList.add('hidden');\n\t\t\t\t\tselectedFiles = [];\n\t\t\t\t\tdocument.getElementById('file-upload').value = '';\n\t\t\t\t\tdocument.getElementById('selected-files').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('upload-progress').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('start-upload').disabled = true;\n\t\t\t\t}\n\n\t\t\t\t// Start upload functionality\n\t\t\t\tdocument.getElementById('start-upload').addEventListener('click', async function() {\n\t\t\t\t\tif (selectedFiles.length === 0) return;\n\t\t\t\t\t\n\t\t\t\t\tconst progressDiv = document.getElementById('upload-progress');\n\t\t\t\t\tconst progressBar = document.getElementById('progress-bar');\n\t\t\t\t\tconst progressText = document.getElementById('progress-text');\n\t\t\t\t\t\n\t\t\t\t\tprogressDiv.classList.remove('hidden');\n\t\t\t\t\t\n\t\t\t\t\tconst formData = new FormData();\n\t\t\t\t\tselectedFiles.forEach(file => {\n\t\t\t\t\t\tformData.append('files', file);\n\t\t\t\t\t});\n\t\t\t\t\t\n\t\t\t\t\t// Add current folder ID if we're in a specific folder\n\t\t\t\t\tif (currentFolderID) {\n\t\t\t\t\t\tformData.append('folder_id', currentFolderID);\n\t\t\t\t\t}\n\n\t\t\t\t\tconst response = await fetch('/api/drive/v1/upload', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'X-Csrf-Token': document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: formData\n\t\t\t\t\t});\n\n\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\tconst errorData = await response.json();\n\t\t\t\t\t\talert(errorData.error || 'Failed to upload files');\n\t\t\t\t\t\tprogressDiv.classList.add('hidden');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\tconst data = await response.json();\n\t\t\t\t\tif (data.status === 'success') {\n\t\t\t\t\t\tprogressBar.style.width = '100%';\n\t\t\t\t\t\tprogressText.textContent = '100%';\n\t\t\t\t\t\t\n\t\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\t\tcloseUploadModal();\n\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t}, 1000);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tthrow new Error(data.error || 'Upload failed');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Close modal functionality\n\t\t\t\tdocument.getElementById('close-modal').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('new-folder-modal').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('folder-name').value = '';\n\t\t\t\t});\n\n\t\t\t\t// Cancel button functionality\n\t\t\t\tdocument.getElementById('cancel-create').addEventListener('click', function() {\n\t\t\t\t\tdocument.getElementById('new-folder-modal').classList.add('hidden');\n\t\t\t\t\tdocument.getElementById('folder-name').value = '';\n\t\t\t\t});\n\n\t\t\t\t// Close modal when clicking outside\n\t\t\t\tdocument.getElementById('new-folder-modal').addEventListener('click', function(e) {\n\t\t\t\t\tif (e.target === this) {\n\t\t\t\t\t\tthis.classList.add('hidden');\n\t\t\t\t\t\tdocument.getElementById('folder-name').value = '';\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Create folder form submission\n\t\t\t\tdocument.getElementById('create-folder-form').addEventListener('submit', async function(e) {\n\t\t\t\t\te.preventDefault();\n\t\t\t\t\tconst folderName = document.getElementById('folder-name').value.trim();\n\t\t\t\t\t\n\t\t\t\t\tif (!folderName) {\n\t\t\t\t\t\talert('Please enter a folder name');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\t// Send request to create folder\n\t\t\t\t\tconst response = await fetch('/api/drive/v1/files', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t\t'X-Csrf-Token': document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\t\t\t\t\t\t},\n\t\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\t\tname: folderName,\n\t\t\t\t\t\t\tmime_type: 'application/askfrank.folder', // Proper MIME type for folders\n\t\t\t\t\t\t\tparent: currentFolderID // Use current folder as parent\n\t\t\t\t\t\t})\n\t\t\t\t\t});\n\n\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\tconst errorData = await response.json();\n\t\t\t\t\t\talert(errorData.error || 'Failed to create folder');\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\n\t\t\t\t\tconst data = await response.json();\n\t\t\t\t\tif (data.status === 'success') {\n\t\t\t\t\t\t// Reload the page to show the new folder\n\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t} else {\n\t\t\t\t\t\talert(data.error || 'Failed to create folder');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// File action functionality\n\t\t\t\tdocument.addEventListener('click', async function(e) {\n\t\t\t\t\t// Share button functionality\n\t\t\t\t\tif (e.target.closest('.share-btn')) {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\te.stopPropagation();\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst shareBtn = e.target.closest('.share-btn');\n\t\t\t\t\t\tconst fileItem = shareBtn.closest('.file-item');\n\t\t\t\t\t\tconst fileId = fileItem.dataset.fileId;\n\t\t\t\t\t\t\n\t\t\t\t\t\tif (!fileId) {\n\t\t\t\t\t\t\talert('File ID not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tcurrentFileIdToShare = fileId;\n\t\t\t\t\t\tdocument.getElementById('share-modal').classList.remove('hidden');\n\t\t\t\t\t\tdocument.getElementById('recipient-email').focus();\n\t\t\t\t\t}\n\n\t\t\t\t\t// File download functionality\n\t\t\t\t\tif (e.target.closest('.download-btn')) {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\te.stopPropagation();\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst downloadBtn = e.target.closest('.download-btn');\n\t\t\t\t\t\tconst fileItem = downloadBtn.closest('.file-item');\n\t\t\t\t\t\tconst fileId = fileItem.dataset.fileId;\n\t\t\t\t\t\t\n\t\t\t\t\t\tif (!fileId) {\n\t\t\t\t\t\t\talert('File ID not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tconst response = await fetch(`/api/drive/v1/files/${fileId}/download`, {\n\t\t\t\t\t\t\tmethod: 'GET',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-Csrf-Token': document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content'),\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t})\n\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tthrow new Error('Failed to download file');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\t// Convert response to Blob\n\t\t\t\t\t\tconst blob = await response.blob();\n\n\t\t\t\t\t\t// Create a download link\n\t\t\t\t\t\tconst url = window.URL.createObjectURL(blob);\n\t\t\t\t\t\tconst a = document.createElement('a');\n\t\t\t\t\t\ta.href = url;\n\t\t\t\t\t\ta.download = 'downloaded_file'; // You can optionally set the real name\n\t\t\t\t\t\ta.click();\n\n\t\t\t\t\t\t// Cleanup\n\t\t\t\t\t\twindow.URL.revokeObjectURL(url);\n\t\t\t\t\t}\n\n\t\t\t\t\t// File and folder delete functionality\n\t\t\t\t\tif (e.target.closest('.delete-btn')) {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\te.stopPropagation();\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst deleteBtn = e.target.closest('.delete-btn');\n\t\t\t\t\t\tconst fileItem = deleteBtn.closest('.file-item');\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst itemId = fileItem.dataset.fileId;\n\t\t\t\t\t\tconst itemName = fileItem.querySelector('.text-gray-900, .font-medium').textContent;\n\t\t\t\t\t\tconst itemType = 'file';\n\t\t\t\t\t\t\n\t\t\t\t\t\tif (!itemId) {\n\t\t\t\t\t\t\talert('Item ID not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Confirm deletion\n\t\t\t\t\t\tconst confirmed = confirm(`Are you sure you want to delete \"${itemName}\"? This action cannot be undone.`);\n\t\t\t\t\t\tif (!confirmed) {\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tfetch(`/api/drive/v1/files/${itemId}`, {\n\t\t\t\t\t\t\tmethod: 'DELETE',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-Csrf-Token': csrfToken.getAttribute('content')\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(response => {\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tthrow new Error('Delete failed');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn response.json();\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(data => {\n\t\t\t\t\t\t\tif (data.status === 'success') {\n\t\t\t\t\t\t\t\t// Reload the page to reflect the deletion\n\t\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tthrow new Error(data.error || 'Delete failed');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(error => {\n\t\t\t\t\t\t\tconsole.error('Error:', error);\n\t\t\t\t\t\t\talert('Delete failed: ' + error.message);\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\tfunction downloadFile(fileId) {\n\t\t\t\t\t// Add CSRF token as header approach through hidden input\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\tif (csrfToken) {\n\t\t\t\t\t\t// Since this is a form submission, we'll include the token as a header approach\n\t\t\t\t\t\t// by creating the request through fetch first to get the file blob\n\t\t\t\t\t\tfetch(`/api/drive/v1/files/${fileId}/download`, {\n\t\t\t\t\t\t\tmethod: 'GET',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-Csrf-Token': csrfToken.getAttribute('content')\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(response => {\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tthrow new Error('Download failed');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t// Get the filename from the Content-Disposition header\n\t\t\t\t\t\t\tconst contentDisposition = response.headers.get('Content-Disposition');\n\t\t\t\t\t\t\tlet filename = 'download';\n\t\t\t\t\t\t\tif (contentDisposition) {\n\t\t\t\t\t\t\t\tconst filenameMatch = contentDisposition.match(/filename=\"(.+)\"/);\n\t\t\t\t\t\t\t\tif (filenameMatch) {\n\t\t\t\t\t\t\t\t\tfilename = filenameMatch[1];\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\treturn response.blob().then(blob => ({ blob, filename }));\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.then(({ blob, filename }) => {\n\t\t\t\t\t\t\t// Create a download link and trigger download\n\t\t\t\t\t\t\tconst url = window.URL.createObjectURL(blob);\n\t\t\t\t\t\t\tconst a = document.createElement('a');\n\t\t\t\t\t\t\ta.href = url;\n\t\t\t\t\t\t\ta.download = filename;\n\t\t\t\t\t\t\tdocument.body.appendChild(a);\n\t\t\t\t\t\t\ta.click();\n\t\t\t\t\t\t\twindow.URL.revokeObjectURL(url);\n\t\t\t\t\t\t\tdocument.body.removeChild(a);\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(error => {\n\t\t\t\t\t\t\tconsole.error('Error:', error);\n\t\t\t\t\t\t\talert('Download failed: ' + error.message);\n\t\t\t\t\t\t});\n\t\t\t\t\t} else {\n\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t});\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

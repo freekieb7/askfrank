@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user",
+      "relations": {},
+      "metadata": null
+    },
+    {
+      "type": "file",
+      "relations": {
+        "can_read": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "object": "",
+                  "relation": "reader"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "object": "",
+                    "relation": "parent"
+                  },
+                  "computedUserset": {
+                    "object": "",
+                    "relation": "can_read"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_write": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "object": "",
+                  "relation": "writer"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "object": "",
+                    "relation": "parent"
+                  },
+                  "computedUserset": {
+                    "object": "",
+                    "relation": "can_write"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "parent": {
+          "this": {}
+        },
+        "reader": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "object": "",
+                  "relation": "writer"
+                }
+              }
+            ]
+          }
+        },
+        "writer": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "can_read": {
+            "directly_related_user_types": [],
+            "module": "",
+            "source_info": null
+          },
+          "can_write": {
+            "directly_related_user_types": [],
+            "module": "",
+            "source_info": null
+          },
+          "parent": {
+            "directly_related_user_types": [
+              {
+                "type": "file",
+                "condition": ""
+              }
+            ],
+            "module": "",
+            "source_info": null
+          },
+          "reader": {
+            "directly_related_user_types": [
+              {
+                "type": "user",
+                "condition": ""
+              }
+            ],
+            "module": "",
+            "source_info": null
+          },
+          "writer": {
+            "directly_related_user_types": [
+              {
+                "type": "user",
+                "condition": ""
+              }
+            ],
+            "module": "",
+            "source_info": null
+          }
+        },
+        "module": "",
+        "source_info": null
+      }
+    }
+  ],
+  "conditions": {}
+}

@@ -68,18 +68,54 @@ type User struct {
 	UpdatedAt       time.Time
 }
 
-func (db *PostgresDatabase) CreateUser(ctx context.Context, user User) error {
+type CreateUserParams struct {
+	Name         string
+	Email        string
+	PasswordHash []byte
+}
+
+func (db *PostgresDatabase) CreateUser(ctx context.Context, params CreateUserParams) (User, error) {
+	var user User
+	user.ID = uuid.New()
+	user.Name = params.Name
+	user.Email = params.Email
+	user.PasswordHash = params.PasswordHash
+	user.IsEmailVerified = false
+	user.CreatedAt = time.Now()
+	user.UpdatedAt = time.Now()
+
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_user (id, name, email, password_hash, is_email_verified, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		user.ID, user.Name, user.Email, user.PasswordHash, user.IsEmailVerified, user.CreatedAt, user.UpdatedAt); err != nil {
 		// Handle error
-		return err
+		return user, err
 	}
-	return nil
+	return user, nil
 }
 
-func (db *PostgresDatabase) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+type GetUserParams struct {
+	ID    uuid.UUID
+	Email string
+}
+
+func (db *PostgresDatabase) GetUser(ctx context.Context, params GetUserParams) (User, error) {
 	var user User
-	err := db.QueryRow(ctx, `SELECT id, name, email, password_hash, is_email_verified, created_at, updated_at FROM tbl_user WHERE id = $1`, id).Scan(
+
+	query := `SELECT id, name, email, password_hash, is_email_verified, created_at, updated_at FROM tbl_user WHERE 1 = 1`
+	args := []any{}
+
+	if params.ID != uuid.Nil {
+		query += ` AND id = $1`
+		args = append(args, params.ID)
+	}
+
+	if params.Email != "" {
+		query += ` AND email = $2`
+		args = append(args, params.Email)
+	}
+
+	query += ` LIMIT 1`
+
+	err := db.QueryRow(ctx, query, args...).Scan(
 		&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -90,9 +126,24 @@ func (db *PostgresDatabase) GetUserByID(ctx context.Context, id uuid.UUID) (User
 	return user, nil
 }
 
-func (db *PostgresDatabase) GetUserByEmail(ctx context.Context, email string) (User, error) {
+type RetrieveUserParams struct {
+	Email string
+}
+
+func (db *PostgresDatabase) RetrieveUser(ctx context.Context, params RetrieveUserParams) (User, error) {
 	var user User
-	err := db.QueryRow(ctx, `SELECT id, name, email, password_hash, is_email_verified, created_at, updated_at FROM tbl_user WHERE email = $1`, email).Scan(
+
+	query := `SELECT id, name, email, password_hash, is_email_verified, created_at, updated_at FROM tbl_user WHERE 1 = 1`
+	args := []any{}
+
+	if params.Email != "" {
+		query += ` AND email = $1`
+		args = append(args, params.Email)
+	}
+
+	query += ` LIMIT 1`
+
+	err := db.QueryRow(ctx, query, args...).Scan(
 		&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -103,9 +154,17 @@ func (db *PostgresDatabase) GetUserByEmail(ctx context.Context, email string) (U
 	return user, nil
 }
 
-func (db *PostgresDatabase) UpdateUser(ctx context.Context, user User) error {
+type UpdateUserParams struct {
+	Name            *string
+	Email           *string
+	PasswordHash    []byte
+	IsEmailVerified *bool
+	DeletedAt       *time.Time
+}
+
+func (db *PostgresDatabase) UpdateUser(ctx context.Context, id uuid.UUID, params UpdateUserParams) error {
 	if _, err := db.Exec(ctx, `UPDATE tbl_user SET name = $1, email = $2, password_hash = $3, is_email_verified = $4, updated_at = $5 WHERE id = $6`,
-		user.Name, user.Email, user.PasswordHash, user.IsEmailVerified, user.UpdatedAt, user.ID); err != nil {
+		params.Name, params.Email, params.PasswordHash, params.IsEmailVerified, time.Now(), id); err != nil {
 		// Handle error
 		return err
 	}
@@ -124,6 +183,13 @@ var (
 	ErrFileNotFound = errors.New("File not found")
 )
 
+const (
+	MIMETYPE_FOLDER = "application/askfrank.folder"
+	MIMETYPE_PDF    = "application/pdf"
+	MIMETYPE_JPEG   = "image/jpeg"
+	MIMETYPE_PNG    = "image/png"
+)
+
 type File struct {
 	ID        uuid.UUID
 	OwnerID   uuid.UUID
@@ -132,23 +198,47 @@ type File struct {
 	MimeType  string
 	S3Key     string
 	SizeBytes int64
-	IsFolder  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-type SearchFilesOptions struct {
-	InFolder uuid.NullUUID // Optional folder ID to search within
+func (f File) IsFile() bool {
+	return f.MimeType != MIMETYPE_FOLDER
 }
 
-func (db *PostgresDatabase) SearchFiles(ctx context.Context, ownerID uuid.UUID, options SearchFilesOptions) ([]File, error) {
-	query := `SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at FROM tbl_file WHERE owner_id = $1`
-	args := []any{ownerID}
+func (f File) IsFolder() bool {
+	return f.MimeType == MIMETYPE_FOLDER
+}
 
-	if options.InFolder.Valid {
-		query += ` AND parent_id = $2`
-		args = append(args, options.InFolder.UUID)
-	} else {
+func (f File) IsPDF() bool {
+	return f.MimeType == MIMETYPE_PDF
+}
+
+func (f File) IsImage() bool {
+	return f.MimeType == MIMETYPE_JPEG || f.MimeType == MIMETYPE_PNG
+}
+
+type GetFilesParams struct {
+	OwnerID  uuid.UUID
+	InFolder uuid.UUID
+	InRoot   bool
+}
+
+func (db *PostgresDatabase) GetFiles(ctx context.Context, params GetFilesParams) ([]File, error) {
+	query := `SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE 1 = 1`
+	args := []any{}
+
+	if params.OwnerID != uuid.Nil {
+		query += ` AND owner_id = ?`
+		args = append(args, params.OwnerID)
+	}
+
+	if params.InFolder != uuid.Nil {
+		query += ` AND parent_id = ?`
+		args = append(args, params.InFolder)
+	}
+
+	if params.InRoot {
 		query += ` AND parent_id IS NULL`
 	}
 
@@ -161,7 +251,7 @@ func (db *PostgresDatabase) SearchFiles(ctx context.Context, ownerID uuid.UUID, 
 	var files []File
 	for rows.Next() {
 		var file File
-		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.IsFolder, &file.CreatedAt, &file.UpdatedAt); err != nil {
+		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
 			return nil, err
 		}
 		files = append(files, file)
@@ -174,19 +264,43 @@ func (db *PostgresDatabase) SearchFiles(ctx context.Context, ownerID uuid.UUID, 
 	return files, nil
 }
 
-func (db *PostgresDatabase) CreateFile(ctx context.Context, file File) error {
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_file (id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		file.ID, file.OwnerID, file.ParentID, file.Name, file.MimeType, file.S3Key, file.SizeBytes, file.IsFolder, file.CreatedAt, file.UpdatedAt); err != nil {
-		// Handle error
-		return err
-	}
-	return nil
+type CreateFileParams struct {
+	OwnerID   uuid.UUID
+	ParentID  uuid.NullUUID
+	Name      string
+	MimeType  string
+	S3Key     string
+	SizeBytes int64
 }
 
-func (db *PostgresDatabase) GetFileByID(ctx context.Context, ownerID, id uuid.UUID) (File, error) {
+func (db *PostgresDatabase) CreateFile(ctx context.Context, params CreateFileParams) (File, error) {
+	file := File{
+		ID:        uuid.New(),
+		OwnerID:   params.OwnerID,
+		ParentID:  params.ParentID,
+		Name:      params.Name,
+		MimeType:  params.MimeType,
+		S3Key:     params.S3Key,
+		SizeBytes: params.SizeBytes,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_file (id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		file.ID, file.OwnerID, file.ParentID, file.Name, file.MimeType, file.S3Key, file.SizeBytes, file.CreatedAt, file.UpdatedAt); err != nil {
+		// Handle error
+		return file, err
+	}
+	return file, nil
+}
+
+type GetFileByIDParams struct {
+}
+
+func (db *PostgresDatabase) GetFileByID(ctx context.Context, fileID uuid.UUID, params GetFileByIDParams) (File, error) {
 	var file File
-	err := db.QueryRow(ctx, `SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at FROM tbl_file WHERE id = $1 AND owner_id = $2`, id, ownerID).Scan(
-		&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.IsFolder, &file.CreatedAt, &file.UpdatedAt)
+	err := db.QueryRow(ctx, `SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE id = $1`, fileID).Scan(
+		&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return file, ErrFileNotFound
@@ -196,46 +310,103 @@ func (db *PostgresDatabase) GetFileByID(ctx context.Context, ownerID, id uuid.UU
 	return file, nil
 }
 
-func (db *PostgresDatabase) GetParentFolders(ctx context.Context, ownerID, fileID uuid.UUID) ([]File, error) {
-	var parents []File
+type GetFileWithParentsParams struct {
+}
+
+func (db *PostgresDatabase) GetFileWithParents(ctx context.Context, fileID uuid.UUID, params GetFileWithParentsParams) ([]File, error) {
+	var files []File
+
 	rows, err := db.Query(ctx, `
 		WITH RECURSIVE folder_path AS (
-			SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at
+			SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, created_at, updated_at
 			FROM tbl_file
-			WHERE id = $1 AND owner_id = $2
+			WHERE id = $1
 			UNION ALL
-			SELECT f.id, f.owner_id, f.parent_id, f.name, f.mime_type, f.s3_key, f.size_bytes, f.is_folder, f.created_at, f.updated_at
+			SELECT f.id, f.owner_id, f.parent_id, f.name, f.mime_type, f.s3_key, f.size_bytes, f.created_at, f.updated_at
 			FROM tbl_file f
 			INNER JOIN folder_path fp ON f.id = fp.parent_id
 		)
-		SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, is_folder, created_at, updated_at
+		SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, created_at, updated_at
 		FROM folder_path
 		ORDER BY created_at DESC
-	`, fileID, ownerID)
+	`, fileID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return parents, ErrFileNotFound
+			return files, ErrFileNotFound
 		}
-		return parents, err
+		return files, err
 	}
 	defer rows.Close()
 
+	files = make([]File, 0)
 	for rows.Next() {
 		var file File
-		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.IsFolder, &file.CreatedAt, &file.UpdatedAt); err != nil {
-			return parents, err
+		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
+			return files, err
 		}
-		parents = append(parents, file)
+		files = append(files, file)
 	}
 	if err := rows.Err(); err != nil {
-		return parents, err
+		return files, err
 	}
 
-	return parents, nil
+	return files, nil
 }
 
-func (db *PostgresDatabase) DeleteFile(ctx context.Context, ownerID, id uuid.UUID) error {
-	if _, err := db.Exec(ctx, `DELETE FROM tbl_file WHERE id = $1 AND owner_id = $2`, id, ownerID); err != nil {
+type DeleteFileParams struct {
+}
+
+func (db *PostgresDatabase) DeleteFile(ctx context.Context, fileID uuid.UUID, params DeleteFileParams) error {
+	if _, err := db.Exec(ctx, `DELETE FROM tbl_file WHERE id = $1`, fileID); err != nil {
+		// Handle error
+		return err
+	}
+	return nil
+}
+
+type GetSharedFilesParams struct {
+	UserID uuid.UUID
+}
+
+func (db *PostgresDatabase) GetSharedFiles(ctx context.Context, params GetSharedFilesParams) ([]File, error) {
+	var files []File
+
+	rows, err := db.Query(ctx, `
+		SELECT f.id, f.owner_id, f.parent_id, f.name, f.mime_type, f.s3_key, f.size_bytes, f.created_at, f.updated_at
+		FROM tbl_shared_files sf
+		INNER JOIN tbl_file f ON sf.file_id = f.id
+		WHERE sf.receiving_user_id = $1
+	`, params.UserID)
+	if err != nil {
+		return files, err
+	}
+	defer rows.Close()
+
+	files = make([]File, 0)
+	for rows.Next() {
+		var file File
+		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
+			return files, err
+		}
+		files = append(files, file)
+	}
+	if err := rows.Err(); err != nil {
+		return files, err
+	}
+
+	return files, nil
+}
+
+type CreateSharedFileParams struct {
+	FileID          uuid.UUID
+	SharingUserID   uuid.UUID
+	ReceivingUserID uuid.UUID
+	GrantedAt       time.Time
+}
+
+func (db *PostgresDatabase) CreateSharedFile(ctx context.Context, params CreateSharedFileParams) error {
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_shared_files (file_id, sharing_user_id, receiving_user_id, granted_at) VALUES ($1, $2, $3, $4)`,
+		params.FileID, params.SharingUserID, params.ReceivingUserID, params.GrantedAt); err != nil {
 		// Handle error
 		return err
 	}

@@ -12,11 +12,13 @@ type Breadcrumb struct {
 }
 
 type File struct {
-	ID       string
-	Name     string
-	Size     int64
-	MimeType string
-	IsFolder bool
+	ID          string
+	Name        string
+	Size        int64
+	MimeType    string
+	IsFolder    bool
+	IsViewable  bool
+	DownloadURL string
 }
 
 func getFileIcon(mimeType string, isFolder bool) string {
@@ -41,7 +43,7 @@ func getFileIcon(mimeType string, isFolder bool) string {
 		return "fas fa-file-powerpoint text-orange-500"
 	case strings.HasPrefix(mimeType, "text/"):
 		return "fas fa-file-alt text-gray-500"
-	case mimeType == "application/vnd.google-apps.folder":
+	case mimeType == "application/askfrank.folder":
 		return "fas fa-folder text-blue-500"
 	default:
 		return "fas fa-file text-gray-500"
@@ -61,9 +63,9 @@ func formatFileSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs []Breadcrumb, currentFolderID string) {
+templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs []Breadcrumb, currentFileID string) {
 	@component.AppLayout("Drive - AskFrank", c, t) {
-		<div class="main-content" data-current-folder-id={ currentFolderID }>
+		<div class="main-content" data-current-file-id={ currentFileID }>
 			<div class="p-6">
 				<div class="mb-6">
 					<h1 class="text-2xl font-bold text-gray-900 dark:text-white">My Drive</h1>
@@ -74,18 +76,12 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 					<div class="mb-4">
 						<nav class="flex" aria-label="Breadcrumb">
 							<ol class="inline-flex items-center space-x-1 md:space-x-3">
-								for i, breadcrumb := range breadcrumbs {
+								for _, breadcrumb := range breadcrumbs {
 									<li class="inline-flex items-center">
-										if i > 0 {
-											<i class="fas fa-chevron-right text-gray-400 mx-2"></i>
-										}
-										if i == len(breadcrumbs)-1 {
-											<span class="text-gray-500 dark:text-gray-400">{ breadcrumb.Name }</span>
-										} else {
-											<a href={ templ.URL(breadcrumb.URL) } class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
-												{ breadcrumb.Name }
-											</a>
-										}
+										<i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+										<a href={ templ.URL(breadcrumb.URL) } class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+											{ breadcrumb.Name }
+										</a>
 									</li>
 								}
 							</ol>
@@ -106,7 +102,8 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 						</div>
 					</div>
 					<div class="flex space-x-3">
-						<div class="relative">
+						<!-- Search Bar (hidden for now) -->
+						<div class="relative" hidden>
 							<input
 								type="text"
 								placeholder="Search files and folders..."
@@ -114,12 +111,6 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 							/>
 							<i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
 						</div>
-						<button id="grid-view-btn" class="p-2 border border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors" title="Grid view">
-							<i class="fas fa-th"></i>
-						</button>
-						<button id="list-view-btn" class="p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" title="List view">
-							<i class="fas fa-list"></i>
-						</button>
 					</div>
 				</div>
 				<!-- Drive Content -->
@@ -131,64 +122,8 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 							<p class="text-gray-600 dark:text-gray-400">Upload files or create folders to get started</p>
 						</div>
 					} else {
-						<!-- Drive Content Grid -->
-						<div id="drive-grid" class="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3">
-							<!-- Files and Folders -->
-							for _, file := range files {
-								if file.IsFolder {
-									<div class="folder-item group cursor-pointer" data-folder-id={ file.ID } title="Double-click to open folder">
-										<div class="p-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-2 border-transparent hover:border-blue-200 dark:hover:border-blue-700">
-											<div class="flex flex-col items-center text-center">
-												<div class="relative mb-2">
-													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " text-3xl" }></i>
-													<div class="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-														<div class="flex space-x-1">
-															<button class="delete-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600" title="Delete Folder">
-																<i class="fas fa-trash text-xs"></i>
-															</button>
-														</div>
-													</div>
-												</div>
-												<span class="text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1" title={ file.Name }>
-													{ file.Name }
-												</span>
-												<span class="text-xs text-blue-600 dark:text-blue-400 mt-1">
-													Folder
-												</span>
-											</div>
-										</div>
-									</div>
-								} else {
-									<div class="file-item group cursor-pointer" data-file-id={ file.ID } title="Double-click to open file">
-										<div class="p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-2 border-transparent hover:border-gray-200 dark:hover:border-gray-600">
-											<div class="flex flex-col items-center text-center">
-												<div class="relative mb-2">
-													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " text-3xl" }></i>
-													<div class="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-														<div class="flex space-x-1">
-															<button class="download-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-blue-500 border border-gray-200 dark:border-gray-600" title="Download">
-																<i class="fas fa-download text-xs"></i>
-															</button>
-															<button class="delete-btn p-1 bg-white dark:bg-gray-800 rounded-full shadow-lg text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-600" title="Delete">
-																<i class="fas fa-trash text-xs"></i>
-															</button>
-														</div>
-													</div>
-												</div>
-												<span class="text-sm font-medium text-gray-900 dark:text-white truncate w-full px-1" title={ file.Name }>
-													{ file.Name }
-												</span>
-												<span class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-													{ formatFileSize(file.Size) }
-												</span>
-											</div>
-										</div>
-									</div>
-								}
-							}
-						</div>
 						<!-- Drive Content List -->
-						<div id="drive-list" class="hidden">
+						<div id="drive-list">
 							<div class="px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
 								<div class="grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
 									<div class="col-span-6">Name</div>
@@ -201,56 +136,34 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 							<div class="divide-y divide-gray-200 dark:divide-gray-700">
 								<!-- Files and Folders -->
 								for _, file := range files {
-									if file.IsFolder {
-										<div class="folder-item group hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors cursor-pointer" data-folder-id={ file.ID } title="Double-click to open folder">
-											<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
-												<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
-													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0" }></i>
-													<span class="font-medium text-gray-900 dark:text-white truncate">{ file.Name }</span>
-												</div>
-												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
-													Me
-												</div>
-												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block">
-													—
-												</div>
-												<div class="col-span-1 text-sm text-blue-600 dark:text-blue-400 hidden lg:block">
-													Folder
-												</div>
-												<div class="col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-													<button class="delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Delete Folder">
-														<i class="fas fa-trash text-sm"></i>
-													</button>
-												</div>
+									<div class="file-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" data-file-id={ file.ID } data-is-folder={ file.IsFolder } data-is-viewable={ file.IsViewable } data-download-url={ file.DownloadURL } title="Double-click to open file">
+										<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
+											<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
+												<i class={ getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0" }></i>
+												<span class="font-medium text-gray-900 dark:text-white truncate">{ file.Name }</span>
+											</div>
+											<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
+												Me
+											</div>
+											<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block">
+												—
+											</div>
+											<div class="col-span-1 text-sm text-gray-500 dark:text-gray-400 hidden lg:block">
+												{ formatFileSize(file.Size) }
+											</div>
+											<div class="col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+												<button class="share-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Share">
+													<i class="fas fa-share text-sm"></i>
+												</button>
+												<button class="download-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Download">
+													<i class="fas fa-download text-sm"></i>
+												</button>
+												<button class="delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Delete">
+													<i class="fas fa-trash text-sm"></i>
+												</button>
 											</div>
 										</div>
-									} else {
-										<div class="file-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" data-file-id={ file.ID } title="Double-click to open file">
-											<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
-												<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
-													<i class={ getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0" }></i>
-													<span class="font-medium text-gray-900 dark:text-white truncate">{ file.Name }</span>
-												</div>
-												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
-													Me
-												</div>
-												<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden md:block">
-													—
-												</div>
-												<div class="col-span-1 text-sm text-gray-500 dark:text-gray-400 hidden lg:block">
-													{ formatFileSize(file.Size) }
-												</div>
-												<div class="col-span-6 sm:col-span-1 flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-													<button class="download-btn p-2 text-gray-400 hover:text-blue-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Download">
-														<i class="fas fa-download text-sm"></i>
-													</button>
-													<button class="delete-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="Delete">
-														<i class="fas fa-trash text-sm"></i>
-													</button>
-												</div>
-											</div>
-										</div>
-									}
+									</div>
 								}
 							</div>
 						</div>
@@ -360,103 +273,238 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 				</div>
 			</div>
 		</div>
-		<!-- JavaScript for folder functionality -->
+		<!-- Share File Modal -->
+		<div id="share-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 hidden">
+			<div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+				<div class="mt-3">
+					<!-- Modal Header -->
+					<div class="flex items-center justify-between mb-4">
+						<h3 class="text-lg font-medium text-gray-900 dark:text-white">
+							Share File
+						</h3>
+						<button id="close-share-modal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+							<i class="fas fa-times text-xl"></i>
+						</button>
+					</div>
+					<!-- Modal Body -->
+					<form id="share-file-form">
+						<div class="mb-4">
+							<label for="recipient-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+								Recipient Email
+							</label>
+							<input
+								type="email"
+								id="recipient-email"
+								name="recipient-email"
+								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+								placeholder="Enter email address..."
+								required
+							/>
+						</div>
+						<div class="mb-4">
+							<p class="text-sm text-gray-600 dark:text-gray-400">
+								The recipient will be able to view and download this file.
+							</p>
+						</div>
+						<!-- Modal Footer -->
+						<div class="flex justify-end space-x-3">
+							<button
+								type="button"
+								id="cancel-share"
+								class="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+							>
+								Cancel
+							</button>
+							<button
+								type="submit"
+								class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+							>
+								Share File
+							</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
 		<script>
 			document.addEventListener('DOMContentLoaded', function() {
-				// Get current folder ID from backend-provided data attribute
-				const getCurrentFolderID = function() {
-					try {
-						const mainContent = document.querySelector('.main-content');
-						if (!mainContent) {
-							return null;
-						}
-						
-						const folderId = mainContent.dataset.currentFolderId;
-						
-						// Return null for empty string or undefined, otherwise return the folder ID
-						return folderId && folderId.trim() !== '' ? folderId.trim() : null;
-					} catch (error) {
-						console.warn('Error getting current folder ID:', error);
-						return null;
-					}
-				};
-
-				const currentFolderID = getCurrentFolderID();
-
-				// View switching functionality
-				const gridViewBtn = document.getElementById('grid-view-btn');
-				const listViewBtn = document.getElementById('list-view-btn');
-				const driveGrid = document.getElementById('drive-grid');
-				const driveList = document.getElementById('drive-list');
-
-				gridViewBtn.addEventListener('click', function() {
-					driveGrid.classList.remove('hidden');
-					driveList.classList.add('hidden');
-					gridViewBtn.classList.add('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');
-					gridViewBtn.classList.remove('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');
-					listViewBtn.classList.remove('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');
-					listViewBtn.classList.add('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');
-				});
-
-				listViewBtn.addEventListener('click', function() {
-					driveList.classList.remove('hidden');
-					driveGrid.classList.add('hidden');
-					listViewBtn.classList.add('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');
-					listViewBtn.classList.remove('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');
-					gridViewBtn.classList.remove('bg-blue-50', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-600', 'text-blue-600', 'dark:text-blue-400');
-					gridViewBtn.classList.add('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600', 'text-gray-700', 'dark:text-gray-300');
-				});
+				const currentFileID = document.querySelector('.main-content').dataset.currentFileId;
 
 				// Double-click navigation and file opening
 				document.addEventListener('dblclick', function(e) {
 					e.preventDefault(); // Prevent any default behavior
 					
 					// Check if the clicked element is specifically a folder or file
-					const clickedElement = e.target.closest('.folder-item, .file-item');
+					const clickedElement = e.target.closest('.file-item');
 					
 					if (!clickedElement) {
 						return; // Not clicking on a file or folder
 					}
-					
-					if (clickedElement.classList.contains('folder-item')) {
-						// Handle folder navigation
-						const folderId = clickedElement.dataset.folderId;
-						if (folderId && folderId.trim() !== '') {
-							// Navigate to folder content - same page navigation
-							window.location.href = `/drive/files/${folderId}`;
-						} else {
-							console.warn('Folder ID not found for folder item');
-						}
-					} else if (clickedElement.classList.contains('file-item')) {
-						// Handle file opening
-						const fileId = clickedElement.dataset.fileId;
-						if (fileId && fileId.trim() !== '') {
-							// Get file information from the DOM to determine how to handle it
-							const fileNameElement = clickedElement.querySelector('.font-medium');
-							const fileName = fileNameElement ? fileNameElement.textContent.trim() : 'unknown';
-							const fileIcon = clickedElement.querySelector('i');
-							const isImage = fileIcon && fileIcon.classList.contains('fa-image');
-							const isPdf = fileIcon && fileIcon.classList.contains('fa-file-pdf');
-							const isText = fileIcon && fileIcon.classList.contains('fa-file-alt');
-							
-							// For viewable files, try to open in new tab, otherwise download
-							if (isImage || isPdf || isText) {
-								// Try to open in new tab first
-								const viewUrl = `/api/drive/v1/files/${fileId}/download`;
-								window.open(viewUrl, '_blank');
-							} else {
-								// For other file types, download directly
-								downloadFile(fileId);
-							}
-						} else {
-							console.warn('File ID not found for file item');
-						}
+
+					const fileID = clickedElement.dataset.fileId;
+					const downloadURL = clickedElement.dataset.downloadUrl;
+					const isViewable = clickedElement.dataset.isViewable === 'true';
+					const isFolder = clickedElement.dataset.isFolder === 'true';
+
+					// Handle folder
+					if (isFolder) {
+						// Navigate to folder content - same page navigation
+						window.location.href = `/drive/files/${fileID}`;
+						return;
 					}
+
+					// Handle file
+					if (isViewable) {
+						window.open(downloadURL, '_blank');
+						return;
+					} 
+
+					if (downloadURL !== '') {
+						const csrfToken = document.querySelector('meta[name="csrf-token"]');
+
+						fetch(downloadURL, {
+							method: 'GET',
+							headers: {
+								'X-Csrf-Token': csrfToken.getAttribute('content')
+							}
+						})
+						.then(response => {
+							if (!response.ok) {
+								throw new Error('Download failed');
+							}
+							// Get the filename from the Content-Disposition header
+							const contentDisposition = response.headers.get('Content-Disposition');
+							let filename = 'download';
+							if (contentDisposition) {
+								const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+								if (filenameMatch) {
+									filename = filenameMatch[1];
+								}
+							}
+							return response.blob().then(blob => ({ blob, filename }));
+						})
+						.then(({ blob, filename }) => {
+							// Create a download link and trigger download
+							const url = window.URL.createObjectURL(blob);
+							const a = document.createElement('a');
+							a.href = url;
+							a.download = filename;
+							document.body.appendChild(a);
+							a.click();
+							window.URL.revokeObjectURL(url);
+							document.body.removeChild(a);
+						})
+						.catch(error => {
+							console.error('Error:', error);
+							alert('Download failed: ' + error.message);
+						});
+					}
+					
+					// if (clickedElement.classList.contains('folder-item')) {
+					// 	// Handle folder navigation
+					// 	const folderId = clickedElement.dataset.folderId;
+					// 	if (folderId && folderId.trim() !== '') {
+					// 		// Navigate to folder content - same page navigation
+					// 		window.location.href = `/drive/files/${folderId}`;
+					// 	} else {
+					// 		console.warn('Folder ID not found for folder item');
+					// 	}
+					// } else if (clickedElement.classList.contains('file-item')) {
+					// 	// Handle file opening
+					// 	const fileId = clickedElement.dataset.fileId;
+					// 	if (fileId && fileId.trim() !== '') {
+					// 		// Get file information from the DOM to determine how to handle it
+					// 		const fileNameElement = clickedElement.querySelector('.font-medium');
+					// 		const fileName = fileNameElement ? fileNameElement.textContent.trim() : 'unknown';
+					// 		const fileIcon = clickedElement.querySelector('i');
+					// 		const isImage = fileIcon && fileIcon.classList.contains('fa-image');
+					// 		const isPdf = fileIcon && fileIcon.classList.contains('fa-file-pdf');
+					// 		const isText = fileIcon && fileIcon.classList.contains('fa-file-alt');
+							
+					// 		// For viewable files, try to open in new tab, otherwise download
+					// 		if (isImage || isPdf || isText) {
+					// 			// Try to open in new tab first
+					// 			const viewUrl = `/api/drive/v1/files/${fileId}/download`;
+					// 			window.open(viewUrl, '_blank');
+					// 		} else {
+					// 			// For other file types, download directly
+					// 			downloadFile(fileId);
+					// 		}
+					// 	} else {
+					// 		console.warn('File ID not found for file item');
+					// 	}
+					// }
 				});
 
 				// New folder functionality
 				document.getElementById('new-folder-button').addEventListener('click', function() {
 					document.getElementById('new-folder-modal').classList.remove('hidden');
+				});
+
+				// Share file functionality
+				let currentFileIdToShare = null;
+
+				// Share modal event handlers
+				document.getElementById('close-share-modal').addEventListener('click', function() {
+					document.getElementById('share-modal').classList.add('hidden');
+					currentFileIdToShare = null;
+				});
+
+				document.getElementById('cancel-share').addEventListener('click', function() {
+					document.getElementById('share-modal').classList.add('hidden');
+					currentFileIdToShare = null;
+				});
+
+				// Close modal when clicking outside
+				document.getElementById('share-modal').addEventListener('click', function(e) {
+					if (e.target === this) {
+						this.classList.add('hidden');
+						currentFileIdToShare = null;
+					}
+				});
+
+				// Handle share form submission
+				document.getElementById('share-file-form').addEventListener('submit', async function(e) {
+					e.preventDefault();
+					
+					const email = document.getElementById('recipient-email').value.trim();
+					if (!email || !currentFileIdToShare) {
+						alert('Please enter a valid email address');
+						return;
+					}
+
+					const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+					if (!csrfToken) {
+						alert('CSRF token not found');
+						return;
+					}
+
+					try {
+						const response = await fetch(`/api/drive/v1/files/${currentFileIdToShare}/share`, {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'X-Csrf-Token': csrfToken
+							},
+							body: JSON.stringify({
+								email: email
+							})
+						});
+
+						const result = await response.json();
+
+						if (response.ok) {
+							alert('File shared successfully!');
+							document.getElementById('share-modal').classList.add('hidden');
+							document.getElementById('recipient-email').value = '';
+							currentFileIdToShare = null;
+						} else {
+							alert(result.error || 'Failed to share file');
+						}
+					} catch (error) {
+						console.error('Error sharing file:', error);
+						alert('Failed to share file: ' + error.message);
+					}
 				});
 
 				// File upload functionality
@@ -646,7 +694,7 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 						},
 						body: JSON.stringify({
 							name: folderName,
-							mime_type: 'application/vnd.google-apps.folder', // Proper MIME type for folders
+							mime_type: 'application/askfrank.folder', // Proper MIME type for folders
 							parent: currentFolderID // Use current folder as parent
 						})
 					});
@@ -666,8 +714,28 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 					}
 				});
 
-				// File download functionality
+				// File action functionality
 				document.addEventListener('click', async function(e) {
+					// Share button functionality
+					if (e.target.closest('.share-btn')) {
+						e.preventDefault();
+						e.stopPropagation();
+						
+						const shareBtn = e.target.closest('.share-btn');
+						const fileItem = shareBtn.closest('.file-item');
+						const fileId = fileItem.dataset.fileId;
+						
+						if (!fileId) {
+							alert('File ID not found');
+							return;
+						}
+
+						currentFileIdToShare = fileId;
+						document.getElementById('share-modal').classList.remove('hidden');
+						document.getElementById('recipient-email').focus();
+					}
+
+					// File download functionality
 					if (e.target.closest('.download-btn')) {
 						e.preventDefault();
 						e.stopPropagation();
@@ -713,19 +781,10 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 						
 						const deleteBtn = e.target.closest('.delete-btn');
 						const fileItem = deleteBtn.closest('.file-item');
-						const folderItem = deleteBtn.closest('.folder-item');
 						
-						let itemId, itemName, itemType;
-						
-						if (fileItem) {
-							itemId = fileItem.dataset.fileId;
-							itemName = fileItem.querySelector('.text-gray-900, .font-medium').textContent;
-							itemType = 'file';
-						} else if (folderItem) {
-							itemId = folderItem.dataset.folderId;
-							itemName = folderItem.querySelector('.text-gray-900, .font-medium').textContent;
-							itemType = 'folder';
-						}
+						const itemId = fileItem.dataset.fileId;
+						const itemName = fileItem.querySelector('.text-gray-900, .font-medium').textContent;
+						const itemType = 'file';
 						
 						if (!itemId) {
 							alert('Item ID not found');

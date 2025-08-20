@@ -23,3 +23,5 @@ uploads/*
 backups/*
 
 !.gitkeep
+
+*.gz

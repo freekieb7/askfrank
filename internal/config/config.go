@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
+	OpenFGA  OpenFGAConfig
 }
 
 type ServerConfig struct {
@@ -30,11 +31,18 @@ type DatabaseConfig struct {
 	MaxIdleConns int
 }
 
+type OpenFGAConfig struct {
+	APIURL               string
+	APIToken             string
+	StoreID              string
+	AuthorizationModelID string
+}
+
 func NewConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Host:         getEnv("SERVER_HOST", "localhost"),
-			Port:         getEnv("SERVER_PORT", "8080"),
+			Port:         getEnv("SERVER_PORT", "3001"),
 			ReadTimeout:  getEnvDuration("SERVER_READ_TIMEOUT", 10*time.Second),
 			WriteTimeout: getEnvDuration("SERVER_WRITE_TIMEOUT", 10*time.Second),
 			Environment:  getEnv("SERVER_ENVIRONMENT", "development"),
@@ -43,11 +51,17 @@ func NewConfig() *Config {
 			Host:         getEnv("DB_HOST", "localhost"),
 			Port:         getEnvInt("DB_PORT", 5432),
 			User:         getEnv("DB_USER", "postgres"),
-			Password:     getEnv("DB_PASSWORD", "postgres"),
+			Password:     getEnv("DB_PASSWORD", "password"),
 			Name:         getEnv("DB_NAME", "postgres"),
 			SSLMode:      getEnv("DB_SSL_MODE", "disable"),
 			MaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 10),
 			MaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
+		},
+		OpenFGA: OpenFGAConfig{
+			APIURL:               getEnv("OPENFGA_API_URL", "http://localhost:8080"),
+			APIToken:             getEnv("OPENFGA_API_TOKEN", ""),
+			StoreID:              getEnv("OPENFGA_STORE_ID", "01K332MA3TGDVDAPSSSKJKCKGB"),
+			AuthorizationModelID: getEnv("OPENFGA_AUTHORIZATION_MODEL_ID", "01K38HA7G4M0JVJB5PZ6VDH589"),
 		},
 	}
 }
