@@ -3,9 +3,12 @@ package openfga
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
+	openfga "github.com/openfga/go-sdk"
+	"github.com/openfga/go-sdk/client"
 )
 
 // Permission represents an OpenFGA permission check
@@ -32,6 +35,59 @@ func NewAuthorizationService(client *Client) *AuthorizationService {
 	return &AuthorizationService{
 		client: client,
 	}
+}
+
+func (s *AuthorizationService) ListObjectIds(ctx context.Context, perm Permission, pageSize int32) ([]uuid.UUID, error) {
+	// options := client.ClientReadOptions{
+	// 	PageSize:          &pageSize,
+	// 	ContinuationToken: continuationToken,
+	// }
+
+	// res, err := s.client.fga.ListObjects(ctx).Body(client.ClientListObjectsRequest{
+	// 	User:     perm.User,
+	// 	Relation: perm.Relation,
+	// 	Type:     perm.Object,
+	// 	Context:  &map[string]any{"ViewCount": 100},
+	// }).Execute()
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// ids := make([]uuid.UUID, 0)
+	// for _, object := range res.Objects {
+	// 	parts := strings.Split(object, ":")
+	// 	if len(parts) == 2 {
+	// 		id, err := uuid.Parse(parts[1])
+	// 		if err == nil {
+	// 			ids = append(ids, id)
+	// 		}
+	// 	}
+	// }
+
+	res, err := s.client.fga.Read(ctx).Body(client.ClientReadRequest{
+		User:     &perm.User,
+		Relation: openfga.PtrString("reader"),
+		Object:   openfga.PtrString("file:"),
+	}).Execute()
+
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("ListObjectIds", "res", len(res.GetTuples()))
+
+	ids := make([]uuid.UUID, 0)
+	for _, tuple := range res.Tuples {
+		parts := strings.Split(tuple.Key.Object, ":")
+		if len(parts) == 2 {
+			id, err := uuid.Parse(parts[1])
+			if err == nil {
+				ids = append(ids, id)
+			}
+		}
+	}
+
+	return ids, nil
 }
 
 // Check verifies if a user has permission to perform an action on a resource
@@ -106,7 +162,14 @@ func (s *AuthorizationService) RemoveGroupMember(ctx context.Context, groupID, u
 	})
 }
 
-// Checks if a user can view or copy file content
+func (s *AuthorizationService) ListCanReadFiles(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	return s.ListObjectIds(ctx, Permission{
+		User:     fmt.Sprintf("user:%s", userID.String()),
+		Relation: "can_read",
+		Object:   "file",
+	}, 100)
+}
+
 func (s *AuthorizationService) CanReadFile(ctx context.Context, userID, fileID uuid.UUID) (bool, error) {
 	return s.Check(ctx, Permission{
 		User:     fmt.Sprintf("user:%s", userID.String()),
@@ -115,7 +178,6 @@ func (s *AuthorizationService) CanReadFile(ctx context.Context, userID, fileID u
 	})
 }
 
-// Checks if a user can modify file content
 func (s *AuthorizationService) CanWriteFile(ctx context.Context, userID, fileID uuid.UUID) (bool, error) {
 	return s.Check(ctx, Permission{
 		User:     fmt.Sprintf("user:%s", userID.String()),

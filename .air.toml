@@ -21,7 +21,7 @@ bin = "tmp/main"
 # Watch these filename extensions.
 include_ext = ["go", "tpl", "templ", "html"]
 # Ignore these filename extensions or directories.
-exclude_dir = ["assets", "tmp", "vendor", "node_modules", "internal/web/static"]
+exclude_dir = ["assets", "tmp", "vendor", "node_modules", "internal/web/static", "uploads"]
 # Watch these directories if you specified.
 include_dir = []
 # Watch these files.

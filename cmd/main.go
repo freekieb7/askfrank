@@ -41,13 +41,14 @@ func run(ctx context.Context) error {
 		logger.Error("Failed to create OpenFGA client", "error", err)
 		return err
 	}
+	authorization := openfga.NewAuthorizationService(fgaClient)
 
 	translator := i18n.NewTranslator(i18n.NL)
 	if err := translator.LoadTranslations(); err != nil {
 		logger.Error("Failed to load translations", "error", err)
 	}
 
-	db := database.NewDatabase(cfg.Database)
+	db := database.NewDatabase(cfg.Database, logger)
 
 	sessionStore := session.New(session.Config{
 		Expiration: 24 * time.Hour,
@@ -69,7 +70,7 @@ func run(ctx context.Context) error {
 	})
 
 	pageHandler := web.NewPageHandler(logger, translator, sessionStore, db, fgaClient)
-	apiHandler := api.NewApiHandler(db)
+	apiHandler := api.NewApiHandler(authorization, db)
 
 	// Middleware
 	// Enable gzip compression
@@ -126,14 +127,18 @@ func run(ctx context.Context) error {
 	app.Get("/api/health", apiHandler.Healthy)
 	app.All("/api/stripe/webhook", apiHandler.StripeWebhook)
 
-	app.Get("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.ListFiles)                 // List files and folders (supports search query filter).
-	app.Get("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.GetFile)          // Get metadata for a specific file.
-	app.Post("/api/drive/v1/files/:file_id/share", middleware.Authenticated(sessionStore), apiHandler.ShareFile) // Share a file with another user.
-	app.Post("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.CreateFile)               // Create a folder.
-	// app.Patch("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.UpdateFile) // Update metadata.
+	app.Get("/api/auth/v1/authorize", apiHandler.Authorize)     // OAuth2 authorization endpoint
+	app.Post("/api/auth/v1/oauth/token", apiHandler.OAuthToken) // OAuth2 token endpoint
+
+	app.Get("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.ListFiles)                      // List files and folders (supports search query filter).
+	app.Post("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.CreateFile)                    // Create a folder.
+	app.Get("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.GetFile)               // Get metadata for a specific file.
 	app.Delete("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.DeleteFile)         // Permanently delete a file.
 	app.Get("/api/drive/v1/files/:file_id/download", middleware.Authenticated(sessionStore), apiHandler.DownloadFile) // Download a file.
-	app.Post("/api/drive/v1/upload", middleware.Authenticated(sessionStore), apiHandler.UploadFile)                   // Upload a file.
+	app.Post("/api/drive/v1/files/:file_id/share", middleware.Authenticated(sessionStore), apiHandler.ShareFile)      // Share a file with another user.
+
+	// app.Patch("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.UpdateFile) // Update metadata.
+	app.Post("/api/drive/v1/upload", middleware.Authenticated(sessionStore), apiHandler.UploadFile) // Upload a file.
 
 	// GET /drive/v3/files/{fileId}/permissions — List permissions for a file.
 	// POST /drive/v3/files/{fileId}/permissions — Add sharing permissions.

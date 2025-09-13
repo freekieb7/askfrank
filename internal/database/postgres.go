@@ -3,7 +3,9 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hp/internal/config"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -14,9 +16,10 @@ import (
 
 type PostgresDatabase struct {
 	*pgxpool.Pool
+	logger *slog.Logger
 }
 
-func NewDatabase(cfg config.DatabaseConfig) *PostgresDatabase {
+func NewDatabase(cfg config.DatabaseConfig, logger *slog.Logger) *PostgresDatabase {
 	// Construct the connection string
 	dsn := "host=" + cfg.Host +
 		" port=" + strconv.Itoa(cfg.Port) +
@@ -45,6 +48,7 @@ func NewDatabase(cfg config.DatabaseConfig) *PostgresDatabase {
 
 	return &PostgresDatabase{
 		pool,
+		logger,
 	}
 }
 
@@ -219,23 +223,33 @@ func (f File) IsImage() bool {
 }
 
 type GetFilesParams struct {
-	OwnerID  uuid.UUID
-	InFolder uuid.UUID
-	InRoot   bool
+	OwnerID    uuid.UUID
+	InFolder   uuid.UUID
+	InRoot     bool
+	AllowedIDs []uuid.UUID
 }
 
 func (db *PostgresDatabase) GetFiles(ctx context.Context, params GetFilesParams) ([]File, error) {
 	query := `SELECT id, owner_id, parent_id, name, mime_type, s3_key, size_bytes, created_at, updated_at FROM tbl_file WHERE 1 = 1`
 	args := []any{}
+	argNum := 1
+
+	if params.AllowedIDs != nil {
+		query += fmt.Sprintf(" AND id = ANY($%d)", argNum)
+		args = append(args, params.AllowedIDs)
+		argNum++
+	}
 
 	if params.OwnerID != uuid.Nil {
-		query += ` AND owner_id = ?`
+		query += fmt.Sprintf(" AND owner_id = $%d", argNum)
 		args = append(args, params.OwnerID)
+		argNum++
 	}
 
 	if params.InFolder != uuid.Nil {
-		query += ` AND parent_id = ?`
+		query += fmt.Sprintf(" AND parent_id = $%d", argNum)
 		args = append(args, params.InFolder)
+		argNum++
 	}
 
 	if params.InRoot {
@@ -244,6 +258,7 @@ func (db *PostgresDatabase) GetFiles(ctx context.Context, params GetFilesParams)
 
 	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
+		db.logger.Error("Failed to execute query", "error", err, "query", query, "args", args)
 		return nil, err
 	}
 	defer rows.Close()

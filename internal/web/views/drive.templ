@@ -349,7 +349,7 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 					// Handle folder
 					if (isFolder) {
 						// Navigate to folder content - same page navigation
-						window.location.href = `/drive/files/${fileID}`;
+						window.location.href = `/drive/folder/${fileID}`;
 						return;
 					}
 
@@ -399,41 +399,6 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 							alert('Download failed: ' + error.message);
 						});
 					}
-					
-					// if (clickedElement.classList.contains('folder-item')) {
-					// 	// Handle folder navigation
-					// 	const folderId = clickedElement.dataset.folderId;
-					// 	if (folderId && folderId.trim() !== '') {
-					// 		// Navigate to folder content - same page navigation
-					// 		window.location.href = `/drive/files/${folderId}`;
-					// 	} else {
-					// 		console.warn('Folder ID not found for folder item');
-					// 	}
-					// } else if (clickedElement.classList.contains('file-item')) {
-					// 	// Handle file opening
-					// 	const fileId = clickedElement.dataset.fileId;
-					// 	if (fileId && fileId.trim() !== '') {
-					// 		// Get file information from the DOM to determine how to handle it
-					// 		const fileNameElement = clickedElement.querySelector('.font-medium');
-					// 		const fileName = fileNameElement ? fileNameElement.textContent.trim() : 'unknown';
-					// 		const fileIcon = clickedElement.querySelector('i');
-					// 		const isImage = fileIcon && fileIcon.classList.contains('fa-image');
-					// 		const isPdf = fileIcon && fileIcon.classList.contains('fa-file-pdf');
-					// 		const isText = fileIcon && fileIcon.classList.contains('fa-file-alt');
-							
-					// 		// For viewable files, try to open in new tab, otherwise download
-					// 		if (isImage || isPdf || isText) {
-					// 			// Try to open in new tab first
-					// 			const viewUrl = `/api/drive/v1/files/${fileId}/download`;
-					// 			window.open(viewUrl, '_blank');
-					// 		} else {
-					// 			// For other file types, download directly
-					// 			downloadFile(fileId);
-					// 		}
-					// 	} else {
-					// 		console.warn('File ID not found for file item');
-					// 	}
-					// }
 				});
 
 				// New folder functionality
@@ -621,9 +586,9 @@ templ DrivePage(c *fiber.Ctx, t translate.Translate, files []File, breadcrumbs [
 						formData.append('files', file);
 					});
 					
-					// Add current folder ID if we're in a specific folder
-					if (currentFolderID) {
-						formData.append('folder_id', currentFolderID);
+					// Add current file ID if we're in a specific file
+					if (currentFileID) {
+						formData.append('file_id', currentFileID);
 					}
 
 					const response = await fetch('/api/drive/v1/upload', {

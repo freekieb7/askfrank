@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"hp/internal/database"
+	"hp/internal/openfga"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,12 +17,14 @@ import (
 )
 
 type ApiHandler struct {
-	db *database.PostgresDatabase
+	authorization *openfga.AuthorizationService
+	db            *database.PostgresDatabase
 }
 
-func NewApiHandler(db *database.PostgresDatabase) *ApiHandler {
+func NewApiHandler(authorization *openfga.AuthorizationService, db *database.PostgresDatabase) *ApiHandler {
 	return &ApiHandler{
-		db: db,
+		authorization: authorization,
+		db:            db,
 	}
 }
 
@@ -39,6 +43,24 @@ func (h *ApiHandler) Healthy(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":  "healthy",
 		"message": "Service is healthy",
+	})
+}
+
+func (h *ApiHandler) Authorize(c *fiber.Ctx) error {
+	// Handle OAuth2 authorization request
+	// This is a placeholder for actual OAuth2 authorization logic
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Authorization endpoint - to be implemented",
+	})
+}
+
+func (h *ApiHandler) OAuthToken(c *fiber.Ctx) error {
+	// Handle OAuth2 token request
+	// This is a placeholder for actual OAuth2 token logic
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "OAuth token endpoint - to be implemented",
 	})
 }
 
@@ -85,6 +107,18 @@ func (h *ApiHandler) ListFiles(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var params database.GetFilesParams
+
+	fileIDs, err := h.authorization.ListCanReadFiles(c.Context(), userID)
+	if err != nil {
+		slog.Error("Failed to list readable files", "error", err, "user_id", userID)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Failed to list readable files",
+		})
+	}
+	params.AllowedIDs = fileIDs
+
+	log.Println(params.AllowedIDs)
 
 	files, err := h.db.GetFiles(c.Context(), params)
 	if err != nil {
@@ -171,19 +205,33 @@ func (h *ApiHandler) CreateFile(c *fiber.Ctx) error {
 }
 
 func (h *ApiHandler) GetFile(c *fiber.Ctx) error {
-	// userID := c.Locals("user_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
 
-	fileID := c.Params("file_id")
-	if fileID == "" {
+	fileIDStr := c.Params("file_id")
+	if fileIDStr == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status": "error",
 			"error":  "File ID is required",
 		})
 	}
 
-	// todo check permissions
+	fileID, err := uuid.Parse(fileIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": "error",
+			"error":  "Invalid file ID",
+		})
+	}
 
-	file, err := h.db.GetFileByID(c.Context(), uuid.MustParse(fileID), database.GetFileByIDParams{})
+	if ok, err := h.authorization.CanReadFile(c.Context(), userID, fileID); !ok {
+		slog.Error("User does not have permission to read file", "user_id", userID, "file_id", fileID, "error", err)
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"status": "error",
+			"error":  "You do not have permission to read this file",
+		})
+	}
+
+	file, err := h.db.GetFileByID(c.Context(), fileID, database.GetFileByIDParams{})
 	if err != nil {
 		slog.Error("Failed to get file", "error", err, "file_id", fileID)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -225,6 +273,11 @@ func (h *ApiHandler) DeleteFile(c *fiber.Ctx) error {
 		})
 	}
 
+	if err := h.authorization.RemoveFileReader(c.Context(), uuid.Nil, uuid.MustParse(fileID)); err != nil {
+		slog.Error("Failed to remove file reader permission", "error", err, "file_id", fileID)
+		// Not returning error to user since the file deletion was successful
+	}
+
 	return c.JSON(fiber.Map{
 		"status":  "success",
 		"message": "File deleted successfully",
@@ -234,17 +287,17 @@ func (h *ApiHandler) DeleteFile(c *fiber.Ctx) error {
 func (h *ApiHandler) UploadFile(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	// Get folder ID from form data (optional)
-	var folderID uuid.NullUUID
-	if folderIDStr := c.FormValue("folder_id"); folderIDStr != "" {
-		id, err := uuid.Parse(folderIDStr)
+	// Get file ID from form data (optional)
+	var fileID uuid.NullUUID
+	if fileIDStr := c.FormValue("file_id"); fileIDStr != "" {
+		id, err := uuid.Parse(fileIDStr)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status": "error",
-				"error":  "Invalid folder ID",
+				"error":  "Invalid file ID",
 			})
 		}
-		folderID = uuid.NullUUID{Valid: true, UUID: id}
+		fileID = uuid.NullUUID{Valid: true, UUID: id}
 	}
 
 	// Parse multipart form
@@ -298,7 +351,7 @@ func (h *ApiHandler) UploadFile(c *fiber.Ctx) error {
 		// Create file record in database
 		var params database.CreateFileParams
 		params.OwnerID = userID
-		params.ParentID = folderID
+		params.ParentID = fileID
 		params.Name = fileHeader.Filename
 		params.MimeType = mimeType
 		params.S3Key = filePath
@@ -309,6 +362,16 @@ func (h *ApiHandler) UploadFile(c *fiber.Ctx) error {
 			slog.Error("Failed to create file record", "error", err, "filename", fileHeader.Filename)
 			// Try to delete the saved file
 			os.Remove(filePath)
+			continue
+		}
+
+		if err := h.authorization.AddFileReader(c.Context(), userID, file.ID); err != nil {
+			slog.Error("Failed to add file reader permission", "error", err, "user_id", userID, "file_id", file.ID)
+			// Try to delete the saved file and database record
+			os.Remove(filePath)
+			if err := h.db.DeleteFile(c.Context(), file.ID, database.DeleteFileParams{}); err != nil {
+				slog.Error("Failed to delete file record after permission error", "error", err, "file_id", file.ID)
+			}
 			continue
 		}
 
