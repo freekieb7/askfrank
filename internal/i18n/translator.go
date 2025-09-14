@@ -36,8 +36,8 @@ type Translator struct {
 	defaultLang  Language
 }
 
-func NewTranslator(defaultLang Language) *Translator {
-	return &Translator{
+func NewTranslator(defaultLang Language) Translator {
+	return Translator{
 		translations: make(map[Language]Translations),
 		defaultLang:  defaultLang,
 	}

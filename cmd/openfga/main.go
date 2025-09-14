@@ -27,17 +27,17 @@ func main() {
 
 	switch command {
 	case "list-stores":
-		handleListStores(ctx, fgaClient)
+		handleListStores(ctx, &fgaClient)
 	case "create-store":
-		handleCreateStore(ctx, fgaClient, os.Args[2:])
+		handleCreateStore(ctx, &fgaClient, os.Args[2:])
 	case "delete-store":
-		handleDeleteStore(ctx, fgaClient, os.Args[2:])
+		handleDeleteStore(ctx, &fgaClient, os.Args[2:])
 	case "list-models":
-		handleListModels(ctx, fgaClient, os.Args[2:])
+		handleListModels(ctx, &fgaClient, os.Args[2:])
 	case "write-model":
-		handleWriteModel(ctx, fgaClient, os.Args[2:])
+		handleWriteModel(ctx, &fgaClient, os.Args[2:])
 	case "read-model":
-		handleReadModel(ctx, fgaClient, os.Args[2:])
+		handleReadModel(ctx, &fgaClient, os.Args[2:])
 	default:
 		printUsage()
 	}

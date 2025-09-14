@@ -19,8 +19,8 @@ tmp/*
 # Built binaries
 bin/*
 
-uploads/*
-backups/*
+uploads/
+backups/
 
 !.gitkeep
 

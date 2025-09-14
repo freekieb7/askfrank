@@ -23,15 +23,15 @@ func init() {
 }
 
 type PageHandler struct {
-	logger       *slog.Logger
-	translator   *i18n.Translator
-	sessionStore *session.Store
-	db           *database.PostgresDatabase
-	fgaClient    *openfga.Client
+	logger        *slog.Logger
+	translator    *i18n.Translator
+	sessionStore  *session.Store
+	db            *database.PostgresDatabase
+	authorization *openfga.AuthorizationService
 }
 
-func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.PostgresDatabase, fgaClient *openfga.Client) *PageHandler {
-	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, fgaClient: fgaClient}
+func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.PostgresDatabase, authorization *openfga.AuthorizationService) *PageHandler {
+	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, authorization: authorization}
 }
 
 func (h *PageHandler) ShowHomePage(c *fiber.Ctx) error {
@@ -43,9 +43,20 @@ func (h *PageHandler) ShowLoginPage(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Failed to get session")
 	}
+	defer func() {
+		if err := sess.Save(); err != nil {
+			h.logger.Error("Failed to save session", "error", err)
+		}
+	}()
 
 	if sess.Get("user_id") != nil {
 		return c.Redirect("/", fiber.StatusSeeOther) // Redirect if already logged in
+	}
+
+	// Store the return_to query parameter in session for post-login redirection
+	redirectToRaw := c.Query("return_to")
+	if redirectToRaw != "" {
+		sess.Set("redirect_to", redirectToRaw)
 	}
 
 	return render(c, views.LoginPage(c, h.translate))
@@ -97,13 +108,28 @@ func (h *PageHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
+	// Regenerate session ID to prevent fixation
+	if err := sess.Regenerate(); err != nil {
+		h.logger.Error("Failed to regenerate session ID", "error", err)
+		// Continue, but log
+	}
 	// Set user ID in session
 	sess.Set("user_id", user.ID)
+
+	// Redirect to the originally requested page or home
+	redirectTo := "/"
+	if redirectRaw := sess.Get("redirect_to"); redirectRaw != nil {
+		if redirectStr, ok := redirectRaw.(string); ok && redirectStr != "" {
+			redirectTo = redirectStr
+		}
+		// Clear the redirect_to after using it
+		sess.Delete("redirect_to")
+	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":   "success",
 		"message":  "Login successful! Redirecting...",
-		"redirect": "/",
+		"redirect": redirectTo,
 	})
 }
 
@@ -271,11 +297,11 @@ func (h *PageHandler) UpdateBilling(c *fiber.Ctx) error {
 func (h *PageHandler) ShowMyDrivePage(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	var params database.GetFilesParams
+	var params database.RetrieveFileListParams
 	params.OwnerID = userID
-	params.InRoot = true
+	params.InFolder = uuid.Nil // Root folder
 
-	files, err := h.db.GetFiles(c.Context(), params)
+	files, err := h.db.RetrieveFileList(c.Context(), params)
 	if err != nil {
 		h.logger.Error("Failed to get files for folder", "error", err, "params", params)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -335,12 +361,11 @@ func (h *PageHandler) ShowMyDrivePage(c *fiber.Ctx) error {
 func (h *PageHandler) ShowSharedFilePage(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
-	var params database.GetSharedFilesParams
-	params.UserID = userID
-
-	sharedFiles, err := h.db.GetSharedFiles(c.Context(), params)
+	sharedFiles, err := h.db.RetrieveSharedFiles(c.Context(), database.RetrieveSharedFilesParams{
+		UserID: userID,
+	})
 	if err != nil {
-		h.logger.Error("Failed to get files for folder", "error", err, "params", params)
+		h.logger.Error("Failed to get files for folder", "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to load files for folder",
 		})
@@ -368,31 +393,29 @@ func (h *PageHandler) ShowSharedFilePage(c *fiber.Ctx) error {
 	return render(c, views.DrivePage(c, h.translate, viewFiles, breadcrumbs, currentFileID))
 }
 
-func (h *PageHandler) ShowRecentFilePage(c *fiber.Ctx) error {
-	// For now, return empty files list for recent files
-	// TODO: Implement GetRecentFiles in database layer
-	viewFiles := make([]views.File, 0)
-	breadcrumbs := make([]views.Breadcrumb, 0)
-
-	// Add a breadcrumb to indicate this is recent files
-	breadcrumbs = append(breadcrumbs, views.Breadcrumb{
-		Name: "Recent Files",
-		URL:  "/drive/recent",
-	})
-
-	return render(c, views.DrivePage(c, h.translate, viewFiles, breadcrumbs, ""))
-}
-
 func (h *PageHandler) ShowFolderPage(c *fiber.Ctx) error {
-	// userID := c.Locals("user_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
 
 	folderIDStr := c.Params("folder_id")
 	folderID := uuid.MustParse(folderIDStr)
 
-	var params database.GetFilesParams
+	ok, err := h.authorization.CanReadFile(c.Context(), userID, folderID)
+	if err != nil {
+		h.logger.Error("Authorization check failed", "error", err, "user_id", userID, "folder_id", folderID)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permissions",
+		})
+	}
+	if !ok {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "You do not have permission to access this folder",
+		})
+	}
+
+	var params database.RetrieveFileListParams
 	params.InFolder = folderID
 
-	files, err := h.db.GetFiles(c.Context(), params)
+	files, err := h.db.RetrieveFileList(c.Context(), params)
 	if err != nil {
 		h.logger.Error("Failed to get files for folder", "error", err, "params", params)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

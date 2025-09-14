@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"hp/internal/api"
 	"hp/internal/config"
+	"hp/internal/daemon"
 	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/middleware"
@@ -30,6 +32,16 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+
+	sigChan := make(chan os.Signal, 1)                                    // Create channel to signify a signal being sent
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM) // When an interrupt or termination signal is sent, notify the channel
+	go func() {
+		sig := <-sigChan
+		fmt.Println("Received signal:", sig)
+		cancel()
+	}()
+
 	cfg := config.NewConfig()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -41,14 +53,19 @@ func run(ctx context.Context) error {
 		logger.Error("Failed to create OpenFGA client", "error", err)
 		return err
 	}
-	authorization := openfga.NewAuthorizationService(fgaClient)
+	authorization := openfga.NewAuthorizationService(&fgaClient)
 
 	translator := i18n.NewTranslator(i18n.NL)
 	if err := translator.LoadTranslations(); err != nil {
 		logger.Error("Failed to load translations", "error", err)
 	}
 
-	db := database.NewDatabase(cfg.Database, logger)
+	db := database.NewPostgresDatabase(logger)
+	if err := db.Init(cfg.Database); err != nil {
+		logger.Error("Failed to initialize database", "error", err)
+		return err
+	}
+	defer db.Close()
 
 	sessionStore := session.New(session.Config{
 		Expiration: 24 * time.Hour,
@@ -69,8 +86,8 @@ func run(ctx context.Context) error {
 		WriteTimeout: cfg.Server.WriteTimeout,
 	})
 
-	pageHandler := web.NewPageHandler(logger, translator, sessionStore, db, fgaClient)
-	apiHandler := api.NewApiHandler(authorization, db)
+	pageHandler := web.NewPageHandler(logger, &translator, sessionStore, &db, &authorization)
+	apiHandler := api.NewApiHandler(logger, &authorization, &db, sessionStore)
 
 	// Middleware
 	// Enable gzip compression
@@ -85,7 +102,8 @@ func run(ctx context.Context) error {
 	// app.Use(middleware.RequestID())
 	// app.Use(middleware.CORS())
 	app.Use(middleware.Localization())
-	app.Use(csrf.New(csrf.Config{
+
+	csrfMiddleware := csrf.New(csrf.Config{
 		KeyLookup:         "header:X-Csrf-Token",
 		CookieName:        "hp-csrf_",
 		CookieSameSite:    "Lax",
@@ -97,7 +115,24 @@ func run(ctx context.Context) error {
 		Session:           sessionStore,
 		SessionKey:        "fiber.csrf.token",
 		ContextKey:        "csrf_token",
-	}))
+	})
+
+	// Routes
+	app.Get("/", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.ShowHomePage)
+	app.Get("/billing", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.ShowBillingPage)
+	app.Post("/billing/update", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.UpdateBilling)
+	app.Get("/drive", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.ShowMyDrivePage)
+	app.Get("/drive/shared", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.ShowSharedFilePage)
+	// app.Get("/drive/recent", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.ShowRecentFilePage)
+	app.Get("/drive/folder/:folder_id", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.ShowFolderPage)
+
+	app.Get("/login", csrfMiddleware, pageHandler.ShowLoginPage)
+	app.Post("/login", csrfMiddleware, pageHandler.Login)
+
+	app.Post("/logout", csrfMiddleware, middleware.AuthenticatedSession(sessionStore), pageHandler.Logout)
+
+	app.Get("/register", csrfMiddleware, pageHandler.ShowRegisterPage)
+	app.Post("/register", csrfMiddleware, pageHandler.Register)
 
 	// Static file serving with compression and caching
 	app.Static("/static", "./internal/web/static", fiber.Static{
@@ -107,38 +142,26 @@ func run(ctx context.Context) error {
 		MaxAge:    3600, // 1 hour cache
 	})
 
-	// Routes
-	app.Get("/", middleware.Authenticated(sessionStore), pageHandler.ShowHomePage)
-	app.Get("/billing", middleware.Authenticated(sessionStore), pageHandler.ShowBillingPage)
-	app.Post("/billing/update", middleware.Authenticated(sessionStore), pageHandler.UpdateBilling)
-	app.Get("/drive", middleware.Authenticated(sessionStore), pageHandler.ShowMyDrivePage)
-	app.Get("/drive/shared", middleware.Authenticated(sessionStore), pageHandler.ShowSharedFilePage)
-	app.Get("/drive/recent", middleware.Authenticated(sessionStore), pageHandler.ShowRecentFilePage)
-	app.Get("/drive/folder/:folder_id", middleware.Authenticated(sessionStore), pageHandler.ShowFolderPage)
-
-	app.Get("/login", pageHandler.ShowLoginPage)
-	app.Post("/login", pageHandler.Login)
-
-	app.Post("/logout", pageHandler.Logout)
-
-	app.Get("/register", pageHandler.ShowRegisterPage)
-	app.Post("/register", pageHandler.Register)
-
 	app.Get("/api/health", apiHandler.Healthy)
 	app.All("/api/stripe/webhook", apiHandler.StripeWebhook)
 
 	app.Get("/api/auth/v1/authorize", apiHandler.Authorize)     // OAuth2 authorization endpoint
 	app.Post("/api/auth/v1/oauth/token", apiHandler.OAuthToken) // OAuth2 token endpoint
 
-	app.Get("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.ListFiles)                      // List files and folders (supports search query filter).
-	app.Post("/api/drive/v1/files", middleware.Authenticated(sessionStore), apiHandler.CreateFile)                    // Create a folder.
-	app.Get("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.GetFile)               // Get metadata for a specific file.
-	app.Delete("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.DeleteFile)         // Permanently delete a file.
-	app.Get("/api/drive/v1/files/:file_id/download", middleware.Authenticated(sessionStore), apiHandler.DownloadFile) // Download a file.
-	app.Post("/api/drive/v1/files/:file_id/share", middleware.Authenticated(sessionStore), apiHandler.ShareFile)      // Share a file with another user.
+	app.Get("/api/auth/v1/clients", middleware.AuthenticatedToken(&db), apiHandler.ListClients)
+	app.Post("/api/auth/v1/clients", middleware.AuthenticatedToken(&db), apiHandler.CreateClient)
+	app.Get("/api/auth/v1/clients/:client_id", middleware.AuthenticatedToken(&db), apiHandler.GetClient)
+	app.Delete("/api/auth/v1/clients/:client_id", middleware.AuthenticatedToken(&db), apiHandler.DeleteClient)
 
-	// app.Patch("/api/drive/v1/files/:file_id", middleware.Authenticated(sessionStore), apiHandler.UpdateFile) // Update metadata.
-	app.Post("/api/drive/v1/upload", middleware.Authenticated(sessionStore), apiHandler.UploadFile) // Upload a file.
+	app.Get("/api/drive/v1/files", middleware.AuthenticatedToken(&db), apiHandler.ListFiles)                      // List files and folders (supports search query filter).
+	app.Post("/api/drive/v1/files", middleware.AuthenticatedToken(&db), apiHandler.CreateFile)                    // Create a folder.
+	app.Get("/api/drive/v1/files/:file_id", middleware.AuthenticatedToken(&db), apiHandler.GetFile)               // Get metadata for a specific file.
+	app.Delete("/api/drive/v1/files/:file_id", middleware.AuthenticatedToken(&db), apiHandler.DeleteFile)         // Permanently delete a file.
+	app.Get("/api/drive/v1/files/:file_id/download", middleware.AuthenticatedToken(&db), apiHandler.DownloadFile) // Download a file.
+	app.Post("/api/drive/v1/files/:file_id/share", middleware.AuthenticatedToken(&db), apiHandler.ShareFile)      // Share a file with another user.
+
+	// app.Patch("/api/drive/v1/files/:file_id", middleware.AuthenticatedToken(&db), apiHandler.UpdateFile) // Update metadata.
+	app.Post("/api/drive/v1/upload", middleware.AuthenticatedToken(&db), apiHandler.UploadFile) // Upload a file.
 
 	// GET /drive/v3/files/{fileId}/permissions — List permissions for a file.
 	// POST /drive/v3/files/{fileId}/permissions — Add sharing permissions.
@@ -174,10 +197,18 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	c := make(chan os.Signal, 1)                    // Create channel to signify a signal being sent
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM) // When an interrupt or termination signal is sent, notify the channel
+	manager := daemon.NewDaemonManager()
+	manager.Add("cleanup", daemon.CleanupTask(&db, logger))
 
-	<-c // This blocks the main thread until an interrupt is received
+	fmt.Println("Starting supervised daemons...")
+	manager.Start(ctx)
+
+	go func() {
+		manager.Wait()
+		fmt.Println("All daemons stopped")
+	}()
+
+	<-sigChan // This blocks the main thread until an interrupt is received
 	err = app.Shutdown()
 	if err != nil {
 		slog.Error("Error shutting down", "error", err)

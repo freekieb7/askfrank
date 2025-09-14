@@ -38,8 +38,8 @@ type OpenFGAConfig struct {
 	AuthorizationModelID string
 }
 
-func NewConfig() *Config {
-	return &Config{
+func NewConfig() Config {
+	return Config{
 		Server: ServerConfig{
 			Host:         getEnv("SERVER_HOST", "localhost"),
 			Port:         getEnv("SERVER_PORT", "3001"),

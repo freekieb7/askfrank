@@ -3,11 +3,9 @@ package openfga
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
-	openfga "github.com/openfga/go-sdk"
 	"github.com/openfga/go-sdk/client"
 )
 
@@ -31,8 +29,8 @@ type AuthorizationService struct {
 }
 
 // NewAuthorizationService creates a new authorization service
-func NewAuthorizationService(client *Client) *AuthorizationService {
-	return &AuthorizationService{
+func NewAuthorizationService(client *Client) AuthorizationService {
+	return AuthorizationService{
 		client: client,
 	}
 }
@@ -43,42 +41,19 @@ func (s *AuthorizationService) ListObjectIds(ctx context.Context, perm Permissio
 	// 	ContinuationToken: continuationToken,
 	// }
 
-	// res, err := s.client.fga.ListObjects(ctx).Body(client.ClientListObjectsRequest{
-	// 	User:     perm.User,
-	// 	Relation: perm.Relation,
-	// 	Type:     perm.Object,
-	// 	Context:  &map[string]any{"ViewCount": 100},
-	// }).Execute()
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// ids := make([]uuid.UUID, 0)
-	// for _, object := range res.Objects {
-	// 	parts := strings.Split(object, ":")
-	// 	if len(parts) == 2 {
-	// 		id, err := uuid.Parse(parts[1])
-	// 		if err == nil {
-	// 			ids = append(ids, id)
-	// 		}
-	// 	}
-	// }
-
-	res, err := s.client.fga.Read(ctx).Body(client.ClientReadRequest{
-		User:     &perm.User,
-		Relation: openfga.PtrString("reader"),
-		Object:   openfga.PtrString("file:"),
+	res, err := s.client.fga.ListObjects(ctx).Body(client.ClientListObjectsRequest{
+		User:     perm.User,
+		Relation: perm.Relation,
+		Type:     perm.Object,
+		Context:  &map[string]any{"ViewCount": 100},
 	}).Execute()
-
 	if err != nil {
 		return nil, err
 	}
 
-	slog.Info("ListObjectIds", "res", len(res.GetTuples()))
-
 	ids := make([]uuid.UUID, 0)
-	for _, tuple := range res.Tuples {
-		parts := strings.Split(tuple.Key.Object, ":")
+	for _, object := range res.Objects {
+		parts := strings.Split(object, ":")
 		if len(parts) == 2 {
 			id, err := uuid.Parse(parts[1])
 			if err == nil {
@@ -86,6 +61,29 @@ func (s *AuthorizationService) ListObjectIds(ctx context.Context, perm Permissio
 			}
 		}
 	}
+
+	// res, err := s.client.fga.Read(ctx).Body(client.ClientReadRequest{
+	// 	User:     &perm.User,
+	// 	Relation: openfga.PtrString("reader"),
+	// 	Object:   openfga.PtrString("file:"),
+	// }).Execute()
+
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// slog.Info("ListObjectIds", "res", len(res.GetTuples()))
+
+	// ids := make([]uuid.UUID, 0)
+	// for _, tuple := range res.Tuples {
+	// 	parts := strings.Split(tuple.Key.Object, ":")
+	// 	if len(parts) == 2 {
+	// 		id, err := uuid.Parse(parts[1])
+	// 		if err == nil {
+	// 			ids = append(ids, id)
+	// 		}
+	// 	}
+	// }
 
 	return ids, nil
 }

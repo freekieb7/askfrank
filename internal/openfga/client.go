@@ -9,18 +9,20 @@ import (
 	"os"
 
 	openfga "github.com/openfga/go-sdk"
-	"github.com/openfga/go-sdk/client"
+	openfgaClient "github.com/openfga/go-sdk/client"
 )
 
 // Client wraps OpenFGA client with AskFrank-specific methods
 type Client struct {
-	fga *client.OpenFgaClient
+	fga *openfgaClient.OpenFgaClient
 }
 
 // NewClient creates a new OpenFGA client following AskFrank security patterns
-func NewClient(cfg config.OpenFGAConfig) (*Client, error) {
+func NewClient(cfg config.OpenFGAConfig) (Client, error) {
+	var client Client
+
 	// Configure OpenFGA client
-	fgaClient, err := client.NewSdkClient(&client.ClientConfiguration{
+	fgaClient, err := openfgaClient.NewSdkClient(&openfgaClient.ClientConfiguration{
 		ApiUrl:               cfg.APIURL,
 		StoreId:              cfg.StoreID,
 		AuthorizationModelId: cfg.AuthorizationModelID,
@@ -33,19 +35,17 @@ func NewClient(cfg config.OpenFGAConfig) (*Client, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OpenFGA client: %w", err)
+		return client, fmt.Errorf("failed to create OpenFGA client: %w", err)
 	}
 
-	c := &Client{
-		fga: fgaClient,
-	}
+	client.fga = fgaClient
 
-	return c, nil
+	return client, nil
 }
 
 // CheckPermission checks if a user has a specific permission on an object
 func (c *Client) CheckPermission(ctx context.Context, userType, userID, relation, objectType, objectID string) (bool, error) {
-	body := client.ClientCheckRequest{
+	body := openfgaClient.ClientCheckRequest{
 		User:     fmt.Sprintf("%s:%s", userType, userID),
 		Relation: relation,
 		Object:   fmt.Sprintf("%s:%s", objectType, objectID),
@@ -73,8 +73,8 @@ func (c *Client) CheckPermission(ctx context.Context, userType, userID, relation
 
 // WriteTuple creates a relationship tuple in OpenFGA
 func (c *Client) WriteTuple(ctx context.Context, userID, relation, objectType, objectID string) error {
-	body := client.ClientWriteRequest{
-		Writes: []client.ClientTupleKey{
+	body := openfgaClient.ClientWriteRequest{
+		Writes: []openfgaClient.ClientTupleKey{
 			{
 				User:     fmt.Sprintf("user:%s", userID),
 				Relation: relation,
@@ -103,8 +103,8 @@ func (c *Client) WriteTuple(ctx context.Context, userID, relation, objectType, o
 
 // DeleteTuple removes a relationship tuple from OpenFGA
 func (c *Client) DeleteTuple(ctx context.Context, userType, userID, relation, objectType, objectID string) error {
-	body := client.ClientWriteRequest{
-		Deletes: []client.ClientTupleKeyWithoutCondition{
+	body := openfgaClient.ClientWriteRequest{
+		Deletes: []openfgaClient.ClientTupleKeyWithoutCondition{
 			{
 				User:     fmt.Sprintf("%s:%s", userType, userID),
 				Relation: relation,
@@ -141,7 +141,7 @@ func (c *Client) ListStores(ctx context.Context) ([]openfga.Store, error) {
 }
 
 func (c *Client) CreateStore(ctx context.Context, name string) (string, error) {
-	body := client.ClientCreateStoreRequest{
+	body := openfgaClient.ClientCreateStoreRequest{
 		Name: name,
 	}
 
