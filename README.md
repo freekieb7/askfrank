@@ -5,6 +5,31 @@ Required for developers:
 - sudo apt install npm
 - npm install tailwindcss @tailwindcss/cli
 
+## TODO
+
+- Registration protection
+- Email verification after registering
+- Multi factor authentication
+- Calendar
+- Meetings
+- Chats
+- Notifications
+- OAuth clients
+- error handling client side
+<!-- // Add this in the catch block after console.error
+if (systemMessage && window.location.hostname !== 'localhost') {
+    // Send to your error reporting service
+    fetch('/api/log-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            error: systemMessage,
+            context: 'login_form',
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent
+        })
+    }).catch(() => {}); // Silently fail if logging fails
+} -->
 ## Database Migrations
 
 This project includes a powerful migration CLI tool built with **pgxpool** for managing database schema changes safely and efficiently.

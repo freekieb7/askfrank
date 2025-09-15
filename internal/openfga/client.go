@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hp/internal/config"
 	"log/slog"
 	"os"
 
@@ -18,30 +17,30 @@ type Client struct {
 }
 
 // NewClient creates a new OpenFGA client following AskFrank security patterns
-func NewClient(cfg config.OpenFGAConfig) (Client, error) {
-	var client Client
+// func NewClient(cfg config.OpenFGAConfig) (Client, error) {
+// 	var client Client
 
-	// Configure OpenFGA client
-	fgaClient, err := openfgaClient.NewSdkClient(&openfgaClient.ClientConfiguration{
-		ApiUrl:               cfg.APIURL,
-		StoreId:              cfg.StoreID,
-		AuthorizationModelId: cfg.AuthorizationModelID,
-		// Credentials: &credentials.Credentials{
-		// 	Method: credentials.CredentialsMethodApiToken,
-		// 	Config: &credentials.Config{
-		// 		ApiToken: cfg.APIToken,
-		// 	},
-		// },
-	})
+// 	// Configure OpenFGA client
+// 	fgaClient, err := openfgaClient.NewSdkClient(&openfgaClient.ClientConfiguration{
+// 		ApiUrl:               cfg.APIURL,
+// 		StoreId:              cfg.StoreID,
+// 		AuthorizationModelId: cfg.AuthorizationModelID,
+// 		// Credentials: &credentials.Credentials{
+// 		// 	Method: credentials.CredentialsMethodApiToken,
+// 		// 	Config: &credentials.Config{
+// 		// 		ApiToken: cfg.APIToken,
+// 		// 	},
+// 		// },
+// 	})
 
-	if err != nil {
-		return client, fmt.Errorf("failed to create OpenFGA client: %w", err)
-	}
+// 	if err != nil {
+// 		return client, fmt.Errorf("failed to create OpenFGA client: %w", err)
+// 	}
 
-	client.fga = fgaClient
+// 	client.fga = fgaClient
 
-	return client, nil
-}
+// 	return client, nil
+// }
 
 // CheckPermission checks if a user has a specific permission on an object
 func (c *Client) CheckPermission(ctx context.Context, userType, userID, relation, objectType, objectID string) (bool, error) {

@@ -5,11 +5,7 @@ import (
 	"encoding/base64"
 )
 
-type Optional[T any] struct {
-	Value T
-	Some  bool
-}
-
+// RandomString generates a secure random string of the specified length.
 func RandomString(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {

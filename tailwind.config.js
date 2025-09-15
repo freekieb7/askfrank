@@ -1,10 +1,10 @@
 module.exports = {
+    darkMode: 'media', // Enable media-based dark mode
     content: [
-        "./internal/web/**/*.templ",  // Your templ components
-        "./internal/web/**/*.go",     // Go handlers if they include inline HTML
-        "./internal/web/**/*.html",   // Any HTML files
+        "./internal/web/views/**/*.{html,js,templ}",
+        "./internal/web/static/**/*.{html,js}",
+        // Add other paths as needed
     ],
-    darkMode: 'class', // Enable class-based dark mode
     safelist: [
         // Ensure dark mode classes are included
         'dark:bg-gray-900',

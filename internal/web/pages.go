@@ -1,20 +1,30 @@
 package web
 
 import (
+	"context"
 	"encoding/gob"
+	"encoding/json"
+	"fmt"
+	"hp/internal/config"
 	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/openfga"
+	"hp/internal/session"
+	"hp/internal/stripe"
+	"hp/internal/util"
+	"hp/internal/web/translate"
 	"hp/internal/web/views"
-	"log"
+	"hp/internal/web/views/component"
+	"io"
 	"log/slog"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/a-h/templ"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/google/uuid"
-	"github.com/stripe/stripe-go/v82"
-	stripeSession "github.com/stripe/stripe-go/v82/checkout/session"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -26,286 +36,445 @@ type PageHandler struct {
 	logger        *slog.Logger
 	translator    *i18n.Translator
 	sessionStore  *session.Store
-	db            *database.PostgresDatabase
+	db            *database.Database
 	authorization *openfga.AuthorizationService
+	stripe        *stripe.Client
 }
 
-func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.PostgresDatabase, authorization *openfga.AuthorizationService) *PageHandler {
-	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, authorization: authorization}
+func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, stripe *stripe.Client) *PageHandler {
+	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, stripe: stripe}
 }
 
-func (h *PageHandler) ShowHomePage(c *fiber.Ctx) error {
-	return render(c, views.HomePage(c, h.translate))
+func (h *PageHandler) layoutProps(ctx context.Context, title string) component.LayoutProps {
+	lang := ctx.Value(config.LanguageContextKey).(i18n.Language)
+	translator := translate.Translator{
+		Translator: h.translator,
+		Language:   lang,
+	}
+	CSRFToken := ctx.Value(config.CSRFTokenContextKey).(string)
+
+	return component.LayoutProps{
+		Title:      title,
+		Translator: translator,
+		CSRFToken:  CSRFToken,
+		// Description: "Your healthcare platform",
+		// Keywords:    []string{"healthcare", "platform", "askfrank"},
+	}
 }
 
-func (h *PageHandler) ShowLoginPage(c *fiber.Ctx) error {
-	sess, err := h.sessionStore.Get(c)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString("Failed to get session")
+func (h *PageHandler) appLayoutProps(layoutProps component.LayoutProps, r *http.Request) component.AppLayoutProps {
+	// userID := c.Locals("user_id").(uuid.UUID)
+	return component.AppLayoutProps{
+		LayoutProps: layoutProps,
+		MenuItems: []component.MenuItem{
+			{Name: "Home", URL: "/", Icon: "fas fa-home", Active: r.URL.Path == "/"},
+			{Name: "Calendar", URL: "/calendar", Icon: "fas fa-calendar", Active: strings.HasPrefix(r.URL.Path, "/calendar")},
+			{Name: "Drive", URL: "/drive", Icon: "fas fa-folder", Active: strings.HasPrefix(r.URL.Path, "/drive"), SubItems: []component.MenuItem{
+				{Name: "My Drive", URL: "/drive", Icon: "fas fa-folder", Active: r.URL.Path == "/drive"},
+				{Name: "Shared with Me", URL: "/drive/shared", Icon: "fas fa-folder-open", Active: strings.HasPrefix(r.URL.Path, "/drive/shared")},
+			}},
+			{Name: "Meetings", URL: "/meetings", Icon: "fas fa-video", Active: strings.HasPrefix(r.URL.Path, "/meetings")},
+			{Name: "Billing", URL: "/billing", Icon: "fas fa-credit-card", Active: strings.HasPrefix(r.URL.Path, "/billing")},
+			{Name: "Developers", URL: "/developers", Icon: "fas fa-code", Active: strings.HasPrefix(r.URL.Path, "/developers"), SubItems: []component.MenuItem{
+				// {Name: "API Documentation", URL: "/developers", Icon: "fas fa-book", Active: c.Path() == "/developers"},
+				{Name: "Clients", URL: "/developers/clients", Icon: "fas fa-laptop-code", Active: strings.HasPrefix(r.URL.Path, "/developers/clients")},
+				{Name: "Webhooks", URL: "/developers/webhooks", Icon: "fas fa-rss", Active: strings.HasPrefix(r.URL.Path, "/developers/webhooks")},
+				{Name: "Logs", URL: "/developers/logs", Icon: "fas fa-file-alt", Active: strings.HasPrefix(r.URL.Path, "/developers/logs")},
+			}},
+		},
 	}
-	defer func() {
-		if err := sess.Save(); err != nil {
-			h.logger.Error("Failed to save session", "error", err)
-		}
-	}()
-
-	if sess.Get("user_id") != nil {
-		return c.Redirect("/", fiber.StatusSeeOther) // Redirect if already logged in
-	}
-
-	// Store the return_to query parameter in session for post-login redirection
-	redirectToRaw := c.Query("return_to")
-	if redirectToRaw != "" {
-		sess.Set("redirect_to", redirectToRaw)
-	}
-
-	return render(c, views.LoginPage(c, h.translate))
 }
 
-func (h *PageHandler) Login(c *fiber.Ctx) error {
-	sess, err := h.sessionStore.Get(c)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString("Failed to get session")
-	}
-	defer func() {
-		if err := sess.Save(); err != nil {
-			h.logger.Error("Failed to save session", "error", err)
-		}
-	}()
-
-	// Get form data
-	email := c.FormValue("email")
-	password := c.FormValue("password")
-
-	// Basic validation
-	if email == "" || password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Email and password are required",
+func (h *PageHandler) ShowHomePage(w http.ResponseWriter, r *http.Request) error {
+	// Due to default muxing, simplest way to check if page exists
+	if r.URL.Path != "/" {
+		return JSONResponse(w, http.StatusNotFound, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Not Found",
 		})
 	}
 
-	var params database.RetrieveUserParams
-	params.Email = email
+	ctx := r.Context()
+	return render(ctx, w, views.HomePage(views.HomePageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Home"), r),
+	}))
+}
 
-	user, err := h.db.RetrieveUser(c.Context(), params)
+func (h *PageHandler) ShowLoginPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
+	}
+	defer func() {
+		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
+			h.logger.Error("Failed to save session", "error", err)
+		}
+	}()
+
+	if sess.UserID.Some {
+		return Redirect(w, r, "/", http.StatusSeeOther) // Redirect if already logged in
+	}
+
+	// Store the return_to query parameter in session for post-login redirection
+	redirectToRaw := r.URL.Query().Get("return_to")
+	if redirectToRaw != "" {
+		sess.Data["redirect_to"] = redirectToRaw
+	}
+
+	return render(ctx, w, views.LoginPage(views.LoginPageProps{
+		LayoutProps: h.layoutProps(ctx, "Login"),
+	}))
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to get session",
+		})
+	}
+	defer func() {
+		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
+			h.logger.Error("Failed to save session", "error", err)
+		}
+	}()
+
+	// Get JSON data
+	var loginReq LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&loginReq); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request payload",
+		})
+	}
+
+	// Basic validation
+	if loginReq.Email == "" || loginReq.Password == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Email and password are required",
+		})
+	}
+
+	user, err := h.db.GetUserByEmail(ctx, loginReq.Email)
 	if err != nil {
 		if err == database.ErrUserNotFound {
-			h.logger.Warn("Login attempt with non-existing user", "email", email)
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid email or password",
+			h.logger.Warn("Login attempt with non-existing user", "email", loginReq.Email)
+			return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Invalid email or password",
 			})
 		}
 
 		h.logger.Error("Failed to get user by email", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Something went wrong, please try again later",
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to get user by email",
 		})
 	}
 
-	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(password)); err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid email or password",
+	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(loginReq.Password)); err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid email or password",
 		})
 	}
 
-	// Regenerate session ID to prevent fixation
-	if err := sess.Regenerate(); err != nil {
-		h.logger.Error("Failed to regenerate session ID", "error", err)
-		// Continue, but log
-	}
+	// Regenerate session ID to prevent fixation TODO look into this
+	// if err := sess.Regenerate(); err != nil {
+	// 	h.logger.Error("Failed to regenerate session ID", "error", err)
+	// 	// Continue, but log
+	// }
 	// Set user ID in session
-	sess.Set("user_id", user.ID)
+	sess.UserID = util.Some(user.ID)
 
 	// Redirect to the originally requested page or home
 	redirectTo := "/"
-	if redirectRaw := sess.Get("redirect_to"); redirectRaw != nil {
-		if redirectStr, ok := redirectRaw.(string); ok && redirectStr != "" {
-			redirectTo = redirectStr
-		}
+
+	if sess.Data["redirect_to"] != nil {
+		redirectTo = sess.Data["redirect_to"].(string)
 		// Clear the redirect_to after using it
-		sess.Delete("redirect_to")
+		delete(sess.Data, "redirect_to")
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":   "success",
-		"message":  "Login successful! Redirecting...",
-		"redirect": redirectTo,
+	// eventData, err := json.Marshal(map[string]any{
+	// 	"ip_address": c.IP(),
+	// 	"timestamp":  time.Now().UTC().Format(time.RFC3339),
+	// 	"user_agent": c.Get("User-Agent"),
+	// })
+	// if err != nil {
+	// 	h.logger.Error("Failed to marshal event data", "error", err)
+	// 	return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+	// 		Status:  APIResponseStatusError,
+	// 		Message: "Failed to marshal event data",
+	// 	})
+	// }
+
+	// h.db.CreateAuditLogEvent(ctx, database.CreateAuditLogEventParams{
+	// 	OwnerID:   user.ID,
+	// 	EventType: "login",
+	// 	EventData: database.AuditLogEventChange{
+	// 		Key:      "login.v1",
+	// 		OldValue: util.None[[]byte](),
+	// 		NewValue: util.Some(eventData),
+	// 	},
+	// 	CreatedAt: time.Now(),
+	// })
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Login successful! Redirecting...",
+		Data: map[string]string{
+			"redirect_to": redirectTo,
+		},
 	})
 }
 
-func (h *PageHandler) Logout(c *fiber.Ctx) error {
-	sess, err := h.sessionStore.Get(c)
+func (h *PageHandler) Logout(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	sess, err := h.sessionStore.Get(ctx, r)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString("Failed to get session")
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to get session",
+		})
 	}
 	defer func() {
-		if err := sess.Save(); err != nil {
+		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
 			h.logger.Error("Failed to save session", "error", err)
 		}
 	}()
 
-	if err := sess.Destroy(); err != nil {
+	if err := h.sessionStore.Destroy(ctx, w, r); err != nil {
 		h.logger.Error("Failed to destroy session", "error", err)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":   "success",
-		"message":  "Logout successful! Continue to login.",
-		"redirect": "/login",
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Logout successful! Continue to login.",
+		Data: map[string]any{
+			"redirect_to": "/login",
+		},
 	})
 }
 
-func (h *PageHandler) ShowRegisterPage(c *fiber.Ctx) error {
-	return render(c, views.RegisterPage(c, h.translate))
+func (h *PageHandler) ShowRegisterPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	return render(ctx, w, views.RegisterPage(views.RegisterPageProps{
+		LayoutProps: h.layoutProps(ctx, "Register"),
+	}))
 }
 
-func (h *PageHandler) Register(c *fiber.Ctx) error {
-	sess, err := h.sessionStore.Get(c)
+type RegisterRequest struct {
+	Name          string `json:"name"`
+	Email         string `json:"email"`
+	Password      string `json:"password"`
+	TermsAccepted bool   `json:"terms_accepted"`
+}
+
+func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	sess, err := h.sessionStore.Get(ctx, r)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString("Failed to get session")
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to get session",
+		})
 	}
 	defer func() {
-		if err := sess.Save(); err != nil {
+		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
 			h.logger.Error("Failed to save session", "error", err)
 		}
 	}()
 
 	// Get form data
-	name := c.FormValue("name")
-	email := c.FormValue("email")
-	password := c.FormValue("password")
-	termsAccepted := c.FormValue("terms")
+	var req RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode register request", "error", err)
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request",
+		})
+	}
 
 	// Basic validation
-	if name == "" || email == "" || password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "All fields are required",
+	if req.Name == "" || req.Email == "" || req.Password == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "All fields are required",
 		})
 	}
 
-	if len(password) < 8 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Password must be at least 8 characters long",
+	if len(req.Password) < 8 {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Password must be at least 8 characters long",
 		})
 	}
 
-	if termsAccepted != "on" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "You must accept the terms and conditions",
+	if !req.TermsAccepted {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You must accept the terms and conditions",
 		})
 	}
 
 	// Check if user already exists
-	var retrieveUserParams database.RetrieveUserParams
-	retrieveUserParams.Email = email
-
-	_, err = h.db.RetrieveUser(c.Context(), retrieveUserParams)
+	_, err = h.db.GetUserByEmail(ctx, req.Email)
 	if err == nil {
 		// User already exists
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error": "An account with this email already exists",
+		return JSONResponse(w, http.StatusConflict, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "An account with this email already exists",
 		})
 	}
 	if err != database.ErrUserNotFound {
-		h.logger.Error("Failed to check if user exists", "error", err, "email", email)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Something went wrong, please try again later",
+		h.logger.Error("Failed to check if user exists", "error", err, "email", req.Email)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Something went wrong, please try again later",
 		})
 	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		h.logger.Error("Failed to hash password", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to hash password, please try again later",
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to hash password, please try again later",
 		})
 	}
 
-	var createUserParams database.CreateUserParams
-	createUserParams.Name = name
-	createUserParams.Email = email
-	createUserParams.PasswordHash = passwordHash
-
-	user, err := h.db.CreateUser(c.Context(), createUserParams)
+	customer, err := h.stripe.CreateCustomer(ctx, stripe.CreateCustomerParams{
+		Email: req.Email,
+	})
 	if err != nil {
-		h.logger.Error("Failed to create user", "error", err, "params", createUserParams)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create user, please try again later",
+		h.logger.Error("Failed to create Stripe customer", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create Stripe customer, please try again later",
+		})
+	}
+
+	h.stripe.AddSubscription(ctx, stripe.AddSubscriptionParams{
+		CustomerID: customer.ID,
+		PriceID:    stripe.FreePlanPriceID,
+	})
+
+	user, err := h.db.CreateUser(ctx, database.CreateUserParams{
+		Name:             req.Name,
+		Email:            req.Email,
+		PasswordHash:     passwordHash,
+		StripeCustomerID: customer.ID,
+	})
+	if err != nil {
+		h.logger.Error("Failed to create user", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create user, please try again later",
 		})
 	}
 
 	// Set user ID in session
-	sess.Set("user_id", user.ID)
+	sess.UserID = util.Some(user.ID)
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":   "success",
-		"message":  "Registration successful! Continue to the app.",
-		"redirect": "/",
-	})
-}
-
-func (h *PageHandler) ShowBillingPage(c *fiber.Ctx) error {
-	return render(c, views.BillingPage(c, h.translate))
-}
-
-func (h *PageHandler) UpdateBilling(c *fiber.Ctx) error {
-	stripe.Key = "sk_test_51Rm9NXRpsw6KPSOTjxYsYKz1oMczIt9tbWJqYpS58mwkDyCcU6T5pDuMCOu5J1tisAzoxrUuXwjacjwaWxV1liad00S5SBnCid"
-
-	domain := "https://webhook.site/9c023c39-c641-4d41-97c9-850555964554" // Replace with your actual domain
-
-	priceTable := map[string]string{
-		"free":       "",
-		"pro":        "price_1Rrg4RRpsw6KPSOT3xe54iWO",
-		"enterprise": "price_1Rrg54Rpsw6KPSOTW3K8Ur3L",
-	}
-
-	priceID := c.FormValue("price")
-	price, exists := priceTable[priceID]
-	if !exists {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid price selected",
-		})
-	}
-
-	checkoutParams := &stripe.CheckoutSessionParams{
-		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			{
-				Price:    stripe.String(price),
-				Quantity: stripe.Int64(1),
-			},
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Registration successful! Continue to the app.",
+		Data: map[string]any{
+			"redirect_to": "/",
 		},
-		SuccessURL: stripe.String(domain + "/success.html?session_id={CHECKOUT_SESSION_ID}"),
-		CancelURL:  stripe.String(domain + "/cancel.html"),
-	}
-
-	s, err := stripeSession.New(checkoutParams)
-	if err != nil {
-		log.Printf("session.New: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status": "error",
-			"error":  "Failed to create checkout session",
-		})
-	}
-
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":   "succeeded",
-		"redirect": s.URL,
 	})
 }
 
-func (h *PageHandler) ShowMyDrivePage(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+func (h *PageHandler) ShowBillingPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	return render(ctx, w, views.BillingPage(views.BillingPageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Billing"), r),
+	}))
+}
 
-	var params database.RetrieveFileListParams
-	params.OwnerID = userID
-	params.InFolder = uuid.Nil // Root folder
+// func (h *PageHandler) CreateCheckoutSession(w http.ResponseWriter, r *http.Request) error {
+// 	params := &stripe.CheckoutSessionParams{
 
-	files, err := h.db.RetrieveFileList(c.Context(), params)
+// 	}
+// }
+
+// func (h *PageHandler) UpdateBilling(w http.ResponseWriter, r *http.Request) error {
+// 	stripe.Key = "sk_test_51Rm9NXRpsw6KPSOTjxYsYKz1oMczIt9tbWJqYpS58mwkDyCcU6T5pDuMCOu5J1tisAzoxrUuXwjacjwaWxV1liad00S5SBnCid"
+
+// 	domain := "https://webhook.site/9c023c39-c641-4d41-97c9-850555964554" // Replace with your actual domain
+
+// 	priceTable := map[string]string{
+// 		"free":       "",
+// 		"pro":        "price_1Rrg4RRpsw6KPSOT3xe54iWO",
+// 		"enterprise": "price_1Rrg54Rpsw6KPSOTW3K8Ur3L",
+// 	}
+
+// 	priceID := c.FormValue("price")
+// 	price, exists := priceTable[priceID]
+// 	if !exists {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Invalid price selected",
+// 		})
+// 	}
+
+// 	checkoutParams := &stripe.CheckoutSessionParams{
+// 		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+// 		LineItems: []*stripe.CheckoutSessionLineItemParams{
+// 			{
+// 				Price:    stripe.String(price),
+// 				Quantity: stripe.Int64(1),
+// 			},
+// 		},
+// 		SuccessURL: stripe.String(domain + "/success.html?session_id={CHECKOUT_SESSION_ID}"),
+// 		CancelURL:  stripe.String(domain + "/cancel.html"),
+// 	}
+
+// 	s, err := stripeSession.New(checkoutParams)
+// 	if err != nil {
+// 		log.Printf("session.New: %v", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to create checkout session",
+// 		})
+// 	}
+
+// 	return JSONResponse(w, http.StatusOK, ApiResponse{
+// 		Status: APIResponseStatusSuccess,
+// 		Data: map[string]any{
+// 			"redirect": s.URL,
+// 		},
+// 	})
+// }
+
+func (h *PageHandler) ShowMyDrivePage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	files, err := h.db.ListFiles(ctx, database.ListFilesParams{
+		OwnerID:  util.Some(userID),
+		ParentID: util.Some(util.None[uuid.UUID]()), // Root folder
+	})
 	if err != nil {
-		h.logger.Error("Failed to get files for folder", "error", err, "params", params)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to load files for folder",
+		h.logger.Error("Failed to get files for folder", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to load files for folder",
 		})
 	}
 
@@ -316,9 +485,9 @@ func (h *PageHandler) ShowMyDrivePage(c *fiber.Ctx) error {
 			Name:        file.Name,
 			Size:        file.SizeBytes,
 			MimeType:    file.MimeType,
-			IsFolder:    file.IsFolder(),
-			IsViewable:  file.IsPDF() || file.IsImage(),
-			DownloadURL: "/api/drive/v1/files/" + file.ID.String() + "/download",
+			IsFolder:    file.MimeType == "application/askfrank.folder",
+			IsViewable:  file.MimeType == "application/pdf" || file.MimeType == "application/image",
+			DownloadURL: "/drive/download_file/" + file.ID.String() + "/download",
 		})
 	}
 
@@ -336,7 +505,7 @@ func (h *PageHandler) ShowMyDrivePage(c *fiber.Ctx) error {
 		},
 	}
 	// if params.InFolder != uuid.Nil {
-	// 	parentFiles, err := h.db.GetParentFolders(c.Context(), userID, params.InFolder)
+	// 	parentFiles, err := h.db.GetParentFolders(ctx, userID, params.InFolder)
 	// 	if err != nil {
 	// 		h.logger.Error("Failed to get parent folders for breadcrumb", "error", err, "file_id", params.InFolder.UUID)
 	// 		// If we can't get parent folders, just show the file name
@@ -355,19 +524,433 @@ func (h *PageHandler) ShowMyDrivePage(c *fiber.Ctx) error {
 	// }
 
 	currentFolderID := ""
-	return render(c, views.DrivePage(c, h.translate, viewFiles, breadcrumbs, currentFolderID))
+	return render(ctx, w, views.DrivePage(views.DrivePageProps{
+		AppLayoutProps:  h.appLayoutProps(h.layoutProps(ctx, "My Drive"), r),
+		Files:           viewFiles,
+		Breadcrumbs:     breadcrumbs,
+		CurrentFolderID: currentFolderID,
+	}))
 }
 
-func (h *PageHandler) ShowSharedFilePage(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+type CreateFolderRequest struct {
+	Name     string `json:"name"`
+	ParentID string `json:"parent_id"`
+}
 
-	sharedFiles, err := h.db.RetrieveSharedFiles(c.Context(), database.RetrieveSharedFilesParams{
-		UserID: userID,
+func (h *PageHandler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	// Parse request
+	var requestBody CreateFolderRequest
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to parse request",
+		})
+	}
+
+	// Validation
+	if requestBody.Name == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Name is required",
+		})
+	}
+
+	parentID := util.None[uuid.UUID]()
+	if requestBody.ParentID != "" {
+		parentIDRaw, err := uuid.Parse(requestBody.ParentID)
+		if err != nil {
+			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Invalid Parent ID",
+			})
+		}
+		parentID = util.Some(parentIDRaw)
+	}
+
+	// Create folder in database
+	folder, err := h.db.CreateFile(ctx, database.CreateFileParams{
+		OwnerID:   userID,
+		Name:      requestBody.Name,
+		ParentID:  parentID,
+		MimeType:  "application/askfrank.folder",
+		Path:      util.None[string](),
+		S3Key:     util.None[string](),
+		SizeBytes: 0,
+	})
+	if err != nil {
+		h.logger.Error("Failed to create folder", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create folder",
+		})
+	}
+
+	return JSONResponse(w, http.StatusCreated, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Folder created successfully",
+		Data: map[string]any{
+			"folder_id": folder.ID.String(),
+		},
+	})
+}
+
+type UploadFileRequest struct {
+	FolderID string `json:"folder_id"`
+}
+
+func (h *PageHandler) UploadFile(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	// Get folder ID from form data (optional)
+	var uploadReq UploadFileRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&uploadReq); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to parse request",
+		})
+	}
+
+	var folderID util.Optional[uuid.UUID]
+	if folderIDStr := uploadReq.FolderID; folderIDStr != "" {
+		id, err := uuid.Parse(folderIDStr)
+		if err != nil {
+			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Invalid folder ID",
+			})
+		}
+		folderID = util.Some(id)
+	}
+
+	// Parse multipart form
+	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MB
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to parse multipart form",
+		})
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "No files provided",
+		})
+	}
+
+	// Create uploads directory if it doesn't exist
+	uploadDir := "uploads"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		slog.Error("Failed to create upload directory", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create upload directory",
+		})
+	}
+
+	var uploadedFiles []map[string]any
+
+	for _, fileHeader := range files {
+		// Generate unique filename
+		ext := filepath.Ext(fileHeader.Filename)
+		baseFilename := strings.TrimSuffix(fileHeader.Filename, ext)
+		uniqueFilename := baseFilename + "_" + uuid.New().String() + ext
+		filePath := filepath.Join(uploadDir, uniqueFilename)
+
+		// Open the uploaded file
+		srcFile, err := fileHeader.Open()
+		if err != nil {
+			slog.Error("Failed to open uploaded file", "error", err, "filename", fileHeader.Filename)
+			continue
+		}
+		defer srcFile.Close()
+
+		// Create destination file
+		dstFile, err := os.Create(filePath)
+		if err != nil {
+			slog.Error("Failed to create destination file", "error", err, "filename", fileHeader.Filename)
+			continue
+		}
+		defer dstFile.Close()
+
+		if _, err := io.Copy(dstFile, srcFile); err != nil {
+			slog.Error("Failed to save uploaded file", "error", err, "filename", fileHeader.Filename)
+			// Try to delete the partially saved file
+			os.Remove(filePath)
+			continue
+		}
+
+		// Re-open the file to read its header for MIME type detection
+		savedFile, err := os.Open(filePath)
+		if err != nil {
+			slog.Error("Failed to open saved file for MIME type detection", "error", err, "filename", fileHeader.Filename)
+			// Try to delete the saved file
+			os.Remove(filePath)
+			continue
+		}
+		defer savedFile.Close()
+
+		buffer := make([]byte, 512)
+		if _, err := savedFile.Read(buffer); err != nil {
+			slog.Error("Failed to read file header for MIME type detection", "error", err, "filename", fileHeader.Filename)
+			// Try to delete the saved file
+			os.Remove(filePath)
+			continue
+		}
+
+		fileHeader.Header.Set("Content-Type", http.DetectContentType(buffer))
+
+		// Reset file pointer
+		if _, err := savedFile.Seek(0, 0); err != nil {
+			slog.Error("Failed to reset file pointer", "error", err, "filename", fileHeader.Filename)
+			// Try to delete the saved file
+			os.Remove(filePath)
+			continue
+		}
+
+		// Optionally, you can implement virus scanning here
+
+		// Optionally, upload to S3 or another storage service here and get the S3 key
+
+		// For this example, we'll just store the local file path
+		// In a real application, you might want to store a URL or S3 key instead
+
+		// Determine MIME type
+		mimeType := fileHeader.Header.Get("Content-Type")
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+
+		// Create file record in database
+		file, err := h.db.CreateFile(ctx, database.CreateFileParams{
+			OwnerID:   userID,
+			ParentID:  folderID,
+			Name:      fileHeader.Filename,
+			MimeType:  mimeType,
+			S3Key:     util.None[string](),
+			Path:      util.Some(filePath),
+			SizeBytes: fileHeader.Size,
+		})
+		if err != nil {
+			slog.Error("Failed to create file record", "error", err, "filename", fileHeader.Filename)
+			// Try to delete the saved file
+			os.Remove(filePath)
+			continue
+		}
+
+		// if err := h.authorization.AddFileReader(ctx, userID, file.ID); err != nil {
+		// 	slog.Error("Failed to add file reader permission", "error", err, "user_id", userID, "file_id", file.ID)
+		// 	// Try to delete the saved file and database record
+		// 	os.Remove(filePath)
+		// 	if err := h.db.DeleteFile(ctx, file.ID); err != nil {
+		// 		slog.Error("Failed to delete file record after permission error", "error", err, "file_id", file.ID)
+		// 	}
+		// 	continue
+		// }
+
+		uploadedFiles = append(uploadedFiles, map[string]any{
+			"id":       file.ID,
+			"name":     file.Name,
+			"size":     file.SizeBytes,
+			"mimeType": file.MimeType,
+		})
+	}
+
+	if len(uploadedFiles) == 0 {
+		slog.Error("No files were uploaded successfully")
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to upload any files",
+		})
+	}
+
+	return JSONResponse(w, http.StatusCreated, ApiResponse{
+		Status: APIResponseStatusSuccess,
+		Data:   uploadedFiles,
+	})
+}
+
+type ShareFileRequest struct {
+	FileID string `json:"file_id"`
+	Email  string `json:"email"`
+}
+
+func (h *PageHandler) ShareFile(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	var req ShareFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validation
+	if req.FileID == "" || req.Email == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "File ID and email are required",
+		})
+	}
+
+	fileID, err := uuid.Parse(req.FileID)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid file ID",
+		})
+	}
+
+	// Get the user to share with
+	shareWithUser, err := h.db.GetUserByEmail(ctx, req.Email)
+	if err != nil {
+		if err == database.ErrUserNotFound {
+			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "User to share with not found",
+			})
+		}
+
+		h.logger.Error("Failed to get user by email", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Something went wrong, please try again later",
+		})
+	}
+
+	// Check if the file exists and belongs to the current user
+	file, err := h.db.GetFileByID(ctx, fileID)
+	if err != nil {
+		if err == database.ErrFileNotFound {
+			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "File not found",
+			})
+		}
+
+		h.logger.Error("Failed to get file by ID", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Something went wrong, please try again later",
+		})
+	}
+
+	if file.OwnerID != userID {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You do not have permission to share this file",
+		})
+	}
+
+	if file.OwnerID != userID {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You do not have permission to share this file",
+		})
+	}
+
+	// Add permission in OpenFGA
+	if err := h.authorization.AddFileReader(ctx, shareWithUser.ID, file.ID); err != nil {
+		h.logger.Error("Failed to add file reader permission", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to share file",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "File shared successfully",
+	})
+}
+
+type DownloadFileRequest struct {
+	FileID string `json:"file_id"`
+}
+
+func (h *PageHandler) DownloadFile(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	var req DownloadFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request body",
+		})
+	}
+
+	fileID, err := uuid.Parse(req.FileID)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid file ID",
+		})
+	}
+
+	// Check if the user has permission to access the file
+	hasAccess, err := h.authorization.CanReadFile(ctx, userID, fileID)
+	if err != nil {
+		h.logger.Error("Failed to check file access", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to check file access",
+		})
+	}
+	if !hasAccess {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You do not have permission to access this file",
+		})
+	}
+
+	file, err := h.db.GetFileByID(ctx, fileID)
+	if err != nil {
+		if err == database.ErrFileNotFound {
+			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "File not found",
+			})
+		}
+
+		h.logger.Error("Failed to get file by ID", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Something went wrong, please try again later",
+		})
+	}
+
+	if !file.Path.Some {
+		return JSONResponse(w, http.StatusNotFound, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "File not found on server",
+		})
+	}
+
+	// Serve the file for download
+	return Download(w, r, file.Path.Unwrap(), file.Name)
+}
+
+func (h *PageHandler) ShowSharedFilePage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	sharedFiles, err := h.db.ListSharedFiles(ctx, database.ListSharedFilesParams{
+		UserID: util.Some(userID),
 	})
 	if err != nil {
 		h.logger.Error("Failed to get files for folder", "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to load files for folder",
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to load files for folder",
 		})
 	}
 
@@ -378,7 +961,7 @@ func (h *PageHandler) ShowSharedFilePage(c *fiber.Ctx) error {
 			Name:     file.Name,
 			Size:     file.SizeBytes,
 			MimeType: file.MimeType,
-			IsFolder: file.IsFolder(),
+			IsFolder: file.MimeType == "application/askfrank.folder",
 		})
 	}
 
@@ -389,37 +972,289 @@ func (h *PageHandler) ShowSharedFilePage(c *fiber.Ctx) error {
 		URL:  "/drive/shared",
 	})
 
-	currentFileID := ""
-	return render(c, views.DrivePage(c, h.translate, viewFiles, breadcrumbs, currentFileID))
+	currentFolderID := ""
+	return render(ctx, w, views.DrivePage(views.DrivePageProps{
+		AppLayoutProps:  h.appLayoutProps(h.layoutProps(ctx, "Shared with me"), r),
+		Files:           viewFiles,
+		Breadcrumbs:     breadcrumbs,
+		CurrentFolderID: currentFolderID,
+	}))
 }
 
-func (h *PageHandler) ShowFolderPage(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+func (h *PageHandler) ShowOAuthClientsPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	folderIDStr := c.Params("folder_id")
-	folderID := uuid.MustParse(folderIDStr)
+	// Get the list of OAuth clients for this user
+	clients, err := h.db.ListOAuthClients(ctx, database.ListOAuthClientsParams{
+		OwnerID: util.Some(userID),
+	})
+	if err != nil {
+		h.logger.Error("Failed to list OAuth clients", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to load OAuth clients",
+		})
+	}
 
-	ok, err := h.authorization.CanReadFile(c.Context(), userID, folderID)
+	// Convert to view model
+	viewClients := make([]views.OAuthClient, 0, len(clients))
+	for _, client := range clients {
+		viewClients = append(viewClients, views.OAuthClient{
+			ID:           client.ID.String(),
+			Name:         client.Name,
+			Description:  "", // Add a default empty description
+			CreatedAt:    client.CreatedAt,
+			RedirectURIs: client.RedirectURIs,
+		})
+	}
+
+	return render(ctx, w, views.OAuthClientsPage(views.OAuthClientsPageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "OAuth Clients"), r),
+		Clients:        viewClients,
+	}))
+}
+
+type CreateOAuthClientRequest struct {
+	Name         string `json:"name"`
+	RedirectURIs string `json:"redirect_uris"` // Newline-separated URIs
+	Public       string `json:"public"`        // "true" or "false"
+	Scopes       string `json:"scopes"`        // Comma-separated scopes
+}
+
+func (h *PageHandler) CreateOAuthClient(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	var req CreateOAuthClientRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request payload",
+		})
+	}
+
+	// Validation
+	if req.Name == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Name is required",
+		})
+	}
+
+	if req.RedirectURIs == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "At least one redirect URI is required",
+		})
+	}
+
+	// Process redirect URIs (split by newline)
+	redirectURIs := strings.Split(req.RedirectURIs, "\n")
+	for i, uri := range redirectURIs {
+		redirectURIs[i] = strings.TrimSpace(uri)
+	}
+
+	// Filter out empty URIs
+	var filteredURIs []string
+	for _, uri := range redirectURIs {
+		if uri != "" {
+			filteredURIs = append(filteredURIs, uri)
+		}
+	}
+
+	if len(filteredURIs) == 0 {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "At least one valid redirect URI is required",
+		})
+	}
+
+	// Process public flag
+	isPublic := req.Public == "true"
+
+	// Process scopes
+	allowedScopes := strings.Split(req.Scopes, ",")
+	for i, scope := range allowedScopes {
+		allowedScopes[i] = strings.TrimSpace(scope)
+	}
+
+	// Create the client in the database
+	secret, err := util.RandomString(32)
+	if err != nil {
+		h.logger.Error("Failed to generate client secret", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to generate client credentials",
+		})
+	}
+
+	client, err := h.db.CreateOAuthClient(ctx, database.CreateOAuthClientParams{
+		OwnerID:       userID,
+		Name:          req.Name,
+		RedirectURIs:  filteredURIs,
+		Secret:        secret,
+		IsPublic:      isPublic,
+		AllowedScopes: allowedScopes,
+	})
+	if err != nil {
+		h.logger.Error("Failed to create OAuth client", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create OAuth client",
+		})
+	}
+
+	// Return the newly created client details, including the secret
+	// (this is the only time the secret will be fully visible)
+	return JSONResponse(w, http.StatusCreated, ApiResponse{
+		Status: APIResponseStatusSuccess,
+		Data: map[string]any{
+			"id":           client.ID.String(),
+			"name":         client.Name,
+			"redirectURIs": client.RedirectURIs,
+			"public":       false,
+			"secret":       client.Secret,
+			"createdAt":    client.CreatedAt,
+		},
+	})
+}
+
+func (h *PageHandler) GetOAuthClient(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	// userID := c.Locals("user_id").(uuid.UUID)
+	clientIDStr := r.PathValue("id")
+
+	clientID, err := uuid.Parse(clientIDStr)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid client ID",
+		})
+	}
+
+	client, err := h.db.GetOAuthClientByID(ctx, clientID)
+	if err != nil {
+		if err == database.ErrOAuthClientNotFound {
+			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "OAuth client not found",
+			})
+		}
+		h.logger.Error("Failed to get OAuth client", "error", err, "client_id", clientID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to retrieve OAuth client",
+		})
+	}
+
+	// Return the client details
+	// Note: for security, we don't return the full client secret here
+	// We return a masked version or nothing at all
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status: APIResponseStatusSuccess,
+		Data: map[string]any{
+			"id":           client.ID.String(),
+			"name":         client.Name,
+			"redirectURIs": client.RedirectURIs,
+			"public":       client.IsPublic,
+			"scopes":       client.AllowedScopes,
+			"createdAt":    client.CreatedAt,
+			"updatedAt":    client.UpdatedAt,
+		},
+	})
+}
+
+func (h *PageHandler) DeleteOAuthClient(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	// userID := c.Locals("user_id").(uuid.UUID)
+	clientIDStr := r.PathValue("id")
+
+	clientID, err := uuid.Parse(clientIDStr)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid client ID",
+		})
+	}
+
+	// Check if the client exists and belongs to the user
+	_, err = h.db.GetOAuthClientByID(ctx, clientID)
+	if err != nil {
+		if err == database.ErrOAuthClientNotFound {
+			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "OAuth client not found",
+			})
+		}
+		h.logger.Error("Failed to get OAuth client for deletion", "error", err, "client_id", clientID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to retrieve OAuth client",
+		})
+	}
+
+	// Delete the client
+	if err := h.db.DeleteOAuthClientByID(ctx, clientID); err != nil {
+		h.logger.Error("Failed to delete OAuth client", "error", err, "client_id", clientID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to delete OAuth client",
+		})
+	}
+
+	// Redirect back to the developer page after deletion
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "OAuth client deleted successfully",
+		Data: map[string]any{
+			"redirect_to": "/developer",
+		},
+	})
+}
+
+func (h *PageHandler) ShowFolderPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	folderIDStr := ctx.Value("folder_id").(string)
+	if folderIDStr == "" {
+		return Redirect(w, r, "/drive", http.StatusSeeOther)
+	}
+
+	// Validate folder ID
+	folderID, err := uuid.Parse(folderIDStr)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid folder ID",
+		})
+	}
+
+	// Check if the user has access to this folder
+	ok, err := h.authorization.CanReadFile(ctx, userID, folderID)
 	if err != nil {
 		h.logger.Error("Authorization check failed", "error", err, "user_id", userID, "folder_id", folderID)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to check permissions",
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to check permissions",
 		})
 	}
 	if !ok {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "You do not have permission to access this folder",
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You do not have permission to access this folder",
 		})
 	}
 
-	var params database.RetrieveFileListParams
-	params.InFolder = folderID
-
-	files, err := h.db.RetrieveFileList(c.Context(), params)
+	files, err := h.db.ListFiles(ctx, database.ListFilesParams{
+		ParentID: util.Some(util.Some(folderID)),
+	})
 	if err != nil {
-		h.logger.Error("Failed to get files for folder", "error", err, "params", params)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to load files for folder",
+		h.logger.Error("Failed to get files for folder", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to load files for folder",
 		})
 	}
 
@@ -430,8 +1265,8 @@ func (h *PageHandler) ShowFolderPage(c *fiber.Ctx) error {
 			Name:        file.Name,
 			Size:        file.SizeBytes,
 			MimeType:    file.MimeType,
-			IsFolder:    file.IsFolder(),
-			IsViewable:  file.IsPDF() || file.IsImage(),
+			IsFolder:    file.MimeType == "application/askfrank.folder",
+			IsViewable:  file.MimeType == "application/pdf" || file.MimeType == "application/image",
 			DownloadURL: "/api/drive/v1/files/" + file.ID.String() + "/download",
 		})
 	}
@@ -442,9 +1277,13 @@ func (h *PageHandler) ShowFolderPage(c *fiber.Ctx) error {
 		Name: "My Drive",
 		URL:  "/drive",
 	})
+	breadcrumbs = append(breadcrumbs, views.Breadcrumb{
+		Name: "Folder",
+		URL:  "/drive/v1/folder/" + folderID.String(),
+	})
 
 	// todo parent folder must be
-	// parentFiles, err := h.db.GetParentFolders(c.Context(), userID, params.InFolder)
+	// parentFiles, err := h.db.GetParentFolders(ctx, userID, params.InFolder)
 	// if err != nil {
 	// 	h.logger.Error("Failed to get parent folders for breadcrumb", "error", err, "file_id", params.InFolder.UUID)
 	// 	// If we can't get parent folders, just show the file name
@@ -462,15 +1301,208 @@ func (h *PageHandler) ShowFolderPage(c *fiber.Ctx) error {
 	// }
 
 	currentFolderID := ""
-	return render(c, views.DrivePage(c, h.translate, viewFiles, breadcrumbs, currentFolderID))
+	return render(ctx, w, views.DrivePage(views.DrivePageProps{
+		AppLayoutProps:  h.appLayoutProps(h.layoutProps(ctx, "My Drive"), r),
+		Files:           viewFiles,
+		Breadcrumbs:     breadcrumbs,
+		CurrentFolderID: currentFolderID,
+	}))
 }
 
-func render(c *fiber.Ctx, component templ.Component) error {
-	c.Set("Content-Type", "text/html")
-	return component.Render(c.Context(), c.Response().BodyWriter())
+func (h *PageHandler) ShowCreateMeetingPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	return render(ctx, w, views.CreateMeetingPage(views.CreateMeetingPageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Create Meeting"), r),
+	}))
 }
 
-func (h *PageHandler) translate(c *fiber.Ctx, key string) string {
-	lang := c.Locals("lang").(i18n.Language)
-	return h.translator.T(lang, key)
+func (h *PageHandler) ShowMeetingPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	meetingID := r.PathValue("id")
+	if meetingID == "" {
+		return Redirect(w, r, "/meeting", http.StatusSeeOther)
+	}
+
+	return render(ctx, w, views.MeetingPage(views.MeetingPageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Meeting"), r),
+		MeetingID:      meetingID,
+	}))
+}
+
+func (h *PageHandler) ShowCalendarPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	numDays := 35 // 5 weeks from now
+	startDate := time.Now()
+	endDate := startDate.AddDate(0, 0, numDays)
+
+	events, err := h.db.ListCalendarEvents(ctx, database.ListCalendarEventsParams{
+		OwnerID:   util.Some(userID),
+		StartDate: util.Some(startDate),
+		EndDate:   util.Some(endDate),
+	})
+	if err != nil {
+		h.logger.Error("Failed to list calendar events", "error", err, "user_id", userID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to load calendar events",
+		})
+	}
+
+	// Convert to view model
+	viewDays := make([]views.CalendarDay, numDays)
+	for i := range viewDays {
+		date := startDate.AddDate(0, 0, i)
+		viewDays[i] = views.CalendarDay{
+			Date: date,
+			Events: []views.CalendarEvent{
+				{
+					ID:          "123",
+					Title:       "Test Event",
+					Description: "Something",
+					StartTime:   time.Time{},
+					EndTime:     time.Time{},
+					Location:    "",
+					AllDay:      false,
+				},
+			},
+		}
+
+		for _, event := range events {
+			if date.Compare(event.StartTime) == 0 {
+				viewDays[i].Events = append(viewDays[i].Events, views.CalendarEvent{
+					ID:          event.ID.String(),
+					Title:       event.Title,
+					Description: event.Description,
+					StartTime:   event.StartTime,
+					EndTime:     event.EndTime,
+					Location:    event.Location.Unwrap(),
+					AllDay:      event.AllDay,
+				})
+			}
+		}
+	}
+
+	return render(ctx, w, views.CalendarPage(views.CalendarPageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Calendar"), r),
+		Days:           viewDays,
+	}))
+}
+
+func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	// Get the list of webhooks for this user
+	webhooks, err := h.db.ListWebhooks(ctx, database.ListWebhooksParams{
+		OwnerID: util.Some(userID),
+	})
+	if err != nil {
+		h.logger.Error("Failed to list webhooks", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to load webhooks",
+		})
+	}
+
+	// Convert to view model
+	viewWebhooks := make([]views.Webhook, 0, len(webhooks))
+	for _, webhook := range webhooks {
+		viewWebhooks = append(viewWebhooks, views.Webhook{
+			ID:           webhook.ID.String(),
+			Name:         webhook.Name,
+			Description:  webhook.Description,
+			URL:          webhook.URL,
+			EventTypes:   webhook.EventTypes,
+			IsActive:     webhook.IsActive,
+			Activity:     time.Time{},
+			ResponseTime: time.Time{},
+			ErrorRate:    0,
+		})
+	}
+	return render(ctx, w, views.WebhooksPage(views.WebhooksPageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Webhooks"), r),
+		Webhooks:       viewWebhooks,
+	}))
+}
+
+func (h *PageHandler) ShowAuditLogsPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	// Parse query parameters for filtering (e.g., startTime, endTime)
+	startTimeStr := r.URL.Query().Get("startTime")
+	endTimeStr := r.URL.Query().Get("endTime")
+
+	var startTime, endTime time.Time
+	var err error
+
+	if startTimeStr != "" {
+		startTime, err = time.Parse("2006-01-02T15:04", startTimeStr)
+		if err != nil {
+			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Invalid start time format",
+			})
+		}
+	} else {
+		startTime = time.Now().AddDate(0, -1, 0) // Default to 1 month ago
+	}
+
+	if endTimeStr != "" {
+		endTime, err = time.Parse("2006-01-02T15:04", endTimeStr)
+		if err != nil {
+			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Invalid end time format",
+			})
+		}
+	} else {
+		endTime = time.Now() // Default to now
+	}
+
+	// Ensure startTime is before endTime
+	if startTime.After(endTime) {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Start time must be before end time",
+		})
+	}
+
+	// Get the list of audit logs for this user
+	logs, err := h.db.ListAuditLogEvents(ctx, database.ListAuditLogEventsParams{
+		OwnerID:   util.Some(userID),
+		StartTime: util.Some(startTime),
+		EndTime:   util.Some(endTime),
+	})
+	if err != nil {
+		h.logger.Error("Failed to list audit logs", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to load audit logs",
+		})
+	}
+
+	// Convert to view model
+	viewEvents := make([]views.AuditLogEvent, len(logs))
+	for i := range logs {
+		viewEvents[i] = views.AuditLogEvent{
+			ID:        logs[i].ID.String(),
+			Title:     logs[i].EventType,
+			Info:      string(logs[i].EventData),
+			CreatedAt: logs[i].CreatedAt,
+		}
+	}
+	return render(ctx, w, views.AuditLogsPage(views.AuditLogsPageProps{
+		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Audit Logs"), r),
+		Events:         viewEvents,
+	}))
+}
+
+func render(ctx context.Context, w http.ResponseWriter, component templ.Component) error {
+	w.Header().Set("Content-Type", "text/html")
+	return component.Render(ctx, w)
 }

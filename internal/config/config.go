@@ -9,16 +9,32 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
-	OpenFGA  OpenFGAConfig
+	Stripe   StripeConfig
 }
+
+type Environment string
+
+const (
+	EnvironmentDevelopment Environment = "development"
+	EnvironmentProduction  Environment = "production"
+)
 
 type ServerConfig struct {
 	Host         string
 	Port         string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
-	Environment  string
+	Environment  Environment
 }
+
+type ContextKey string
+
+const (
+	SessionContextKey   ContextKey = "session_id"
+	LanguageContextKey  ContextKey = "lang"
+	UserIDContextKey    ContextKey = "user_id"
+	CSRFTokenContextKey ContextKey = "csrf_token"
+)
 
 type DatabaseConfig struct {
 	Host         string
@@ -31,11 +47,9 @@ type DatabaseConfig struct {
 	MaxIdleConns int
 }
 
-type OpenFGAConfig struct {
-	APIURL               string
-	APIToken             string
-	StoreID              string
-	AuthorizationModelID string
+type StripeConfig struct {
+	APIKey string
+	// WebhookSecret string
 }
 
 func NewConfig() Config {
@@ -45,7 +59,7 @@ func NewConfig() Config {
 			Port:         getEnv("SERVER_PORT", "3001"),
 			ReadTimeout:  getEnvDuration("SERVER_READ_TIMEOUT", 10*time.Second),
 			WriteTimeout: getEnvDuration("SERVER_WRITE_TIMEOUT", 10*time.Second),
-			Environment:  getEnv("SERVER_ENVIRONMENT", "development"),
+			Environment:  getEnvEnvironment("SERVER_ENVIRONMENT", EnvironmentDevelopment),
 		},
 		Database: DatabaseConfig{
 			Host:         getEnv("DB_HOST", "localhost"),
@@ -57,11 +71,9 @@ func NewConfig() Config {
 			MaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 10),
 			MaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
 		},
-		OpenFGA: OpenFGAConfig{
-			APIURL:               getEnv("OPENFGA_API_URL", "http://localhost:8080"),
-			APIToken:             getEnv("OPENFGA_API_TOKEN", ""),
-			StoreID:              getEnv("OPENFGA_STORE_ID", "01K332MA3TGDVDAPSSSKJKCKGB"),
-			AuthorizationModelID: getEnv("OPENFGA_AUTHORIZATION_MODEL_ID", "01K38HA7G4M0JVJB5PZ6VDH589"),
+		Stripe: StripeConfig{
+			APIKey: getEnv("STRIPE_API_KEY", "sk_test_51S7Lsl00bAgI7KzUm7hXRKN0PJ3IRI6CIqEg2SXNaLpUW7p8wW1FGU0rz7I3RtnL0ntbEc27i3gTzHTolOyH2ahG00EaiIRpir"),
+			// WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 	}
 }
@@ -70,6 +82,11 @@ func getEnv(key string, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
 	}
+
+	if defaultValue == "" {
+		panic("Missing required environment variable: " + key)
+	}
+
 	return defaultValue
 }
 
@@ -87,6 +104,13 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 		if durationValue, err := time.ParseDuration(value); err == nil {
 			return durationValue
 		}
+	}
+	return defaultValue
+}
+
+func getEnvEnvironment(key string, defaultValue Environment) Environment {
+	if value, exists := os.LookupEnv(key); exists {
+		return Environment(value)
 	}
 	return defaultValue
 }

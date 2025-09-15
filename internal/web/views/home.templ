@@ -1,238 +1,234 @@
 package views
 
-import "github.com/gofiber/fiber/v2"
 import "hp/internal/web/views/component"
-import "hp/internal/web/translate"
 
-templ HomePage(c *fiber.Ctx, t translate.Translate) {
-	@component.AppLayout("Dashboard - AskFrank", c, t) {
-		<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+type HomePageProps struct {
+	component.AppLayoutProps
+}
+
+templ HomePage(props HomePageProps) {
+	@component.AppLayout(props.AppLayoutProps) {
+		<div class="content-container">
 			<!-- Page header -->
-			<div class="md:flex md:items-center md:justify-between mb-6">
+			<div class="page-header">
 				<div class="min-w-0 flex-1">
-					<h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
-					<p class="mt-1 text-sm text-gray-500">Welcome back, Dr. Smith. Here's what's happening today.</p>
+					<h2 class="page-title">Dashboard</h2>
+					<p class="page-subtitle">Welcome back, Dr. Smith. Here's what's happening today.</p>
 				</div>
 				<div class="mt-4 flex md:ml-4 md:mt-0 space-x-3">
-					<button type="button" class="inline-flex items-center rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
-						<i class="fas fa-download -ml-0.5 mr-1.5 h-4 w-4 text-gray-400"></i>
+					<button type="button" class="btn-secondary w-auto">
+						<i class="fas fa-download icon-with-text"></i>
 						Export
 					</button>
-					<button type="button" class="inline-flex items-center rounded-lg px-3 py-2 text-sm font-medium text-white shadow-sm bg-ocean hover:bg-deep-teal">
-						<i class="fas fa-plus -ml-0.5 mr-1.5 h-4 w-4"></i>
+					<button type="button" class="btn-primary w-auto">
+						<i class="fas fa-plus icon-with-text"></i>
 						New Appointment
 					</button>
 				</div>
 			</div>
 			<!-- Key Metrics - Load immediately -->
-			<div class="compact-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+			<div class="grid-compact grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
 				@component.MetricCard("Total Patients", "2,847", "+12% from last month", true)
 				@component.MetricCard("Today's Appointments", "24", "3 completed, 21 remaining", true)
 				@component.MetricCard("Pending Reviews", "7", "2 urgent, 5 routine", false)
 				@component.MetricCard("Monthly Revenue", "$48,390", "+8% from last month", true)
 			</div>
 			<!-- Main content - Lazy loaded -->
-			<div id="dashboard-content" class="compact-grid grid-cols-1 lg:grid-cols-3">
+			<div id="dashboard-content" class="grid-compact grid-cols-1 lg:grid-cols-3">
 				<!-- Loading skeletons -->
 				<!-- Recent Appointments -->
 				<div class="lg:col-span-2">
-					<div class="bg-white shadow rounded-lg">
-						<div class="px-4 py-5 sm:p-6">
-							<h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Appointments</h3>
-							<div class="flow-root">
-								<ul class="-my-5 divide-y divide-gray-200">
-									<li class="py-4">
-										<div class="flex items-center space-x-4">
-											<div class="flex-shrink-0">
-												<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=Emily+Johnson&background=00A896&color=fff" alt="Emily Johnson"/>
-											</div>
-											<div class="flex-1 min-w-0">
-												<p class="text-sm font-medium text-gray-900 truncate">Emily Johnson</p>
-												<p class="text-sm text-gray-500">Annual Check-up</p>
-											</div>
-											<div class="text-right">
-												<p class="text-sm text-gray-900">10:00 AM</p>
-												<p class="text-sm text-gray-500">Today</p>
-											</div>
-											<div>
-												<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-													Completed
-												</span>
-											</div>
+					<div class="card">
+						<h3 class="card-title">Recent Appointments</h3>
+						<div class="flow-root">
+							<ul class="list-divided">
+								<li class="py-4">
+									<div class="flex items-center space-x-4">
+										<div class="flex-shrink-0">
+											<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=Emily+Johnson&background=00A896&color=fff" alt="Emily Johnson"/>
 										</div>
-									</li>
-									<li class="py-4">
-										<div class="flex items-center space-x-4">
-											<div class="flex-shrink-0">
-												<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=Michael+Brown&background=05668D&color=fff" alt="Michael Brown"/>
-											</div>
-											<div class="flex-1 min-w-0">
-												<p class="text-sm font-medium text-gray-900 truncate">Michael Brown</p>
-												<p class="text-sm text-gray-500">Follow-up consultation</p>
-											</div>
-											<div class="text-right">
-												<p class="text-sm text-gray-900">11:30 AM</p>
-												<p class="text-sm text-gray-500">Today</p>
-											</div>
-											<div>
-												<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-													In Progress
-												</span>
-											</div>
+										<div class="flex-1 min-w-0">
+											<p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">Emily Johnson</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Annual Check-up</p>
 										</div>
-									</li>
-									<li class="py-4">
-										<div class="flex items-center space-x-4">
-											<div class="flex-shrink-0">
-												<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=Sarah+Wilson&background=028090&color=fff" alt="Sarah Wilson"/>
-											</div>
-											<div class="flex-1 min-w-0">
-												<p class="text-sm font-medium text-gray-900 truncate">Sarah Wilson</p>
-												<p class="text-sm text-gray-500">Blood pressure monitoring</p>
-											</div>
-											<div class="text-right">
-												<p class="text-sm text-gray-900">2:00 PM</p>
-												<p class="text-sm text-gray-500">Today</p>
-											</div>
-											<div>
-												<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-													Scheduled
-												</span>
-											</div>
+										<div class="text-right">
+											<p class="text-sm text-gray-900 dark:text-gray-100">10:00 AM</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Today</p>
 										</div>
-									</li>
-									<li class="py-4">
-										<div class="flex items-center space-x-4">
-											<div class="flex-shrink-0">
-												<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=David+Garcia&background=02C39A&color=fff" alt="David Garcia"/>
-											</div>
-											<div class="flex-1 min-w-0">
-												<p class="text-sm font-medium text-gray-900 truncate">David Garcia</p>
-												<p class="text-sm text-gray-500">Prescription renewal</p>
-											</div>
-											<div class="text-right">
-												<p class="text-sm text-gray-900">3:30 PM</p>
-												<p class="text-sm text-gray-500">Today</p>
-											</div>
-											<div>
-												<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-													Scheduled
-												</span>
-											</div>
+										<div>
+											<span class="badge-success">
+												Completed
+											</span>
 										</div>
-									</li>
-								</ul>
-							</div>
-							<div class="mt-6">
-								<a href="/appointments" class="w-full flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-									View all appointments
-								</a>
-							</div>
+									</div>
+								</li>
+								<li class="py-4">
+									<div class="flex items-center space-x-4">
+										<div class="flex-shrink-0">
+											<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=Michael+Brown&background=05668D&color=fff" alt="Michael Brown"/>
+										</div>
+										<div class="flex-1 min-w-0">
+											<p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">Michael Brown</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Follow-up consultation</p>
+										</div>
+										<div class="text-right">
+											<p class="text-sm text-gray-900 dark:text-gray-100">11:30 AM</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Today</p>
+										</div>
+										<div>
+											<span class="badge-primary">
+												In Progress
+											</span>
+										</div>
+									</div>
+								</li>
+								<li class="py-4">
+									<div class="flex items-center space-x-4">
+										<div class="flex-shrink-0">
+											<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=Sarah+Wilson&background=028090&color=fff" alt="Sarah Wilson"/>
+										</div>
+										<div class="flex-1 min-w-0">
+											<p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">Sarah Wilson</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Blood pressure monitoring</p>
+										</div>
+										<div class="text-right">
+											<p class="text-sm text-gray-900 dark:text-gray-100">2:00 PM</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Today</p>
+										</div>
+										<div>
+											<span class="badge-secondary">
+												Scheduled
+											</span>
+										</div>
+									</div>
+								</li>
+								<li class="py-4">
+									<div class="flex items-center space-x-4">
+										<div class="flex-shrink-0">
+											<img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name=David+Garcia&background=02C39A&color=fff" alt="David Garcia"/>
+										</div>
+										<div class="flex-1 min-w-0">
+											<p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">David Garcia</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Prescription renewal</p>
+										</div>
+										<div class="text-right">
+											<p class="text-sm text-gray-900 dark:text-gray-100">3:30 PM</p>
+											<p class="text-sm text-gray-500 dark:text-gray-400">Today</p>
+										</div>
+										<div>
+											<span class="badge-secondary">
+												Scheduled
+											</span>
+										</div>
+									</div>
+								</li>
+							</ul>
+						</div>
+						<div class="mt-6">
+							<a href="/appointments" class="link-secondary w-full flex justify-center items-center px-4 py-2">
+								View all appointments
+							</a>
 						</div>
 					</div>
 				</div>
 				<!-- Quick Actions & Analytics -->
 				<div class="space-y-6">
 					<!-- Quick Actions -->
-					<div class="bg-white shadow rounded-lg">
-						<div class="px-4 py-5 sm:p-6">
-							<h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
-							<div class="space-y-3">
-								<button class="w-full flex items-center justify-start px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-									<i class="fas fa-user-plus mr-3 text-ocean"></i>
-									Add New Patient
-								</button>
-								<button class="w-full flex items-center justify-start px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-									<i class="fas fa-calendar-plus mr-3 text-mint"></i>
-									Schedule Appointment
-								</button>
-								<button class="w-full flex items-center justify-start px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-									<i class="fas fa-prescription-bottle-alt mr-3 text-teal"></i>
-									Prescribe Medication
-								</button>
-								<button class="w-full flex items-center justify-start px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-									<i class="fas fa-file-medical mr-3 text-aqua"></i>
-									View Lab Results
-								</button>
-							</div>
+					<div class="card">
+						<h3 class="card-title">Quick Actions</h3>
+						<div class="space-y-3">
+							<button class="btn-secondary w-full justify-start text-left">
+								<i class="fas fa-user-plus icon-with-text text-primary-600"></i>
+								Add New Patient
+							</button>
+							<button class="btn-secondary w-full justify-start text-left">
+								<i class="fas fa-calendar-plus icon-with-text text-medical-600"></i>
+								Schedule Appointment
+							</button>
+							<button class="btn-secondary w-full justify-start text-left">
+								<i class="fas fa-prescription-bottle-alt icon-with-text text-primary-500"></i>
+								Prescribe Medication
+							</button>
+							<button class="btn-secondary w-full justify-start text-left">
+								<i class="fas fa-file-medical icon-with-text text-medical-500"></i>
+								View Lab Results
+							</button>
 						</div>
 					</div>
 					<!-- Patient Activity -->
-					<div class="bg-white shadow rounded-lg">
-						<div class="px-4 py-5 sm:p-6">
-							<h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Activity</h3>
-							<div class="flow-root">
-								<ul class="-mb-8">
-									<li>
-										<div class="relative pb-8">
-											<div class="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-200"></div>
-											<div class="relative flex items-start space-x-3">
-												<div class="relative">
-													<div class="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
-														<i class="fas fa-check text-green-600 text-sm"></i>
-													</div>
+					<div class="card">
+						<h3 class="card-title">Recent Activity</h3>
+						<div class="flow-root">
+							<ul class="-mb-8">
+								<li>
+									<div class="relative pb-8">
+										<div class="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"></div>
+										<div class="relative flex items-start space-x-3">
+											<div class="relative">
+												<div class="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+													<i class="fas fa-check text-green-600 dark:text-green-400 text-sm"></i>
 												</div>
-												<div class="min-w-0 flex-1">
-													<div>
-														<div class="text-sm">
-															<span class="font-medium text-gray-900">Emily Johnson</span>
-														</div>
-														<p class="mt-0.5 text-sm text-gray-500">Completed annual check-up</p>
+											</div>
+											<div class="min-w-0 flex-1">
+												<div>
+													<div class="text-sm">
+														<span class="font-medium text-gray-900 dark:text-gray-100">Emily Johnson</span>
 													</div>
-													<div class="mt-2 text-sm text-gray-700">
-														<p class="text-xs text-gray-500">15 minutes ago</p>
-													</div>
+													<p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Completed annual check-up</p>
+												</div>
+												<div class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+													<p class="text-xs text-gray-500 dark:text-gray-400">15 minutes ago</p>
 												</div>
 											</div>
 										</div>
-									</li>
-									<li>
-										<div class="relative pb-8">
-											<div class="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-200"></div>
-											<div class="relative flex items-start space-x-3">
-												<div class="relative">
-													<div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-														<i class="fas fa-file-alt text-blue-600 text-sm"></i>
-													</div>
+									</div>
+								</li>
+								<li>
+									<div class="relative pb-8">
+										<div class="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"></div>
+										<div class="relative flex items-start space-x-3">
+											<div class="relative">
+												<div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
+													<i class="fas fa-file-alt text-blue-600 dark:text-blue-400 text-sm"></i>
 												</div>
-												<div class="min-w-0 flex-1">
-													<div>
-														<div class="text-sm">
-															<span class="font-medium text-gray-900">Lab results</span>
-														</div>
-														<p class="mt-0.5 text-sm text-gray-500">New results for Michael Brown</p>
+											</div>
+											<div class="min-w-0 flex-1">
+												<div>
+													<div class="text-sm">
+														<span class="font-medium text-gray-900 dark:text-gray-100">Lab results</span>
 													</div>
-													<div class="mt-2 text-sm text-gray-700">
-														<p class="text-xs text-gray-500">1 hour ago</p>
-													</div>
+													<p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">New results for Michael Brown</p>
+												</div>
+												<div class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+													<p class="text-xs text-gray-500 dark:text-gray-400">1 hour ago</p>
 												</div>
 											</div>
 										</div>
-									</li>
-									<li>
-										<div class="relative">
-											<div class="relative flex items-start space-x-3">
-												<div class="relative">
-													<div class="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100">
-														<i class="fas fa-prescription text-yellow-600 text-sm"></i>
-													</div>
+									</div>
+								</li>
+								<li>
+									<div class="relative">
+										<div class="relative flex items-start space-x-3">
+											<div class="relative">
+												<div class="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900">
+													<i class="fas fa-prescription text-yellow-600 dark:text-yellow-400 text-sm"></i>
 												</div>
-												<div class="min-w-0 flex-1">
-													<div>
-														<div class="text-sm">
-															<span class="font-medium text-gray-900">Prescription</span>
-														</div>
-														<p class="mt-0.5 text-sm text-gray-500">Refill requested by Sarah Wilson</p>
+											</div>
+											<div class="min-w-0 flex-1">
+												<div>
+													<div class="text-sm">
+														<span class="font-medium text-gray-900 dark:text-gray-100">Prescription</span>
 													</div>
-													<div class="mt-2 text-sm text-gray-700">
-														<p class="text-xs text-gray-500">2 hours ago</p>
-													</div>
+													<p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Refill requested by Sarah Wilson</p>
+												</div>
+												<div class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+													<p class="text-xs text-gray-500 dark:text-gray-400">2 hours ago</p>
 												</div>
 											</div>
 										</div>
-									</li>
-								</ul>
-							</div>
+									</div>
+								</li>
+							</ul>
 						</div>
 					</div>
 				</div>

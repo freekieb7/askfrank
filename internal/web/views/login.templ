@@ -1,30 +1,30 @@
 package views
 
-import (
-	"github.com/gofiber/fiber/v2"
-	"hp/internal/web/translate"
-	"hp/internal/web/views/component"
-)
+import "hp/internal/web/views/component"
 
-templ LoginPage(c *fiber.Ctx, t translate.Translate) {
-	@component.Layout("Login - AskFrank", c) {
-		<div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-			<div class="max-w-sm w-full space-y-4">
+type LoginPageProps struct {
+	component.LayoutProps
+}
+
+templ LoginPage(props LoginPageProps) {
+	@component.Layout(props.LayoutProps) {
+		<div class="auth-layout">
+			<div class="auth-container">
 				<!-- Header -->
 				<div class="text-center">
-					<i class="fas fa-user-md text-4xl text-ocean dark:text-aqua mb-2"></i>
-					<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-						Sign in to <span class="text-gradient-ocean">AskFrank</span>
+					<i class="fas fa-user-md text-4xl text-primary-600 dark:text-primary-400 mb-2"></i>
+					<h2 class="page-title">
+						Sign in to <span class="text-gradient-primary">AskFrank</span>
 					</h2>
-					<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Welcome back to your healthcare platform</p>
+					<p class="page-subtitle">Welcome back to your healthcare platform</p>
 				</div>
 				<!-- Login Form -->
-				<div class="bg-white dark:bg-gray-800 py-6 px-6 shadow-compact rounded-lg border border-gray-200 dark:border-gray-700">
+				<div class="auth-form-card">
 					<form class="space-y-4" method="POST" action="/login" id="login-form">
-						<div id="error-message" class="hidden p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+						<div id="error-message" class="alert-error hidden">
 							<div class="flex">
 								<div class="flex-shrink-0">
-									<svg class="h-5 w-5 text-red-400 dark:text-red-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+									<svg class="icon-lg text-red-400 dark:text-red-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
 									</svg>
 								</div>
@@ -36,10 +36,10 @@ templ LoginPage(c *fiber.Ctx, t translate.Translate) {
 							</div>
 						</div>
 						<!-- Success message display -->
-						<div id="success-message" class="hidden p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+						<div id="success-message" class="alert-success hidden">
 							<div class="flex">
 								<div class="flex-shrink-0">
-									<svg class="h-5 w-5 text-green-400 dark:text-green-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+									<svg class="icon-lg text-green-400 dark:text-green-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
 									</svg>
 								</div>
@@ -51,7 +51,7 @@ templ LoginPage(c *fiber.Ctx, t translate.Translate) {
 							</div>
 						</div>
 						<div>
-							<label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+							<label for="email" class="form-label">
 								Email Address
 							</label>
 							<div class="relative">
@@ -63,13 +63,13 @@ templ LoginPage(c *fiber.Ctx, t translate.Translate) {
 									name="email"
 									type="email"
 									required
-									class="block w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ocean dark:focus:ring-aqua focus:border-ocean dark:focus:border-aqua bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+									class="form-input-icon"
 									placeholder="Enter your email address"
 								/>
 							</div>
 						</div>
 						<div>
-							<label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+							<label for="password" class="form-label">
 								Password
 							</label>
 							<div class="relative">
@@ -81,27 +81,27 @@ templ LoginPage(c *fiber.Ctx, t translate.Translate) {
 									name="password"
 									type="password"
 									required
-									class="block w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ocean dark:focus:ring-aqua focus:border-ocean dark:focus:border-aqua bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+									class="form-input-icon"
 									placeholder="Enter your password"
 								/>
 							</div>
 						</div>
 						<div class="flex items-center justify-between text-sm">
 							<label class="flex items-center">
-								<input type="checkbox" class="h-4 w-4 text-ocean dark:text-aqua focus:ring-ocean dark:focus:ring-aqua border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"/>
-								<span class="ml-2 text-gray-600 dark:text-gray-400">Remember me</span>
+								<input type="checkbox" class="form-checkbox"/>
+								<span class="ml-2 text-muted">Remember me</span>
 							</label>
-							<a href="/forgot-password" class="text-aqua hover:text-teal dark:text-aqua dark:hover:text-mint transition-colors">
+							<a href="/forgot-password" class="link-primary">
 								Forgot password?
 							</a>
 						</div>
 						<div>
 							<button
 								type="submit"
-								class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-ocean hover:bg-teal dark:bg-aqua dark:hover:bg-mint focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ocean dark:focus:ring-aqua dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+								class="btn-primary"
 								id="submit-button"
 							>
-								<i class="fas fa-sign-in-alt mr-2"></i>
+								<i class="fas fa-sign-in-alt icon-with-text"></i>
 								<span id="button-text">Sign in</span>
 							</button>
 						</div>
@@ -109,9 +109,9 @@ templ LoginPage(c *fiber.Ctx, t translate.Translate) {
 				</div>
 				<!-- Register Link -->
 				<div class="text-center">
-					<p class="text-sm text-gray-600 dark:text-gray-400">
+					<p class="text-small">
 						Don't have an account?
-						<a href="/register" class="text-aqua hover:text-teal dark:text-aqua dark:hover:text-mint font-medium transition-colors">
+						<a href="/register" class="link-primary">
 							Create account
 						</a>
 					</p>
@@ -119,6 +119,15 @@ templ LoginPage(c *fiber.Ctx, t translate.Translate) {
 			</div>
 		</div>
 		<script>
+			class LoginError extends Error {
+				constructor(consoleMessage, userMessage) {
+					super(consoleMessage);
+					this.name = 'LoginError';
+					this.userMessage = userMessage;
+					this.consoleMessage = consoleMessage;
+				}
+			}
+			
             document.addEventListener('DOMContentLoaded', function() {
                 const loginForm = document.getElementById('login-form');
                 const errorDiv = document.getElementById('error-message');
@@ -141,41 +150,56 @@ templ LoginPage(c *fiber.Ctx, t translate.Translate) {
 
                     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
                     const formData = new FormData(this);
+					let requestBody = {
+						"email": formData.get('email'),
+						"password": formData.get('password')
+					}
 
 					try {
 						const response = await fetch('/login', {
 							method: 'POST',
-							body: formData,
 							headers: {
-								'X-Csrf-Token': csrfToken
+								'X-CSRF-Token': csrfToken,
+								'Content-Type': 'application/json',
+								'Accept': 'application/json',
 							},
+							body: JSON.stringify(requestBody),
 						});
 
-						// Handle the response
-						if (response.ok) {
-							successDiv.classList.remove('hidden');
-							successText.textContent = 'Login successful! Redirecting...';
-
-							const json = await response.json();
-							if (json.redirect) {
-								setTimeout(() => {
-									window.location.href = json.redirect;
-								}, 1000); // Redirect after 1 second
-							}
-						} else {
+						if (!response.ok) {
+							// Handle error response
 							const result = await response.json();
 							
-							// Handle error response
-							errorText.textContent = result.error || 'Login failed';
-							errorDiv.classList.remove('hidden');
-							
-							// Re-enable submit button
-							submitButton.disabled = false;
-							buttonText.textContent = 'Sign in';
+							if (!result.message) {
+								throw new Error('Invalid server response');
+							}
+						
+							throw new LoginError(`HTTP ${response.status}: ${result.message}`, result.message);
 						}
+
+						// Only execute this if login was successful
+						const body = await response.json();
+
+						if (!body || !body.data || !body.data.redirect_to) {
+							throw new Error('Invalid server response');
+						}
+
+						const redirectTo = body.data.redirect_to;
+						window.location.href = redirectTo;
 					} catch (error) {
+						let consoleMessage, userMessage;
+
+						if (error instanceof LoginError) {
+							consoleMessage = error.systemMessage || error.message;
+							userMessage = error.userMessage || 'Login failed. Please try again.';
+						} else {
+							consoleMessage = error.message || 'An unexpected error occurred';
+							userMessage = 'An unexpected error occurred. Please try again.';
+						}
+
 						// Handle network or other errors
-						errorText.textContent = 'Network error. Please try again.';
+						console.error('Login error:', consoleMessage);
+						errorText.textContent = userMessage;
 						errorDiv.classList.remove('hidden');
 						
 						// Re-enable submit button

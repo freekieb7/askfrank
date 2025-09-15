@@ -1,0 +1,89 @@
+package views
+
+import "hp/internal/web/views/component"
+
+type CreateMeetingPageProps struct {
+	component.AppLayoutProps
+}
+
+templ CreateMeetingPage(props CreateMeetingPageProps) {
+	@component.AppLayout(props.AppLayoutProps) {
+		<div class="main-content">
+			<div class="p-6">
+				<div class="mb-6">
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Create New Meeting</h1>
+					<p class="text-gray-600 dark:text-gray-400">Start a new video conference</p>
+				</div>
+				<div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden">
+					<div class="p-4 border-b border-gray-200 dark:border-gray-700">
+						<h2 class="text-lg font-medium text-gray-900 dark:text-white">Meeting Options</h2>
+					</div>
+					<div class="p-6">
+						<div class="mb-4">
+							<label for="meetingName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Meeting Name (Optional)</label>
+							<input
+								type="text"
+								id="meetingName"
+								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-ocean-500 focus:border-ocean-500 dark:bg-gray-700 dark:text-white"
+								placeholder="My Meeting"
+							/>
+						</div>
+						<div class="mb-6">
+							<label for="meetingId" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Meeting ID</label>
+							<div class="flex">
+								<input
+									type="text"
+									id="meetingId"
+									class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-l-md shadow-sm focus:outline-none focus:ring-ocean-500 focus:border-ocean-500 dark:bg-gray-700 dark:text-white"
+									placeholder="Generate or enter meeting ID"
+									readonly
+								/>
+								<button
+									type="button"
+									id="generateMeetingId"
+									class="px-4 py-2 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-r-md hover:bg-gray-200 dark:hover:bg-gray-500 focus:outline-none"
+									onclick="generateRandomMeetingId()"
+								>
+									<i class="fas fa-sync-alt"></i>
+								</button>
+							</div>
+						</div>
+						<div class="flex justify-end">
+							<button
+								type="button"
+								id="startMeetingBtn"
+								class="px-4 py-2 bg-ocean text-white rounded-md hover:bg-ocean-700 focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+								onclick="startMeeting()"
+							>
+								Start Meeting
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<script>
+            function generateRandomMeetingId() {
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let result = '';
+                for (let i = 0; i < 10; i++) {
+                    result += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                document.getElementById('meetingId').value = result;
+            }
+            
+            // Generate a meeting ID on page load
+            document.addEventListener('DOMContentLoaded', generateRandomMeetingId);
+            
+            function startMeeting() {
+                const meetingId = document.getElementById('meetingId').value;
+                if (!meetingId) {
+                    alert('Please generate a meeting ID first');
+                    return;
+                }
+                
+                window.location.href = `/meeting/${meetingId}`;
+            }
+        </script>
+	}
+}

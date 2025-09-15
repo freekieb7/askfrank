@@ -1,35 +1,58 @@
 # 🎨 UI Style Guide
 
-This document defines the core color palette and usage guidelines for your UI.
+This document defines the core color palette and usage guidelines for your UI based on the Tailwind configuration.
 
 ---
 
 ## 🌈 Color Palette
 
-| Color Name   | Hex       | Usage Recommendation                         |
-|--------------|-----------|----------------------------------------------|
-| Ocean Blue   | `#05668D` | Primary buttons, headers, brand accent       |
-| Deep Teal    | `#028090` | Hover states, icons, secondary buttons       |
-| Mint Green   | `#00A896` | Success states, highlights, call-to-actions  |
-| Aqua Green   | `#02C39A` | Accents, tags, links                         |
+### 🩺 Primary Healthcare Colors (Blue Spectrum)
+| Tailwind Class   | Hex       | Usage Recommendation                         |
+|------------------|-----------|----------------------------------------------|
+| `primary-500`    | `#3b82f6` | Primary buttons, headers, brand accent       |
+| `primary-600`    | `#2563eb` | Hover states, active states                  |
+| `primary-700`    | `#1d4ed8` | Pressed states, dark themes                  |
+| `primary-400`    | `#60a5fa` | Light accents, disabled states               |
+
+### 🧬 Medical Colors (Teal/Mint Spectrum)
+| Tailwind Class   | Hex       | Usage Recommendation                         |
+|------------------|-----------|----------------------------------------------|
+| `medical-500`    | `#14b8a6` | Success states, call-to-actions              |
+| `medical-600`    | `#0d9488` | Success hover states, icons                  |
+| `medical-400`    | `#2dd4bf` | Highlights, badges, accents                  |
+| `medical-300`    | `#5eead4` | Light accents, tags                          |
+
+### 🎨 Gradient Colors
+| Tailwind Class      | Hex       | Usage Recommendation                      |
+|---------------------|-----------|------------------------------------------|
+| `gradient-start`    | `#3b82f6` | Gradient backgrounds (from)              |
+| `gradient-end`      | `#6366f1` | Gradient backgrounds (to)                |
 
 ---
 
 ## 🧱 Usage Guidelines
 
-### 🎯 Primary Color – Ocean Blue `#05668D`
+### 🎯 Primary Color – Primary Blue `primary-500`
 - Use for navigation bars, primary action buttons, or branding highlights.
+- Class examples: `bg-primary-500`, `text-primary-500`, `border-primary-500`
 - Avoid overusing to preserve impact.
 
-### 🧭 Secondary Color – Deep Teal `#028090`
+### 🧭 Secondary Color – Primary Blue Dark `primary-600`
 - Ideal for button hovers, link hovers, or secondary UI elements.
-- Pairs well with Ocean Blue for subtle contrast.
+- Class examples: `hover:bg-primary-600`, `focus:border-primary-600`
+- Pairs well with primary-500 for subtle contrast.
 
-### ✅ Accent Color – Mint Green `#00A896`
+### ✅ Accent Color – Medical Teal `medical-500`
 - Great for success messages, form indicators, or badges.
+- Class examples: `bg-medical-500`, `text-medical-500`
 
-### 🔗 Supporting Accent – Aqua Green `#02C39A`
+### 🔗 Supporting Accent – Medical Light `medical-400`
 - Use for hyperlinks, borders, tags, or minor CTAs.
+- Class examples: `text-medical-400`, `border-medical-400`
+
+### 🌈 Gradient Backgrounds
+- Use `from-gradient-start to-gradient-end` for hero sections and cards
+- Example: `bg-gradient-to-r from-gradient-start to-gradient-end`
 
 ---
 
@@ -54,8 +77,9 @@ This document defines the core color palette and usage guidelines for your UI.
 - **Supporting Text**: `text-xs` for compact, `text-sm` for standard
 
 ### 🎛️ Button & Interactive Element Guidelines
-- **Primary Buttons**: Ocean Blue background with Deep Teal hover
-- **Secondary Buttons**: Gray background with darker gray hover
+- **Primary Buttons**: `bg-primary-500 hover:bg-primary-600 text-white`
+- **Secondary Buttons**: `bg-gray-200 hover:bg-gray-300 text-gray-900`
+- **Success Buttons**: `bg-medical-500 hover:bg-medical-600 text-white`
 - **Button Padding**: `py-2 px-4` for compact, `py-3 px-4` for standard
 - **Button Text**: `text-sm font-medium` for compact, `text-base font-medium` for standard
 
@@ -67,14 +91,15 @@ This document defines the core color palette and usage guidelines for your UI.
 ### ✨ Special Component Patterns
 
 #### 💳 Pricing Card Best Practices
-- Use `scale-105` for featured/popular plans
-- Include "Most Popular" badge with `bg-ocean text-white` styling
-- Use Mint Green checkmarks (`text-mint`) for included features
+- Use `scale-105 shadow-medical` for featured/popular plans
+- Include "Most Popular" badge with `bg-primary-500 text-white` styling
+- Use Medical Green checkmarks (`text-medical-500`) for included features
 - Use gray X marks (`text-gray-400`) for excluded features
 - Keep feature lists to 5-6 items maximum for readability
 
 #### 🏷️ Status Indicators
-- **Active/Success**: Use Mint Green (`#00A896`)
+- **Active/Success**: Use Medical Teal (`text-medical-500` or `bg-medical-500`)
+- **Primary/Important**: Use Primary Blue (`text-primary-500` or `bg-primary-500`)
 - **Warning/Pending**: Use appropriate warning colors
 - **Inactive/Disabled**: Use `text-gray-400` or `bg-gray-100`
 
@@ -82,14 +107,37 @@ This document defines the core color palette and usage guidelines for your UI.
 - **Standard Icons**: `w-4 h-4` for compact layouts, `w-5 h-5` for standard
 - **Large Icons**: `w-5 h-5` to `w-6 h-6` for emphasis
 - **Icon Spacing**: `mr-2` for compact, `mr-3` for standard layouts
-- **Icon Colors**: Use brand colors for interactive elements, gray for informational
+- **Icon Colors**: Use `text-primary-500` for interactive elements, `text-gray-500` for informational
+
+### 🎨 Animation & Effects
+- **Fade In**: Use `animate-fade-in` for smooth content loading
+- **Slide Up**: Use `animate-slide-up` for modal/card entrances
+- **Soft Shadows**: Use `shadow-soft` for subtle depth
+- **Medical Shadows**: Use `shadow-medical` for healthcare-themed elements
+
+### 🌙 Dark Mode Considerations
+- All components automatically adapt using `dark:` prefixes
+- Primary colors remain consistent in dark mode
+- Use safelist classes defined in tailwind.config.js for proper dark mode support
 
 ---
 
 ## 🎨 Brand Application Examples
 
 ### Billing/Pricing Pages
-- Ocean Blue for primary upgrade buttons and featured plan borders
-- Mint Green for feature checkmarks and success indicators
-- Deep Teal for button hover states
+- Primary Blue (`bg-primary-500`) for primary upgrade buttons and featured plan borders
+- Medical Teal (`text-medical-500`) for feature checkmarks and success indicators
+- Primary Blue hover (`hover:bg-primary-600`) for button hover states
 - Compact spacing with `py-6` page padding and `gap-6` card spacing
+
+### Healthcare Dashboard Components
+- Use `shadow-medical` for healthcare-specific cards
+- Apply `bg-gradient-to-r from-gradient-start to-gradient-end` for hero sections
+- Use Inter font family for clean, medical-appropriate typography
+- Leverage `animate-fade-in` and `animate-slide-up` for smooth user interactions
+
+### Form Elements
+- Primary focus states: `focus:ring-primary-500 focus:border-primary-500`
+- Success states: `border-medical-500 text-medical-600`
+- Error states: Use standard red colors
+- Disabled states: `bg-gray-100 text-gray-400`

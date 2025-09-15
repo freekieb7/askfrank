@@ -8,12 +8,34 @@ package component
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import (
-	"github.com/gofiber/fiber/v2"
-	"hp/internal/web/translate"
-)
+type MenuItem struct {
+	Name     string
+	Icon     string
+	URL      string
+	SubItems []MenuItem
+	Active   bool
+}
 
-func AppLayout(title string, c *fiber.Ctx, t translate.Translate) templ.Component {
+func openClassName(open bool) string {
+	if open {
+		return "open"
+	}
+	return ""
+}
+
+func activeClassName(active bool) string {
+	if active {
+		return "bg-medical-500"
+	}
+	return ""
+}
+
+type AppLayoutProps struct {
+	LayoutProps LayoutProps
+	MenuItems   []MenuItem
+}
+
+func AppLayout(props AppLayoutProps) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -46,7 +68,452 @@ func AppLayout(title string, c *fiber.Ctx, t translate.Translate) templ.Componen
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<link rel=\"stylesheet\" href=\"/static/css/dashboard.css\"><div class=\"flex h-screen bg-gray-50 dark:bg-gray-900\"><!-- Sidebar --><div class=\"hidden lg:flex lg:w-56 lg:flex-col lg:fixed lg:inset-y-0\"><div class=\"flex flex-col flex-grow pt-4 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto\"><!-- Logo --><div class=\"flex items-center flex-shrink-0 px-3 pb-4\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div></div><!-- Navigation --><nav class=\"flex-1 pb-3 space-y-1\"><a href=\"/\" class=\"sidebar-link active\"><i class=\"fas fa-home w-4 h-4 mr-2.5\"></i> Dashboard</a><!-- Drive Dropdown --><details class=\"sidebar-dropdown group\"><summary class=\"sidebar-link cursor-pointer flex items-center justify-between w-full\"><div class=\"flex items-center\"><i class=\"fas fa-cloud w-4 h-4 mr-2.5\"></i> <span>Drive</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"pl-8 mt-1 space-y-1\"><a href=\"/drive\" class=\"sidebar-link submenu-link\"><i class=\"fas fa-folder w-4 h-4 mr-2.5\"></i> My Files</a> <a href=\"/drive/shared\" class=\"sidebar-link submenu-link\"><i class=\"fas fa-share-alt w-4 h-4 mr-2.5\"></i> Shared Files</a></nav></details><!-- Analytics Dropdown --></nav></div></div><!-- Mobile sidebar overlay --><div class=\"lg:hidden fixed inset-0 z-50 hidden\" id=\"mobile-sidebar-overlay\"><!-- Overlay background --><div class=\"fixed inset-0 bg-gray-600 bg-opacity-75\"></div><!-- Mobile sidebar --><div class=\"relative flex flex-col w-full max-w-xs bg-white dark:bg-gray-800 shadow-xl\"><!-- Mobile sidebar header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div><button type=\"button\" class=\"p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300\" id=\"close-sidebar\"><i class=\"fas fa-times w-5 h-5\"></i></button></div><!-- Mobile navigation --><nav class=\"flex-1 px-4 py-4 space-y-1 overflow-y-auto\"><a href=\"/\" class=\"sidebar-link active\"><i class=\"fas fa-home w-4 h-4 mr-2.5\"></i> Dashboard</a><!-- Mobile Drive Dropdown --><details class=\"sidebar-dropdown group\"><summary class=\"sidebar-link cursor-pointer flex items-center justify-between w-full\"><div class=\"flex items-center\"><i class=\"fas fa-cloud w-4 h-4 mr-2.5\"></i> <span>Drive</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"pl-8 mt-1 space-y-1\"><a href=\"/drive\" class=\"sidebar-link submenu-link\"><i class=\"fas fa-folder w-4 h-4 mr-2.5\"></i> My Files</a> <a href=\"/drive/shared\" class=\"sidebar-link submenu-link\"><i class=\"fas fa-share-alt w-4 h-4 mr-2.5\"></i> Shared Files</a></nav></details><!-- Mobile Analytics Dropdown --></nav></div></div><!-- Main content --><div class=\"flex flex-col flex-1 lg:pl-56\"><!-- Top bar --><div class=\"sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 shadow-sm sm:gap-x-4 sm:px-4\"><!-- Mobile menu button --><button type=\"button\" class=\"lg:hidden p-2 text-gray-700 dark:text-gray-300\" id=\"mobile-menu-button\"><i class=\"fas fa-bars w-4 h-4\"></i></button><!-- Search bar --><div class=\"flex flex-1 justify-center\"><div class=\"search-container relative\"><div class=\"absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none\"><i class=\"fas fa-search text-gray-400 dark:text-gray-500 w-4 h-4\"></i></div><input type=\"text\" class=\"block w-full rounded-lg border-0 py-2 pl-9 pr-3 text-sm text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-ocean dark:focus:ring-aqua bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600\" placeholder=\"Search...\"></div></div><!-- Right side items --><div class=\"flex items-center gap-x-2\"><!-- Notifications --><!-- Profile dropdown --><div class=\"relative\"><button type=\"button\" class=\"flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700\" id=\"profile-menu-button\"><img class=\"h-7 w-7 rounded-full bg-gray-50\" src=\"https://ui-avatars.com/api/?name=Dr+Smith&background=05668D&color=fff\" alt=\"Profile\"> <span class=\"hidden sm:flex sm:items-center\"><span class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Dr. Smith</span> <i class=\"fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400 dark:text-gray-500\"></i></span></button><!-- Dropdown menu --><div class=\"dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1.5 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-700/50 hidden\" id=\"profile-dropdown\"><a href=\"/profile\" class=\"block px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-user w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Profile</a> <a href=\"/settings\" class=\"block px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-cog w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Settings</a><div class=\"border-t border-gray-100 dark:border-gray-700 my-1\"></div><button type=\"button\" id=\"logout-button\" class=\"block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Sign out</button></div></div></div></div><!-- Page content --><main class=\"flex-1 py-4 overflow-y-auto\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, " <div class=\"flex h-screen bg-gray-50 dark:bg-gray-900\"><!-- Sidebar --><div class=\"hidden lg:flex lg:w-56 lg:flex-col lg:fixed lg:inset-y-0\"><div class=\"flex flex-col flex-grow pt-4 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto\"><!-- Logo --><div class=\"flex items-center flex-shrink-0 px-3 pb-4\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div></div><!-- Navigation --><nav class=\"flex-1 pb-3 space-y-1\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, item := range props.MenuItems {
+				if item.SubItems != nil && len(item.SubItems) > 0 {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<details class=\"sidebar-dropdown group \"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var3 string
+					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(openClassName(item.Active))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 51, Col: 77}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(` ` + templ_7745c5c3_Var3))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, ">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var4 = []any{"text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 cursor-pointer flex items-center justify-between w-full " + activeClassName(item.Active)}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var4...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<summary class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var5 string
+					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var4).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><div class=\"flex items-baseline\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var6 = []any{item.Icon + " w-4 h-4 mr-2.5"}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var6...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<i class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var7 string
+					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var6).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"></i> <span>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var8 string
+					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 55, Col: 28}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"pl-8 mt-1 space-y-1\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					for _, subItem := range item.SubItems {
+						var templ_7745c5c3_Var9 = []any{"text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white flex items-baseline px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 cursor-pointer flex items-center w-full " + activeClassName(subItem.Active)}
+						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var9...)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<a href=\"")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var10 templ.SafeURL
+						templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(subItem.URL)
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 63, Col: 32}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\" class=\"")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var11 string
+						templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var9).String())
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\">")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var12 = []any{subItem.Icon + " w-4 h-4 mr-2.5"}
+						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var12...)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<i class=\"")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var13 string
+						templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var12).String())
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\"></i> <span>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var14 string
+						templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(subItem.Name)
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 65, Col: 32}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</span></a>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</nav></details>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				} else {
+					var templ_7745c5c3_Var15 = []any{"text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white flex items-baseline px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 " + activeClassName(item.Active)}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var15...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<a href=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var16 templ.SafeURL
+					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(item.URL)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 71, Col: 26}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var17 string
+					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var15).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var18 = []any{item.Icon + " w-4 h-4 mr-2.5"}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var18...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<i class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var19 string
+					templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var18).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\"></i> <span>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var20 string
+					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 73, Col: 26}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</span></a>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</nav></div></div><!-- Mobile sidebar overlay --><div class=\"lg:hidden fixed inset-0 z-50 hidden\" id=\"mobile-sidebar-overlay\"><!-- Overlay background --><div class=\"fixed inset-0 bg-gray-600 bg-opacity-75\"></div><!-- Mobile sidebar --><div class=\"relative flex flex-col w-full max-w-xs bg-white dark:bg-gray-800 shadow-xl\"><!-- Mobile sidebar header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div><button type=\"button\" class=\"p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300\" id=\"close-sidebar\"><i class=\"fas fa-times w-5 h-5\"></i></button></div><!-- Mobile navigation --><nav class=\"flex-1 px-4 py-4 space-y-1 overflow-y-auto\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, item := range props.MenuItems {
+				if item.SubItems != nil && len(item.SubItems) > 0 {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<details class=\"group\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var21 = []any{"cursor-pointer flex items-center justify-between w-full " + activeClassName(item.Active)}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var21...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<summary class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var22 string
+					templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var21).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\"><div class=\"flex items-center\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var23 = []any{item.Icon + " w-4 h-4 mr-2.5"}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var23...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<i class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var24 string
+					templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var23).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\"></i> <span>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var25 string
+					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 107, Col: 28}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"pl-8 mt-1 space-y-1\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					for _, subItem := range item.SubItems {
+						var templ_7745c5c3_Var26 = []any{"submenu-link " + activeClassName(subItem.Active)}
+						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var26...)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<a href=\"")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var27 templ.SafeURL
+						templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinURLErrs(subItem.URL)
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 115, Col: 32}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\" class=\"")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var28 string
+						templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var26).String())
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\">")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var29 = []any{subItem.Icon + " w-4 h-4 mr-2.5"}
+						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var29...)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<i class=\"")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var30 string
+						templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var29).String())
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\"></i> ")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var31 string
+						templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(subItem.Name)
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 117, Col: 26}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</a>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</nav></details>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				} else {
+					var templ_7745c5c3_Var32 = []any{"sidebar-link " + activeClassName(item.Active)}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var32...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<a href=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var33 templ.SafeURL
+					templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinURLErrs(item.URL)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 123, Col: 26}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\" class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var34 string
+					templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var32).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var35 = []any{item.Icon + " w-4 h-4 mr-2.5"}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var35...)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<i class=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var36 string
+					templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var35).String())
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 1, Col: 0}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"></i> ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var37 string
+					templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 125, Col: 20}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</a>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</nav></div></div><!-- Main content --><div class=\"flex flex-col flex-1 lg:pl-56\"><!-- Top bar --><div class=\"sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 shadow-sm sm:gap-x-4 sm:px-4\"><!-- Mobile menu button --><button type=\"button\" class=\"lg:hidden p-2 text-gray-700 dark:text-gray-300\" id=\"mobile-menu-button\"><i class=\"fas fa-bars w-4 h-4\"></i></button><!-- Search bar --><div class=\"flex flex-1 justify-center\"><div class=\"search-container relative\"><div class=\"absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none\"><i class=\"fas fa-search text-gray-400 dark:text-gray-500 w-4 h-4\"></i></div><input type=\"text\" class=\"block w-full rounded-lg border-0 py-2 pl-9 pr-3 text-sm text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-ocean dark:focus:ring-aqua bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600\" placeholder=\"Search...\"></div></div><!-- Right side items --><div class=\"flex items-center gap-x-2\"><!-- Notifications --><!-- Profile dropdown --><div class=\"relative\"><button type=\"button\" class=\"flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700\" id=\"profile-menu-button\"><img class=\"h-7 w-7 rounded-full bg-gray-50\" src=\"https://ui-avatars.com/api/?name=Dr+Smith&background=05668D&color=fff\" alt=\"Profile\"> <span class=\"hidden sm:flex sm:items-center\"><span class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Dr. Smith</span> <i class=\"fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400 dark:text-gray-500\"></i></span></button><!-- Dropdown menu --><div class=\"dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1.5 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-700/50 hidden\" id=\"profile-dropdown\"><div class=\"border-t border-gray-100 dark:border-gray-700 my-1\"><button type=\"button\" id=\"logout-button\" class=\"block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Sign out</button></div></div></div></div></div><!-- Page content --><main class=\"flex-1 py-4 overflow-y-auto\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -54,13 +521,13 @@ func AppLayout(title string, c *fiber.Ctx, t translate.Translate) templ.Componen
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</main></div></div><script>\n\t\t\t// Set active menu item based on current URL\n\t\t\tfunction setActiveMenuItem() {\n\t\t\t\tconst currentPath = window.location.pathname;\n\t\t\t\tconst menuLinks = document.querySelectorAll('.sidebar-link');\n\t\t\t\t\n\t\t\t\t// Remove active class from all links\n\t\t\t\tmenuLinks.forEach(link => {\n\t\t\t\t\tlink.classList.remove('active');\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\t// Handle drive submenu items\n\t\t\t\tif (currentPath.startsWith('/drive')) {\n\t\t\t\t\t// Open the drive details elements\n\t\t\t\t\tconst driveDetails = document.querySelectorAll('details.sidebar-dropdown');\n\t\t\t\t\tdriveDetails.forEach(detail => {\n\t\t\t\t\t\tconst summary = detail.querySelector('summary');\n\t\t\t\t\t\tif (summary && summary.textContent.includes('Drive')) {\n\t\t\t\t\t\t\tdetail.open = true;\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\t\n\t\t\t\t\t// Set active submenu item\n\t\t\t\t\tif (currentPath === '/drive/shared') {\n\t\t\t\t\t\tdocument.querySelectorAll('a[href=\"/drive/shared\"]').forEach(link => {\n\t\t\t\t\t\t\tlink.classList.add('active');\n\t\t\t\t\t\t});\n\t\t\t\t\t} else if (currentPath === '/drive/recent') {\n\t\t\t\t\t\tdocument.querySelectorAll('a[href=\"/drive/recent\"]').forEach(link => {\n\t\t\t\t\t\t\tlink.classList.add('active');\n\t\t\t\t\t\t});\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.querySelectorAll('a[href=\"/drive\"]').forEach(link => {\n\t\t\t\t\t\t\tlink.classList.add('active');\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t} else if (currentPath.startsWith('/analytics')) {\n\t\t\t\t\t// Open the analytics details elements\n\t\t\t\t\tconst analyticsDetails = document.querySelectorAll('details.sidebar-dropdown');\n\t\t\t\t\tanalyticsDetails.forEach(detail => {\n\t\t\t\t\t\tconst summary = detail.querySelector('summary');\n\t\t\t\t\t\tif (summary && summary.textContent.includes('Analytics')) {\n\t\t\t\t\t\t\tdetail.open = true;\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\t\n\t\t\t\t\t// Set active submenu item based on specific path\n\t\t\t\t\tdocument.querySelectorAll(`a[href=\"${currentPath}\"]`).forEach(link => {\n\t\t\t\t\t\tlink.classList.add('active');\n\t\t\t\t\t});\n\t\t\t\t} else {\n\t\t\t\t\t// For other menu items, just match the exact path\n\t\t\t\t\tdocument.querySelectorAll(`a[href=\"${currentPath}\"]`).forEach(link => {\n\t\t\t\t\t\tlink.classList.add('active');\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t}\n\n\t\t\t// Theme management\n\t\t\tfunction toggleTheme() {\n\t\t\t\tconst html = document.documentElement;\n\t\t\t\tconst currentTheme = html.classList.contains('dark') ? 'dark' : 'light';\n\t\t\t\tconst newTheme = currentTheme === 'dark' ? 'light' : 'dark';\n\t\t\t\t\n\t\t\t\t// Toggle dark class\n\t\t\t\tif (newTheme === 'dark') {\n\t\t\t\t\thtml.classList.add('dark');\n\t\t\t\t} else {\n\t\t\t\t\thtml.classList.remove('dark');\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t// Save to localStorage\n\t\t\t\tlocalStorage.setItem('theme', newTheme);\n\t\t\t\t\n\t\t\t\t// Update theme toggle appearance\n\t\t\t\tupdateThemeToggle();\n\t\t\t\t\n\t\t\t\tconsole.log('Theme switched to:', newTheme);\n\t\t\t}\n\n\t\t\tfunction updateThemeToggle() {\n\t\t\t\tconst toggles = document.querySelectorAll('.theme-toggle');\n\t\t\t\tconst isDark = document.documentElement.classList.contains('dark');\n\t\t\t\t\n\t\t\t\ttoggles.forEach(toggle => {\n\t\t\t\t\tif (isDark) {\n\t\t\t\t\t\ttoggle.classList.add('dark');\n\t\t\t\t\t} else {\n\t\t\t\t\t\ttoggle.classList.remove('dark');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t}\n\n\t\t\t// Initialize theme toggle appearance when DOM is loaded\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\tupdateThemeToggle();\n\t\t\t\tsetActiveMenuItem();\n\n\t\t\t\tconst logoutButton = document.getElementById('logout-button');\n\n\t\t\t\tif (logoutButton) {\n\t\t\t\t\tlogoutButton.addEventListener('click', async function() {\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\n\t\t\t\t\t\tconst response = await fetch('/logout', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t\t\t'X-Csrf-Token': csrfToken\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\t\tconst json = await response.json();\n\n\t\t\t\t\t\t\tif (json.redirect) {\n\t\t\t\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\t\t\t\twindow.location.href = json.redirect;\n\t\t\t\t\t\t\t\t}, 1000); // Redirect after 1 second\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\tconst result = await response.json();\n\t\t\t\t\t\t\talert(result.error || 'Logout failed');\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t});\n\n\t\t\t// Also update immediately if called after DOM is ready\n\t\t\tif (document.readyState === 'loading') {\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', updateThemeToggle);\n\t\t\t} else {\n\t\t\t\tupdateThemeToggle();\n\t\t\t}\n\n\t\t\t// Profile dropdown functionality\n\t\t\tconst profileButton = document.getElementById('profile-menu-button');\n\t\t\tconst profileDropdown = document.getElementById('profile-dropdown');\n\t\t\t\n\t\t\tif (profileButton && profileDropdown) {\n\t\t\t\tprofileButton.addEventListener('click', function(e) {\n\t\t\t\t\te.stopPropagation();\n\t\t\t\t\tprofileDropdown.classList.toggle('hidden');\n\t\t\t\t\tif (!profileDropdown.classList.contains('hidden')) {\n\t\t\t\t\t\tsetTimeout(() => profileDropdown.classList.add('show'), 10);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Close dropdown when clicking outside\n\t\t\t\tdocument.addEventListener('click', function() {\n\t\t\t\t\tprofileDropdown.classList.add('hidden');\n\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t});\n\t\t\t}\n\n\t\t\t// Mobile menu functionality\n\t\t\tconst mobileMenuButton = document.getElementById('mobile-menu-button');\n\t\t\tconst mobileOverlay = document.getElementById('mobile-sidebar-overlay');\n\t\t\tconst closeSidebar = document.getElementById('close-sidebar');\n\n\t\t\tif (mobileMenuButton && mobileOverlay) {\n\t\t\t\tmobileMenuButton.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.remove('hidden');\n\t\t\t\t});\n\t\t\t}\n\n\t\t\tif (closeSidebar && mobileOverlay) {\n\t\t\t\tcloseSidebar.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t});\n\n\t\t\t\t// Close mobile menu when clicking overlay\n\t\t\t\tmobileOverlay.addEventListener('click', function(e) {\n\t\t\t\t\tif (e.target === mobileOverlay || e.target.classList.contains('bg-opacity-75')) {\n\t\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t}\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</main></div></div><script>\n\t\t\t// Initialize theme toggle appearance when DOM is loaded\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\tconst logoutButton = document.getElementById('logout-button');\n\t\t\t\tconst profileButton = document.getElementById('profile-menu-button');\n\t\t\t\tconst profileDropdown = document.getElementById('profile-dropdown');\n\t\t\t\tconst mobileMenuButton = document.getElementById('mobile-menu-button');\n\t\t\t\tconst mobileOverlay = document.getElementById('mobile-sidebar-overlay');\n\t\t\t\tconst closeSidebar = document.getElementById('close-sidebar');\n\n\t\t\t\t// Logout functionality\n\t\t\t\tlogoutButton.addEventListener('click', async function() {\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch('/logout', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tthrow new Error('Logout request failed');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tconst json = await response.json();\n\t\t\t\t\t\tif (!json.data.redirect_to) {\n\t\t\t\t\t\t\tthrow new Error('No redirect URL provided');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\twindow.location.href = json.data.redirect_to;\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\tconsole.error('Error during logout:', error);\n\t\t\t\t\t\talert('An error occurred during logout. Please try again.');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Profile dropdown functionality\n\t\t\t\tprofileButton.addEventListener('click', function(e) {\n\t\t\t\t\te.stopPropagation();\n\t\t\t\t\tprofileDropdown.classList.toggle('hidden');\n\t\t\t\t\tif (!profileDropdown.classList.contains('hidden')) {\n\t\t\t\t\t\tsetTimeout(() => profileDropdown.classList.add('show'), 10);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Close dropdown when clicking outside\n\t\t\t\tdocument.addEventListener('click', function() {\n\t\t\t\t\tprofileDropdown.classList.add('hidden');\n\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t});\n\n\t\t\t\t// Mobile menu functionality\n\t\t\t\tmobileMenuButton.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.remove('hidden');\n\t\t\t\t});\n\n\t\t\t\tcloseSidebar.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t});\n\n\t\t\t\t// Close mobile menu when clicking overlay\n\t\t\t\tmobileOverlay.addEventListener('click', function(e) {\n\t\t\t\t\tif (e.target === mobileOverlay || e.target.classList.contains('bg-opacity-75')) {\n\t\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t});\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout(title, c).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout(props.LayoutProps).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

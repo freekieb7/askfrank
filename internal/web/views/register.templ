@@ -1,28 +1,30 @@
 package views
 
-import "github.com/gofiber/fiber/v2"
 import "hp/internal/web/views/component"
-import "hp/internal/web/translate"
 
-templ RegisterPage(c *fiber.Ctx, t translate.Translate) {
-	@component.Layout("Register - AskFrank", c) {
-		<div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-			<div class="max-w-sm w-full space-y-4">
+type RegisterPageProps struct {
+	component.LayoutProps
+}
+
+templ RegisterPage(props RegisterPageProps) {
+	@component.Layout(props.LayoutProps) {
+		<div class="auth-layout">
+			<div class="auth-container">
 				<!-- Header -->
 				<div class="text-center">
-					<i class="fas fa-user-plus text-4xl text-ocean dark:text-aqua mb-2"></i>
-					<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-						Join <span class="text-gradient-ocean">AskFrank</span>
+					<i class="fas fa-user-plus text-4xl text-primary-600 dark:text-primary-400 mb-2"></i>
+					<h2 class="page-title">
+						Join <span class="text-gradient-primary">AskFrank</span>
 					</h2>
-					<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Create your healthcare platform account</p>
+					<p class="page-subtitle">Create your healthcare platform account</p>
 				</div>
 				<!-- Register Form -->
-				<div class="bg-white dark:bg-gray-800 py-6 px-6 shadow-compact rounded-lg border border-gray-200 dark:border-gray-700">
+				<div class="auth-form-card">
 					<form class="space-y-4" method="POST" action="/register" id="register-form">
-						<div id="error-message" class="hidden p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+						<div id="error-message" class="alert-error hidden">
 							<div class="flex">
 								<div class="flex-shrink-0">
-									<svg class="h-5 w-5 text-red-400 dark:text-red-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+									<svg class="icon-lg text-red-400 dark:text-red-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
 									</svg>
 								</div>
@@ -34,10 +36,10 @@ templ RegisterPage(c *fiber.Ctx, t translate.Translate) {
 							</div>
 						</div>
 						<!-- Success message display -->
-						<div id="success-message" class="hidden p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+						<div id="success-message" class="alert-success hidden">
 							<div class="flex">
 								<div class="flex-shrink-0">
-									<svg class="h-5 w-5 text-green-400 dark:text-green-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+									<svg class="icon-lg text-green-400 dark:text-green-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
 										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
 									</svg>
 								</div>
@@ -124,7 +126,7 @@ templ RegisterPage(c *fiber.Ctx, t translate.Translate) {
 						<div>
 							<button
 								type="submit"
-								class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-ocean hover:bg-teal dark:bg-aqua dark:hover:bg-mint focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ocean dark:focus:ring-aqua dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+								class="btn-primary"
 								id="submit-button"
 							>
 								<i class="fas fa-user-plus mr-2"></i>
@@ -145,6 +147,15 @@ templ RegisterPage(c *fiber.Ctx, t translate.Translate) {
 			</div>
 		</div>
 		<script>
+			class RegisterError extends Error {
+				constructor(consoleMessage, userMessage) {
+					super(consoleMessage);
+					this.name = 'RegisterError';
+					this.userMessage = userMessage;
+					this.consoleMessage = consoleMessage;
+				}
+			}
+
 			document.addEventListener('DOMContentLoaded', function() {
 				// Focus the name field on page load
 				document.getElementById('name').focus();
@@ -179,41 +190,58 @@ templ RegisterPage(c *fiber.Ctx, t translate.Translate) {
 					const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 					const formData = new FormData(this);
 
+					let json = {
+						"name": formData.get('name'),
+						"email": formData.get('email'),
+						"password": formData.get('password'),
+						"terms_accepted": termsCheckbox.checked
+					};
+
 					try {
 						const response = await fetch('/register', {
 							method: 'POST',
-							body: formData,
 							headers: {
-								'X-Csrf-Token': csrfToken
+								'X-CSRF-Token': csrfToken,
+								'Content-Type': 'application/json',
+								'Accept': 'application/json',
 							},
+							body: JSON.stringify(json)
 						});
 
-						if (response.ok) {
-							successDiv.classList.remove('hidden');
-							successText.textContent = 'Registration successful! Redirecting...';
-
-							const json = await response.json();
-							if (json.redirect) {
-								setTimeout(() => {
-									window.location.href = json.redirect;
-								}, 1000); // Redirect after 1 second
+						if (!response.ok) {
+							const errorData = await response.json();
+							if (errorData && errorData.message) {
+								throw new RegisterError(errorData.error, errorData.message);
 							}
-						} else {
-							const result = await response.json();
-
-							// Handle error response
-							errorText.textContent = result.error || 'Registration failed';
-							errorDiv.classList.remove('hidden');
-
-							// Re-enable submit button
-							submitButton.disabled = false;
-							buttonText.textContent = 'Create Account';
+							throw new Error('Network response was not ok');
 						}
-					} catch (error) {
-						// Handle network or other errors
-						errorText.textContent = 'Network error. Please try again.';
-						errorDiv.classList.remove('hidden');
 
+					
+						successDiv.classList.remove('hidden');
+						successText.textContent = 'Registration successful! Redirecting...';
+
+						const responseBody = await response.json();
+						if (!responseBody.data.redirect_to) {
+							throw new RegisterError('Registration failed: no redirect URL provided');
+						}
+
+						window.location.href = responseBody.data.redirect_to;
+					} catch (error) {
+						let consoleMessage, userMessage;
+
+						if (error instanceof RegisterError) {
+							consoleMessage = error.consoleMessage;
+							userMessage = error.userMessage;
+						} else {
+							consoleMessage = error.message;
+							userMessage = 'An unexpected error occurred. Please try again.';
+						}
+
+						// Handle network or other errors
+						console.error('Register error:', consoleMessage);
+						errorText.textContent = userMessage;
+						errorDiv.classList.remove('hidden');
+						
 						// Re-enable submit button
 						submitButton.disabled = false;
 						buttonText.textContent = 'Create Account';
