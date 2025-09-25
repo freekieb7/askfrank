@@ -146,7 +146,7 @@ templ DrivePage(props DrivePageProps) {
 									<div class="file-item group hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" data-file-id={ file.ID } data-is-folder={ file.IsFolder } data-is-viewable={ file.IsViewable } data-download-url={ file.DownloadURL } title="Double-click to open file">
 										<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center">
 											<div class="col-span-6 sm:col-span-6 flex items-center min-w-0">
-												<i class={ getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0" }></i>
+												<i class={ getFileIcon(file.MimeType, file.IsFolder) + " mr-3 shrink-0" }></i>
 												<span class="font-medium text-gray-900 dark:text-white truncate">{ file.Name }</span>
 											</div>
 											<div class="col-span-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:block">

@@ -136,10 +136,11 @@ func run(ctx context.Context) error {
 
 		group.GET("/register", pageHandler.ShowRegisterPage)
 		group.POST("/register", pageHandler.Register)
+		group.GET("/docs", pageHandler.ShowDocsPage)
 
 		// Protected routes
 		group.Group("", func(group *web.Router) {
-			group.GET("/", pageHandler.ShowHomePage)
+			group.GET("/dashboard", pageHandler.ShowHomePage)
 			group.POST("/logout", pageHandler.Logout)
 
 			group.Group("/billing", func(billingGroup *web.Router) {

@@ -96,14 +96,9 @@ func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess database.S
 	return nil
 }
 
-func (s *Store) Destroy(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	id, ok := ctx.Value(config.SessionContextKey).(uuid.UUID)
-	if !ok {
-		return fmt.Errorf("session id not found in context")
-	}
-
+func (s *Store) Destroy(ctx context.Context, w http.ResponseWriter, sess database.Session) error {
 	// Delete session from database
-	if err := s.Database.DeleteSessionByID(ctx, id); err != nil {
+	if err := s.Database.DeleteSessionByID(ctx, sess.ID); err != nil {
 		err = fmt.Errorf("failed to delete session: %w", err)
 		return err
 	}

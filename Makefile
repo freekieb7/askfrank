@@ -2,13 +2,15 @@
 .PHONY: migrate-build openfga-build
 .PHONY: docker-compose-up docker-compose-down docker-compose-restart
 
-# Tailwind dev mode
-tailwind:
-	npx @tailwindcss/cli -i ./internal/web/static/css/components.css -o ./internal/web/static/css/stylesheet.css
+# Tailwind
+gen-css:
+	npx @tailwindcss/cli -i ./internal/web/static/css/components.css -o ./internal/web/static/css/stylesheet.css --minify --optimize
 
-# Tailwind build for production
-tailwind-minify:
-	npx tailwindcss -i ./internal/web/static/css/components.css -o ./internal/web/static/css/stylesheet.css --minify
+gen-css-dev:
+	npx @tailwindcss/cli -i ./internal/web/static/css/components.css -o ./internal/web/static/css/stylesheet.css --watch
+
+gen-docs:
+	npx @redocly/cli build-docs ./docs/openapi.yaml -o ./internal/web/static/html/docs.html
 
 # Go dev mode with Air
 air:
@@ -42,4 +44,4 @@ openfga-build:
 	@echo "Building OpenFGA CLI..."
 	go build -o bin/openfga ./cmd/openfga
 
-dev: docker-compose-up tailwind air
+dev: docker-compose-up air

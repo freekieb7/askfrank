@@ -67,7 +67,7 @@ func (h *PageHandler) appLayoutProps(layoutProps component.LayoutProps, r *http.
 	return component.AppLayoutProps{
 		LayoutProps: layoutProps,
 		MenuItems: []component.MenuItem{
-			{Name: "Home", URL: "/", Icon: "fas fa-home", Active: r.URL.Path == "/"},
+			{Name: "Home", URL: "/dashboard", Icon: "fas fa-home", Active: r.URL.Path == "/dashboard"},
 			{Name: "Calendar", URL: "/calendar", Icon: "fas fa-calendar", Active: strings.HasPrefix(r.URL.Path, "/calendar")},
 			{Name: "Drive", URL: "/drive", Icon: "fas fa-folder", Active: strings.HasPrefix(r.URL.Path, "/drive"), SubItems: []component.MenuItem{
 				{Name: "My Drive", URL: "/drive", Icon: "fas fa-folder", Active: r.URL.Path == "/drive"},
@@ -85,14 +85,22 @@ func (h *PageHandler) appLayoutProps(layoutProps component.LayoutProps, r *http.
 	}
 }
 
+func (h *PageHandler) ShowDocsPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	return render(ctx, w, views.DocsPage(views.DocsPageProps{
+		LayoutProps: h.layoutProps(ctx, "API Documentation"),
+	}))
+}
+
 func (h *PageHandler) ShowHomePage(w http.ResponseWriter, r *http.Request) error {
-	// Due to default muxing, simplest way to check if page exists
-	if r.URL.Path != "/" {
-		return JSONResponse(w, http.StatusNotFound, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Not Found",
-		})
-	}
+	// // Due to default muxing, simplest way to check if page exists
+	// if r.URL.Path != "/" {
+	// 	return JSONResponse(w, http.StatusNotFound, ApiResponse{
+	// 		Status:  APIResponseStatusError,
+	// 		Message: "Not Found",
+	// 	})
+	// }
 
 	ctx := r.Context()
 	return render(ctx, w, views.HomePage(views.HomePageProps{
@@ -114,7 +122,7 @@ func (h *PageHandler) ShowLoginPage(w http.ResponseWriter, r *http.Request) erro
 	}()
 
 	if sess.UserID.Some {
-		return Redirect(w, r, "/", http.StatusSeeOther) // Redirect if already logged in
+		return Redirect(w, r, "/dashboard", http.StatusSeeOther) // Redirect if already logged in
 	}
 
 	// Store the return_to query parameter in session for post-login redirection
@@ -129,8 +137,9 @@ func (h *PageHandler) ShowLoginPage(w http.ResponseWriter, r *http.Request) erro
 }
 
 type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	RememberMe bool   `json:"remember_me"`
 }
 
 func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
@@ -166,6 +175,16 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
+	// Determine session duration based on "Remember Me" option
+	var sessionDuration time.Duration
+	if loginReq.RememberMe {
+		sessionDuration = 30 * 24 * time.Hour // 30 days
+	} else {
+		sessionDuration = 2 * time.Hour // 2 hours
+	}
+	sess.ExpiresAt = time.Now().Add(sessionDuration)
+
+	// Fetch user by email
 	user, err := h.db.GetUserByEmail(ctx, loginReq.Email)
 	if err != nil {
 		if err == database.ErrUserNotFound {
@@ -199,7 +218,7 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	sess.UserID = util.Some(user.ID)
 
 	// Redirect to the originally requested page or home
-	redirectTo := "/"
+	redirectTo := "/dashboard"
 
 	if sess.Data["redirect_to"] != nil {
 		redirectTo = sess.Data["redirect_to"].(string)
@@ -256,7 +275,7 @@ func (h *PageHandler) Logout(w http.ResponseWriter, r *http.Request) error {
 		}
 	}()
 
-	if err := h.sessionStore.Destroy(ctx, w, r); err != nil {
+	if err := h.sessionStore.Destroy(ctx, w, sess); err != nil {
 		h.logger.Error("Failed to destroy session", "error", err)
 	}
 
@@ -394,7 +413,7 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 		Status:  APIResponseStatusSuccess,
 		Message: "Registration successful! Continue to the app.",
 		Data: map[string]any{
-			"redirect_to": "/",
+			"redirect_to": "/dashboard",
 		},
 	})
 }

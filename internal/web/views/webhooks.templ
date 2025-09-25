@@ -28,74 +28,74 @@ templ WebhooksPage(props WebhooksPageProps) {
 	@component.AppLayout(props.AppLayoutProps) {
 		<div class="main-content">
 			<div class="p-6">
-				<div class="mb-6 flex justify-between items-center">
+				<div class="toolbar">
 					<div>
-						<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Developer Portal</h1>
-						<p class="text-gray-600 dark:text-gray-400">Manage your OAuth Clients and API access</p>
+						<h1 class="page-title">Developer Portal</h1>
+						<p class="page-subtitle">Manage your OAuth Clients and API access</p>
 					</div>
 					<button
 						type="button"
-						class="px-4 py-2 bg-ocean text-white rounded-md hover:bg-ocean-700 focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+						class="btn-primary"
 						onclick="document.getElementById('createWebhookModal').classList.remove('hidden')"
 					>
-						<i class="fas fa-plus mr-2"></i> Create New Webhook
+						<i class="fas fa-plus icon-with-text"></i> Create New Webhook
 					</button>
 				</div>
 				<!-- Webhook List -->
-				<div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden">
+				<div class="card">
 					<div class="p-4 border-b border-gray-200 dark:border-gray-700">
-						<h2 class="text-lg font-medium text-gray-900 dark:text-white">Your Webhooks</h2>
-						<p class="text-sm text-gray-500 dark:text-gray-400">Applications that can receive webhook events</p>
+						<h2 class="card-title mb-0">Your Webhooks</h2>
+						<p class="card-subtitle">Applications that can receive webhook events</p>
 					</div>
 					if len(props.Webhooks) == 0 {
-						<div class="p-6 text-center">
-							<p class="text-gray-500 dark:text-gray-400">You haven't created any webhooks yet.</p>
-							<p class="text-sm mt-2 text-gray-400 dark:text-gray-500">Create a webhook to integrate with AskFrank's API</p>
+						<div class="empty-state">
+							<p class="text-muted">You haven't created any webhooks yet.</p>
+							<p class="text-sm mt-2 text-muted">Create a webhook to integrate with AskFrank's API</p>
 						</div>
 					} else {
-						<div class="overflow-x-auto">
-							<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-								<thead class="bg-gray-50 dark:bg-gray-700">
+						<div class="table-container">
+							<table class="table">
+								<thead>
 									<tr>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Endpoint</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Listening to</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Response time</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Error rate</th>
-										<th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+										<th>Endpoint</th>
+										<th>Description</th>
+										<th>Listening to</th>
+										<th>Response time</th>
+										<th>Error rate</th>
+										<th class="text-right">Actions</th>
 									</tr>
 								</thead>
-								<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+								<tbody>
 									for _, webhook := range props.Webhooks {
-										<tr class="hover:bg-gray-50 dark:hover:bg-gray-750">
-											<td class="px-6 py-4 whitespace-nowrap">
-												<div class="text-sm font-medium text-gray-900 dark:text-white">{ webhook.Name }</div>
-												<div class="text-xs text-gray-500 dark:text-gray-400">{ webhook.URL }</div>
+										<tr>
+											<td>
+												<div class="text-sm font-medium">{ webhook.Name }</div>
+												<div class="text-xs text-muted">{ webhook.URL }</div>
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap">
-												<div class="text-sm text-gray-500 dark:text-gray-400">{ webhook.Description }</div>
+											<td>
+												<div class="text-sm text-muted">{ webhook.Description }</div>
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap">
-												<div class="text-sm text-gray-500 dark:text-gray-400">
+											<td>
+												<div class="text-sm text-muted">
 													{ len(webhook.EventTypes) } events
 													<span class="tooltip">{ strings.Join(webhook.EventTypes, ", ") }</span>
 												</div>
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+											<td class="text-sm text-muted">
 												if webhook.Activity.IsZero() {
 													Never
 												} else {
 													{ webhook.Activity.Format("Jan 2, 2006 15:04") }
 												}
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+											<td class="text-sm text-muted">
 												if webhook.ResponseTime.IsZero() {
 													Never
 												} else {
 													{ webhook.ResponseTime.Format("Jan 2, 2006 15:04") }
 												}
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+											<td class="text-sm text-muted">
 												<div>{{ fmt.Sprintf("%.2f%%", webhook.ErrorRate) }}</div>
 											</td>
 										</tr>
@@ -106,63 +106,63 @@ templ WebhooksPage(props WebhooksPageProps) {
 					}
 				</div>
 				<!-- Create Webhook Modal -->
-				<div id="createWebhookModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-					<div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
-						<div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-							<h3 class="text-lg font-medium text-gray-900 dark:text-white">Create New Webhook</h3>
-							<button type="button" class="text-gray-400 hover:text-gray-500" onclick="document.getElementById('createWebhookModal').classList.add('hidden')">
+				<div id="createWebhookModal" class="modal-overlay hidden">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h3 class="modal-title">Create New Webhook</h3>
+							<button type="button" class="modal-close" onclick="document.getElementById('createWebhookModal').classList.add('hidden')">
 								<i class="fas fa-times"></i>
 							</button>
 						</div>
 						<form id="createWebhookForm" class="p-4" onsubmit="event.preventDefault(); createWebhook();">
 							<div class="mb-4">
-								<label for="webhookName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client Name</label>
+								<label for="webhookName" class="form-label">Client Name</label>
 								<input
 									type="text"
 									id="webhookName"
 									name="name"
 									required
-									class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-ocean-500 focus:border-ocean-500 dark:bg-gray-700 dark:text-white"
+									class="form-input"
 									placeholder="My Application"
 								/>
 							</div>
 							<div class="mb-4">
-								<label for="webhookDescription" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (optional)</label>
+								<label for="webhookDescription" class="form-label">Description (optional)</label>
 								<input
 									type="text"
 									id="webhookDescription"
 									name="description"
-									class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-ocean-500 focus:border-ocean-500 dark:bg-gray-700 dark:text-white"
+									class="form-input"
 									placeholder="A brief description of your application"
 								/>
 							</div>
 							<div class="mb-4">
-								<label for="webhookDescription" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (optional)</label>
+								<label for="webhookURL" class="form-label">Webhook URL</label>
 								<input
 									type="text"
 									id="webhookURL"
 									name="url"
-									class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-ocean-500 focus:border-ocean-500 dark:bg-gray-700 dark:text-white"
+									class="form-input"
 									placeholder="https://example.com/webhook"
 								/>
 							</div>
 							<div class="mb-4">
-								<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Allowed Scopes</label>
+								<label class="form-label">Allowed Scopes</label>
 								<div class="space-y-2">
 									<div class="flex items-center">
-										<input type="checkbox" id="scope_read" name="scopes" value="read" class="h-4 w-4 text-ocean-600 focus:ring-ocean-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700" checked/>
-										<label for="scope_read" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">Read</label>
+										<input type="checkbox" id="scope_read" name="scopes" value="read" class="form-checkbox" checked/>
+										<label for="scope_read" class="ml-2 block text-sm">Read</label>
 									</div>
 									<div class="flex items-center">
-										<input type="checkbox" id="scope_write" name="scopes" value="write" class="h-4 w-4 text-ocean-600 focus:ring-ocean-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"/>
-										<label for="scope_write" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">Write</label>
+										<input type="checkbox" id="scope_write" name="scopes" value="write" class="form-checkbox"/>
+										<label for="scope_write" class="ml-2 block text-sm">Write</label>
 									</div>
 								</div>
 							</div>
-							<div class="flex justify-end pt-2 border-t border-gray-200 dark:border-gray-700">
+							<div class="modal-footer">
 								<button
 									type="button"
-									class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-650 focus:outline-none mr-2"
+									class="btn-secondary"
 									onclick="document.getElementById('createWebhookModal').classList.add('hidden')"
 								>
 									Cancel
@@ -170,7 +170,7 @@ templ WebhooksPage(props WebhooksPageProps) {
 								<button
 									type="button"
 									id="createWebhookButton"
-									class="px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-ocean hover:bg-ocean-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ocean-500 dark:focus:ring-offset-gray-800"
+									class="btn-primary"
 									onclick="createWebhook()"
 								>
 									Create Webhook
@@ -180,19 +180,19 @@ templ WebhooksPage(props WebhooksPageProps) {
 					</div>
 				</div>
 				<!-- Delete Confirmation Modal -->
-				<div id="deleteWebhookModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-					<div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+				<div id="deleteWebhookModal" class="modal-overlay hidden">
+					<div class="modal-content max-w-md">
 						<div class="p-4">
 							<div class="flex items-center justify-center text-red-500 mb-4">
 								<i class="fas fa-exclamation-triangle text-4xl"></i>
 							</div>
-							<h3 class="text-lg font-medium text-center text-gray-900 dark:text-white mb-2">Delete Webhook</h3>
-							<p class="text-sm text-center text-gray-500 dark:text-gray-400 mb-4">Are you sure you want to delete <span id="deleteWebhookName" class="font-medium"></span>? This action cannot be undone.</p>
+							<h3 class="modal-title text-center mb-2">Delete Webhook</h3>
+							<p class="text-sm text-center text-muted mb-4">Are you sure you want to delete <span id="deleteWebhookName" class="font-medium"></span>? This action cannot be undone.</p>
 							<form id="deleteWebhookForm" class="flex justify-center space-x-4" onsubmit="event.preventDefault();">
 								<input type="hidden" id="deleteWebhookId" name="webhookId"/>
 								<button
 									type="button"
-									class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-650 focus:outline-none"
+									class="btn-secondary"
 									onclick="document.getElementById('deleteWebhookModal').classList.add('hidden')"
 								>
 									Cancel
@@ -200,7 +200,7 @@ templ WebhooksPage(props WebhooksPageProps) {
 								<button
 									type="button"
 									onclick="deleteWebhook(document.getElementById('deleteWebhookId').value)"
-									class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:focus:ring-offset-gray-800"
+									class="btn-danger"
 								>
 									Delete
 								</button>

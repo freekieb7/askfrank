@@ -17,7 +17,7 @@ func openClassName(open bool) string {
 
 func activeClassName(active bool) string {
 	if active {
-		return "bg-medical-500"
+		return "nav-link-active"
 	}
 	return ""
 }
@@ -33,9 +33,9 @@ templ AppLayout(props AppLayoutProps) {
 		<div class="flex h-screen bg-gray-50 dark:bg-gray-900">
 			<!-- Sidebar -->
 			<div class="hidden lg:flex lg:w-56 lg:flex-col lg:fixed lg:inset-y-0">
-				<div class="flex flex-col flex-grow pt-4 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+				<div class="flex flex-col grow pt-4 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
 					<!-- Logo -->
-					<div class="flex items-center flex-shrink-0 px-3 pb-4">
+					<div class="flex items-center shrink-0 px-3 pb-4">
 						<div class="flex items-center">
 							<i class="fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua"></i>
 							<div>
@@ -45,12 +45,13 @@ templ AppLayout(props AppLayoutProps) {
 						</div>
 					</div>
 					<!-- Navigation -->
-					<nav class="flex-1 pb-3 space-y-1">
+					<!-- Desktop Navigation -->
+					<nav class="flex-1 pb-3 space-y-1 px-3">
 						for _, item := range props.MenuItems {
 							if item.SubItems != nil && len(item.SubItems) > 0 {
-								<details class="sidebar-dropdown group " { openClassName(item.Active) }>
-									<summary class={ "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 cursor-pointer flex items-center justify-between w-full " + activeClassName(item.Active) }>
-										<div class="flex items-baseline">
+								<details class="sidebar-dropdown group" { openClassName(item.Active) }>
+									<summary class={ "nav-link " + activeClassName(item.Active) }>
+										<div class="flex items-center flex-1">
 											<i class={ item.Icon + " w-4 h-4 mr-2.5" }></i>
 											<span>{ item.Name }</span>
 										</div>
@@ -58,9 +59,9 @@ templ AppLayout(props AppLayoutProps) {
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
 										</svg>
 									</summary>
-									<nav class="pl-8 mt-1 space-y-1">
+									<nav class="mt-1 space-y-1">
 										for _, subItem := range item.SubItems {
-											<a href={ subItem.URL } class={ "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white flex items-baseline px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 cursor-pointer flex items-center w-full " + activeClassName(subItem.Active) }>
+											<a href={ subItem.URL } class={ "submenu-link " + activeClassName(subItem.Active) }>
 												<i class={ subItem.Icon + " w-4 h-4 mr-2.5" }></i>
 												<span>{ subItem.Name }</span>
 											</a>
@@ -68,7 +69,7 @@ templ AppLayout(props AppLayoutProps) {
 									</nav>
 								</details>
 							} else {
-								<a href={ item.URL } class={ "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white flex items-baseline px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 " + activeClassName(item.Active) }>
+								<a href={ item.URL } class={ "nav-link " + activeClassName(item.Active) }>
 									<i class={ item.Icon + " w-4 h-4 mr-2.5" }></i>
 									<span>{ item.Name }</span>
 								</a>
@@ -97,12 +98,13 @@ templ AppLayout(props AppLayoutProps) {
 						</button>
 					</div>
 					<!-- Mobile navigation -->
+					<!-- Mobile Navigation -->
 					<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
 						for _, item := range props.MenuItems {
 							if item.SubItems != nil && len(item.SubItems) > 0 {
 								<details class="group">
-									<summary class={ "cursor-pointer flex items-center justify-between w-full " + activeClassName(item.Active) }>
-										<div class="flex items-center">
+									<summary class={ "nav-link " + activeClassName(item.Active) }>
+										<div class="flex items-center flex-1">
 											<i class={ item.Icon + " w-4 h-4 mr-2.5" }></i>
 											<span>{ item.Name }</span>
 										</div>
@@ -110,7 +112,7 @@ templ AppLayout(props AppLayoutProps) {
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
 										</svg>
 									</summary>
-									<nav class="pl-8 mt-1 space-y-1">
+									<nav class="mt-1 space-y-1">
 										for _, subItem := range item.SubItems {
 											<a href={ subItem.URL } class={ "submenu-link " + activeClassName(subItem.Active) }>
 												<i class={ subItem.Icon + " w-4 h-4 mr-2.5" }></i>
@@ -120,7 +122,7 @@ templ AppLayout(props AppLayoutProps) {
 									</nav>
 								</details>
 							} else {
-								<a href={ item.URL } class={ "sidebar-link " + activeClassName(item.Active) }>
+								<a href={ item.URL } class={ "nav-link " + activeClassName(item.Active) }>
 									<i class={ item.Icon + " w-4 h-4 mr-2.5" }></i>
 									{ item.Name }
 								</a>
@@ -137,19 +139,8 @@ templ AppLayout(props AppLayoutProps) {
 					<button type="button" class="lg:hidden p-2 text-gray-700 dark:text-gray-300" id="mobile-menu-button">
 						<i class="fas fa-bars w-4 h-4"></i>
 					</button>
-					<!-- Search bar -->
-					<div class="flex flex-1 justify-center">
-						<div class="search-container relative">
-							<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-								<i class="fas fa-search text-gray-400 dark:text-gray-500 w-4 h-4"></i>
-							</div>
-							<input
-								type="text"
-								class="block w-full rounded-lg border-0 py-2 pl-9 pr-3 text-sm text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-ocean dark:focus:ring-aqua bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600"
-								placeholder="Search..."
-							/>
-						</div>
-					</div>
+					<!-- Spacer -->
+					<div class="flex-1"></div>
 					<!-- Right side items -->
 					<div class="flex items-center gap-x-2">
 						<!-- Notifications -->

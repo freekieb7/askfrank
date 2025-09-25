@@ -241,7 +241,7 @@ func DrivePage(props DrivePageProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var10 = []any{getFileIcon(file.MimeType, file.IsFolder) + " mr-3 flex-shrink-0"}
+					var templ_7745c5c3_Var10 = []any{getFileIcon(file.MimeType, file.IsFolder) + " mr-3 shrink-0"}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var10...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err

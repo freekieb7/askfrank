@@ -26,68 +26,68 @@ templ OAuthClientsPage(props OAuthClientsPageProps) {
 	@component.AppLayout(props.AppLayoutProps) {
 		<div class="main-content">
 			<div class="p-6">
-				<div class="mb-6 flex justify-between items-center">
+				<div class="toolbar">
 					<div>
-						<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Developer Portal</h1>
-						<p class="text-gray-600 dark:text-gray-400">Manage your OAuth Clients and API access</p>
+						<h1 class="page-title">Developer Portal</h1>
+						<p class="page-subtitle">Manage your OAuth Clients and API access</p>
 					</div>
 					<button
 						type="button"
-						class="px-4 py-2 bg-ocean text-white rounded-md hover:bg-ocean-700 focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+						class="btn-primary"
 						onclick="document.getElementById('createClientModal').classList.remove('hidden')"
 					>
-						<i class="fas fa-plus mr-2"></i> Create New Client
+						<i class="fas fa-plus icon-with-text"></i> Create New Client
 					</button>
 				</div>
 				<!-- OAuth Clients List -->
-				<div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden">
+				<div class="card">
 					<div class="p-4 border-b border-gray-200 dark:border-gray-700">
-						<h2 class="text-lg font-medium text-gray-900 dark:text-white">Your OAuth Clients</h2>
-						<p class="text-sm text-gray-500 dark:text-gray-400">Applications that can request access to user data</p>
+						<h2 class="card-title mb-0">Your OAuth Clients</h2>
+						<p class="card-subtitle">Applications that can request access to user data</p>
 					</div>
 					if len(props.Clients) == 0 {
-						<div class="p-6 text-center">
-							<p class="text-gray-500 dark:text-gray-400">You haven't created any OAuth clients yet.</p>
-							<p class="text-sm mt-2 text-gray-400 dark:text-gray-500">Create a client to integrate with AskFrank's API</p>
+						<div class="empty-state">
+							<p class="text-muted">You haven't created any OAuth clients yet.</p>
+							<p class="text-sm mt-2 text-muted">Create a client to integrate with AskFrank's API</p>
 						</div>
 					} else {
-						<div class="overflow-x-auto">
-							<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-								<thead class="bg-gray-50 dark:bg-gray-700">
+						<div class="table-container">
+							<table class="table">
+								<thead>
 									<tr>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Client ID</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Redirect URIs</th>
-										<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
-										<th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+										<th>Name</th>
+										<th>Client ID</th>
+										<th>Type</th>
+										<th>Redirect URIs</th>
+										<th>Created</th>
+										<th class="text-right">Actions</th>
 									</tr>
 								</thead>
-								<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+								<tbody>
 									for _, client := range props.Clients {
-										<tr class="hover:bg-gray-50 dark:hover:bg-gray-750">
-											<td class="px-6 py-4 whitespace-nowrap">
-												<div class="text-sm font-medium text-gray-900 dark:text-white">{ client.Name }</div>
+										<tr>
+											<td>
+												<div class="text-sm font-medium">{ client.Name }</div>
 												if client.Description != "" {
-													<div class="text-xs text-gray-500 dark:text-gray-400">{ client.Description }</div>
+													<div class="text-xs text-muted">{ client.Description }</div>
 												}
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap">
-												<div class="text-sm text-gray-500 dark:text-gray-400">{ client.ID }</div>
+											<td>
+												<div class="text-sm text-muted">{ client.ID }</div>
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap">
+											<td>
 												if client.IsPublic {
-													<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
+													<span class="badge-success">
 														Public
 													</span>
 												} else {
-													<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+													<span class="badge-primary">
 														Confidential
 													</span>
 												}
 											</td>
-											<td class="px-6 py-4">
-												<div class="text-sm text-gray-500 dark:text-gray-400 max-h-16 overflow-y-auto">
+											<td>
+												<div class="text-sm text-muted max-h-16 overflow-y-auto">
 													for i, uri := range client.RedirectURIs {
 														if i < 2 {
 															<div class="truncate max-w-xs">{ uri }</div>
@@ -100,13 +100,13 @@ templ OAuthClientsPage(props OAuthClientsPageProps) {
 													}
 												</div>
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+											<td class="text-sm text-muted">
 												{ client.CreatedAt.Format("Jan 02, 2006") }
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+											<td class="text-right text-sm font-medium">
 												<button
 													type="button"
-													class="text-ocean hover:text-ocean-700 dark:text-aqua dark:hover:text-aqua-300 mr-3"
+													class="text-primary hover:text-primary-600 mr-3"
 													onclick={ templ.JSFuncCall("showClientDetails", client.ID) }
 												>
 													<i class="fas fa-eye"></i>
@@ -127,17 +127,17 @@ templ OAuthClientsPage(props OAuthClientsPageProps) {
 					}
 				</div>
 				<!-- Create Client Modal -->
-				<div id="createClientModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-					<div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
-						<div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-							<h3 class="text-lg font-medium text-gray-900 dark:text-white">Create New OAuth Client</h3>
-							<button type="button" class="text-gray-400 hover:text-gray-500" onclick="document.getElementById('createClientModal').classList.add('hidden')">
+				<div id="createClientModal" class="modal-overlay hidden">
+					<div class="modal-content max-w-md">
+						<div class="modal-header">
+							<h3 class="modal-title">Create New OAuth Client</h3>
+							<button type="button" class="modal-close" onclick="document.getElementById('createClientModal').classList.add('hidden')">
 								<i class="fas fa-times"></i>
 							</button>
 						</div>
 						<form id="createClientForm" class="p-4" onsubmit="event.preventDefault(); createOAuthClient();">
 							<div class="mb-4">
-								<label for="clientName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client Name</label>
+								<label for="clientName" class="form-label">Client Name</label>
 								<input
 									type="text"
 									id="clientName"

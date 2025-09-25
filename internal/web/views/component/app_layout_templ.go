@@ -25,7 +25,7 @@ func openClassName(open bool) string {
 
 func activeClassName(active bool) string {
 	if active {
-		return "bg-medical-500"
+		return "nav-link-active"
 	}
 	return ""
 }
@@ -68,20 +68,20 @@ func AppLayout(props AppLayoutProps) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, " <div class=\"flex h-screen bg-gray-50 dark:bg-gray-900\"><!-- Sidebar --><div class=\"hidden lg:flex lg:w-56 lg:flex-col lg:fixed lg:inset-y-0\"><div class=\"flex flex-col flex-grow pt-4 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto\"><!-- Logo --><div class=\"flex items-center flex-shrink-0 px-3 pb-4\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div></div><!-- Navigation --><nav class=\"flex-1 pb-3 space-y-1\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, " <div class=\"flex h-screen bg-gray-50 dark:bg-gray-900\"><!-- Sidebar --><div class=\"hidden lg:flex lg:w-56 lg:flex-col lg:fixed lg:inset-y-0\"><div class=\"flex flex-col grow pt-4 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto\"><!-- Logo --><div class=\"flex items-center shrink-0 px-3 pb-4\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div></div><!-- Navigation --><!-- Desktop Navigation --><nav class=\"flex-1 pb-3 space-y-1 px-3\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, item := range props.MenuItems {
 				if item.SubItems != nil && len(item.SubItems) > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<details class=\"sidebar-dropdown group \"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<details class=\"sidebar-dropdown group\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var3 string
 					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(openClassName(item.Active))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 51, Col: 77}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 52, Col: 76}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(` ` + templ_7745c5c3_Var3))
 					if templ_7745c5c3_Err != nil {
@@ -91,7 +91,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var4 = []any{"text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 cursor-pointer flex items-center justify-between w-full " + activeClassName(item.Active)}
+					var templ_7745c5c3_Var4 = []any{"nav-link " + activeClassName(item.Active)}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var4...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -109,7 +109,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><div class=\"flex items-baseline\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><div class=\"flex items-center flex-1\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -138,18 +138,18 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 55, Col: 28}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 56, Col: 28}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"pl-8 mt-1 space-y-1\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"mt-1 space-y-1\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					for _, subItem := range item.SubItems {
-						var templ_7745c5c3_Var9 = []any{"text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white flex items-baseline px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 cursor-pointer flex items-center w-full " + activeClassName(subItem.Active)}
+						var templ_7745c5c3_Var9 = []any{"submenu-link " + activeClassName(subItem.Active)}
 						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var9...)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
@@ -161,7 +161,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var10 templ.SafeURL
 						templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(subItem.URL)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 63, Col: 32}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 64, Col: 32}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 						if templ_7745c5c3_Err != nil {
@@ -209,7 +209,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var14 string
 						templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(subItem.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 65, Col: 32}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 66, Col: 32}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 						if templ_7745c5c3_Err != nil {
@@ -225,7 +225,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				} else {
-					var templ_7745c5c3_Var15 = []any{"text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white flex items-baseline px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-150 " + activeClassName(item.Active)}
+					var templ_7745c5c3_Var15 = []any{"nav-link " + activeClassName(item.Active)}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var15...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -237,7 +237,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var16 templ.SafeURL
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(item.URL)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 71, Col: 26}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 72, Col: 26}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
@@ -285,7 +285,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var20 string
 					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 73, Col: 26}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 74, Col: 26}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 					if templ_7745c5c3_Err != nil {
@@ -297,7 +297,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					}
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</nav></div></div><!-- Mobile sidebar overlay --><div class=\"lg:hidden fixed inset-0 z-50 hidden\" id=\"mobile-sidebar-overlay\"><!-- Overlay background --><div class=\"fixed inset-0 bg-gray-600 bg-opacity-75\"></div><!-- Mobile sidebar --><div class=\"relative flex flex-col w-full max-w-xs bg-white dark:bg-gray-800 shadow-xl\"><!-- Mobile sidebar header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div><button type=\"button\" class=\"p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300\" id=\"close-sidebar\"><i class=\"fas fa-times w-5 h-5\"></i></button></div><!-- Mobile navigation --><nav class=\"flex-1 px-4 py-4 space-y-1 overflow-y-auto\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</nav></div></div><!-- Mobile sidebar overlay --><div class=\"lg:hidden fixed inset-0 z-50 hidden\" id=\"mobile-sidebar-overlay\"><!-- Overlay background --><div class=\"fixed inset-0 bg-gray-600 bg-opacity-75\"></div><!-- Mobile sidebar --><div class=\"relative flex flex-col w-full max-w-xs bg-white dark:bg-gray-800 shadow-xl\"><!-- Mobile sidebar header --><div class=\"flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700\"><div class=\"flex items-center\"><i class=\"fas fa-heartbeat text-2xl mr-2 text-ocean dark:text-aqua\"></i><div><h1 class=\"text-lg font-bold text-ocean dark:text-aqua\">AskFrank</h1><p class=\"text-xs text-gray-500 dark:text-gray-400\">Healthcare</p></div></div><button type=\"button\" class=\"p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300\" id=\"close-sidebar\"><i class=\"fas fa-times w-5 h-5\"></i></button></div><!-- Mobile navigation --><!-- Mobile Navigation --><nav class=\"flex-1 px-4 py-4 space-y-1 overflow-y-auto\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -307,7 +307,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var21 = []any{"cursor-pointer flex items-center justify-between w-full " + activeClassName(item.Active)}
+					var templ_7745c5c3_Var21 = []any{"nav-link " + activeClassName(item.Active)}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var21...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -325,7 +325,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\"><div class=\"flex items-center\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\"><div class=\"flex items-center flex-1\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -354,13 +354,13 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var25 string
 					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 107, Col: 28}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 109, Col: 28}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"pl-8 mt-1 space-y-1\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span></div><svg class=\"w-4 h-4 transform group-open:rotate-90 transition-transform duration-200\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 5l7 7-7 7\"></path></svg></summary><nav class=\"mt-1 space-y-1\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -377,7 +377,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var27 templ.SafeURL
 						templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinURLErrs(subItem.URL)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 115, Col: 32}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 117, Col: 32}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 						if templ_7745c5c3_Err != nil {
@@ -425,7 +425,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var31 string
 						templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(subItem.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 117, Col: 26}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 119, Col: 26}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 						if templ_7745c5c3_Err != nil {
@@ -441,7 +441,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				} else {
-					var templ_7745c5c3_Var32 = []any{"sidebar-link " + activeClassName(item.Active)}
+					var templ_7745c5c3_Var32 = []any{"nav-link " + activeClassName(item.Active)}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var32...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -453,7 +453,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var33 templ.SafeURL
 					templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinURLErrs(item.URL)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 123, Col: 26}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 125, Col: 26}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 					if templ_7745c5c3_Err != nil {
@@ -501,7 +501,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var37 string
 					templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 125, Col: 20}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 127, Col: 20}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 					if templ_7745c5c3_Err != nil {
@@ -513,7 +513,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					}
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</nav></div></div><!-- Main content --><div class=\"flex flex-col flex-1 lg:pl-56\"><!-- Top bar --><div class=\"sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 shadow-sm sm:gap-x-4 sm:px-4\"><!-- Mobile menu button --><button type=\"button\" class=\"lg:hidden p-2 text-gray-700 dark:text-gray-300\" id=\"mobile-menu-button\"><i class=\"fas fa-bars w-4 h-4\"></i></button><!-- Search bar --><div class=\"flex flex-1 justify-center\"><div class=\"search-container relative\"><div class=\"absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none\"><i class=\"fas fa-search text-gray-400 dark:text-gray-500 w-4 h-4\"></i></div><input type=\"text\" class=\"block w-full rounded-lg border-0 py-2 pl-9 pr-3 text-sm text-gray-900 dark:text-gray-100 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-ocean dark:focus:ring-aqua bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600\" placeholder=\"Search...\"></div></div><!-- Right side items --><div class=\"flex items-center gap-x-2\"><!-- Notifications --><!-- Profile dropdown --><div class=\"relative\"><button type=\"button\" class=\"flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700\" id=\"profile-menu-button\"><img class=\"h-7 w-7 rounded-full bg-gray-50\" src=\"https://ui-avatars.com/api/?name=Dr+Smith&background=05668D&color=fff\" alt=\"Profile\"> <span class=\"hidden sm:flex sm:items-center\"><span class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Dr. Smith</span> <i class=\"fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400 dark:text-gray-500\"></i></span></button><!-- Dropdown menu --><div class=\"dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1.5 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-700/50 hidden\" id=\"profile-dropdown\"><div class=\"border-t border-gray-100 dark:border-gray-700 my-1\"><button type=\"button\" id=\"logout-button\" class=\"block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Sign out</button></div></div></div></div></div><!-- Page content --><main class=\"flex-1 py-4 overflow-y-auto\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</nav></div></div><!-- Main content --><div class=\"flex flex-col flex-1 lg:pl-56\"><!-- Top bar --><div class=\"sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 shadow-sm sm:gap-x-4 sm:px-4\"><!-- Mobile menu button --><button type=\"button\" class=\"lg:hidden p-2 text-gray-700 dark:text-gray-300\" id=\"mobile-menu-button\"><i class=\"fas fa-bars w-4 h-4\"></i></button><!-- Spacer --><div class=\"flex-1\"></div><!-- Right side items --><div class=\"flex items-center gap-x-2\"><!-- Notifications --><!-- Profile dropdown --><div class=\"relative\"><button type=\"button\" class=\"flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700\" id=\"profile-menu-button\"><img class=\"h-7 w-7 rounded-full bg-gray-50\" src=\"https://ui-avatars.com/api/?name=Dr+Smith&background=05668D&color=fff\" alt=\"Profile\"> <span class=\"hidden sm:flex sm:items-center\"><span class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Dr. Smith</span> <i class=\"fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400 dark:text-gray-500\"></i></span></button><!-- Dropdown menu --><div class=\"dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1.5 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-700/50 hidden\" id=\"profile-dropdown\"><div class=\"border-t border-gray-100 dark:border-gray-700 my-1\"><button type=\"button\" id=\"logout-button\" class=\"block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Sign out</button></div></div></div></div></div><!-- Page content --><main class=\"flex-1 py-4 overflow-y-auto\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -89,6 +89,10 @@ func AuthenticatedSessionMiddleware(sessionStore *session.Store) MiddlewareFunc 
 				return Redirect(w, r, "/login", http.StatusSeeOther)
 			}
 
+			// Add user ID to context
+			ctx := context.WithValue(r.Context(), config.UserIDContextKey, sess.UserID.Data)
+			r = r.WithContext(ctx)
+
 			return next(w, r)
 		}
 	}

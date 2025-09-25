@@ -1,0 +1,451 @@
+openapi: 3.0.3
+info:
+  title: AskFrank API
+  description: Healthcare platform API for patient management and medical consultations
+  version: 1.0.0
+  contact:
+    name: AskFrank Support
+    email: support@askfrank.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.askfrank.com/v1
+    description: Production server
+  - url: http://localhost:3001/api/v1
+    description: Development server
+
+security:
+  - bearerAuth: []
+  - oauth2: [read, write]
+
+paths:
+  /auth/login:
+    post:
+      summary: User login
+      description: Authenticate a user and return access token
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  example: password123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/register:
+    post:
+      summary: User registration
+      description: Register a new user account
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                name:
+                  type: string
+                  example: John Doe
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /meetings:
+    get:
+      summary: List meetings
+      description: Get all meetings for the authenticated user
+      tags:
+        - Meetings
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of meetings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  meetings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Meeting'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      summary: Create meeting
+      description: Schedule a new meeting
+      tags:
+        - Meetings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - start_time
+              properties:
+                title:
+                  type: string
+                  example: Medical Consultation
+                description:
+                  type: string
+                  example: Follow-up appointment
+                start_time:
+                  type: string
+                  format: date-time
+                duration:
+                  type: integer
+                  description: Duration in minutes
+                  default: 30
+      responses:
+        '201':
+          description: Meeting created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /meetings/{id}:
+    get:
+      summary: Get meeting
+      description: Get a specific meeting by ID
+      tags:
+        - Meetings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Meeting details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update meeting
+      description: Update an existing meeting
+      tags:
+        - Meetings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                start_time:
+                  type: string
+                  format: date-time
+                duration:
+                  type: integer
+      responses:
+        '200':
+          description: Meeting updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete meeting
+      description: Cancel/delete a meeting
+      tags:
+        - Meetings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Meeting deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /files:
+    get:
+      summary: List files
+      description: Get all files for the authenticated user
+      tags:
+        - Files
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/File'
+
+    post:
+      summary: Upload file
+      description: Upload a new file
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                description:
+                  type: string
+      responses:
+        '201':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.askfrank.com/oauth/authorize
+          tokenUrl: https://api.askfrank.com/oauth/token
+          scopes:
+            read: Read access
+            write: Write access
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [patient, doctor, admin]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Meeting:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        duration:
+          type: integer
+          description: Duration in minutes
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, cancelled]
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        size:
+          type: integer
+          description: File size in bytes
+        mime_type:
+          type: string
+        url:
+          type: string
+          format: uri
+        uploaded_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: bad_request
+            message: Invalid input data
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: unauthorized
+            message: Invalid credentials
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: not_found
+            message: Resource not found
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: internal_error
+            message: Something went wrong
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Meetings
+    description: Meeting management
+  - name: Files
+    description: File upload and management

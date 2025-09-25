@@ -52,7 +52,7 @@ This document defines the core color palette and usage guidelines for your UI ba
 
 ### 🌈 Gradient Backgrounds
 - Use `from-gradient-start to-gradient-end` for hero sections and cards
-- Example: `bg-gradient-to-r from-gradient-start to-gradient-end`
+- Example: `bg-linear-to-r from-gradient-start to-gradient-end`
 
 ---
 
@@ -132,7 +132,7 @@ This document defines the core color palette and usage guidelines for your UI ba
 
 ### Healthcare Dashboard Components
 - Use `shadow-medical` for healthcare-specific cards
-- Apply `bg-gradient-to-r from-gradient-start to-gradient-end` for hero sections
+- Apply `bg-linear-to-r from-gradient-start to-gradient-end` for hero sections
 - Use Inter font family for clean, medical-appropriate typography
 - Leverage `animate-fade-in` and `animate-slide-up` for smooth user interactions
 
