@@ -197,21 +197,6 @@ func CSRFMiddleware(logger *slog.Logger, sessionStore *session.Store) Middleware
 						Message: "Invalid request please try again",
 					})
 				}
-
-				// Generate new token after successful validation
-				newCSRFToken, err := util.RandomString(32)
-				if err != nil {
-					return fmt.Errorf("failed to generate new CSRF token: %w", err)
-				}
-
-				sess.Data["csrf_token"] = newCSRFToken
-				if err := sessionStore.Save(r.Context(), w, sess); err != nil {
-					return fmt.Errorf("failed to save session: %w", err)
-				}
-
-				// Add new token to context for response
-				ctx := context.WithValue(r.Context(), config.CSRFTokenContextKey, newCSRFToken)
-				r = r.WithContext(ctx)
 			}
 
 			return next(w, r)

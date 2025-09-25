@@ -202,7 +202,7 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(loginReq.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(loginReq.Password)); err != nil {
 		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Invalid email or password",
@@ -250,6 +250,30 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	// 	CreatedAt: time.Now(),
 	// })
 
+	payload, err := json.Marshal(map[string]any{
+		"event":      database.WebhookEventTypeUserLogin,
+		"user_id":    user.ID,
+		"email":      user.Email,
+		"ip_address": r.RemoteAddr,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"user_agent": r.UserAgent(),
+	})
+	if err != nil {
+		h.logger.Error("Failed to marshal event data", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to marshal event data",
+		})
+	}
+
+	if _, err := h.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
+		EventType: database.WebhookEventTypeUserLogin,
+		Payload:   json.RawMessage(payload),
+	}); err != nil {
+		h.logger.Error("Failed to create webhook event for user login", "error", err)
+		// Continue, but log
+	}
+
 	return JSONResponse(w, http.StatusOK, ApiResponse{
 		Status:  APIResponseStatusSuccess,
 		Message: "Login successful! Redirecting...",
@@ -277,6 +301,47 @@ func (h *PageHandler) Logout(w http.ResponseWriter, r *http.Request) error {
 
 	if err := h.sessionStore.Destroy(ctx, w, sess); err != nil {
 		h.logger.Error("Failed to destroy session", "error", err)
+	}
+
+	// Create logout event
+	if _, err := h.db.CreateAuditLogEvent(ctx, database.CreateAuditLogEventParams{
+		OwnerID:   sess.UserID.Data,
+		EventType: "logout",
+		EventData: database.AuditLogEventChange{
+			Key:      "logout.v1",
+			OldValue: util.None[[]byte](),
+			NewValue: util.Some([]byte(`{"user_id":"` + sess.UserID.Data.String() + `"}`)),
+		},
+		CreatedAt: time.Now(),
+	}); err != nil {
+		h.logger.Error("Failed to create audit log event for logout", "error", err)
+		// Continue, but log
+	}
+
+	// Create webhook event
+	payload, err := json.Marshal(map[string]any{
+		"event_type": database.WebhookEventTypeUserLogout,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"data": map[string]any{
+			"user_id":    sess.UserID.Data.String(),
+			"ip_address": r.RemoteAddr,
+			"user_agent": r.UserAgent(),
+		},
+	})
+	if err != nil {
+		h.logger.Error("Failed to marshal event data", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to marshal event data",
+		})
+	}
+
+	if _, err := h.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
+		EventType: database.WebhookEventTypeUserLogout,
+		Payload:   json.RawMessage(payload),
+	}); err != nil {
+		h.logger.Error("Failed to create webhook event for logout", "error", err)
+		// Continue, but log
 	}
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
@@ -395,7 +460,7 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 	user, err := h.db.CreateUser(ctx, database.CreateUserParams{
 		Name:             req.Name,
 		Email:            req.Email,
-		PasswordHash:     passwordHash,
+		PasswordHash:     string(passwordHash),
 		StripeCustomerID: customer.ID,
 	})
 	if err != nil {
@@ -1416,7 +1481,8 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
 	// Get the list of webhooks for this user
-	webhooks, err := h.db.ListWebhooks(ctx, database.ListWebhooksParams{
+
+	subscription, err := h.db.ListWebhookSubscriptions(ctx, database.ListWebhookSubscriptionsParams{
 		OwnerID: util.Some(userID),
 	})
 	if err != nil {
@@ -1428,14 +1494,19 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 	}
 
 	// Convert to view model
-	viewWebhooks := make([]views.Webhook, 0, len(webhooks))
-	for _, webhook := range webhooks {
-		viewWebhooks = append(viewWebhooks, views.Webhook{
+	viewSubscriptions := make([]views.WebhookSubscription, 0, len(subscription))
+	for _, webhook := range subscription {
+		eventTypes := make([]string, len(webhook.EventTypes))
+		for i, eventType := range webhook.EventTypes {
+			eventTypes[i] = string(eventType)
+		}
+
+		viewSubscriptions = append(viewSubscriptions, views.WebhookSubscription{
 			ID:           webhook.ID.String(),
 			Name:         webhook.Name,
 			Description:  webhook.Description,
 			URL:          webhook.URL,
-			EventTypes:   webhook.EventTypes,
+			EventTypes:   eventTypes,
 			IsActive:     webhook.IsActive,
 			Activity:     time.Time{},
 			ResponseTime: time.Time{},
@@ -1444,8 +1515,138 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 	}
 	return render(ctx, w, views.WebhooksPage(views.WebhooksPageProps{
 		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Webhooks"), r),
-		Webhooks:       viewWebhooks,
+		Subscriptions:  viewSubscriptions,
+		EventTypes: []string{
+			string(database.WebhookEventTypeFileCreated),
+			string(database.WebhookEventTypeFileDeleted),
+			string(database.WebhookEventTypeUserLogin),
+			string(database.WebhookEventTypeUserLogout),
+		},
 	}))
+}
+
+type CreateWebhookRequest struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	URL         string   `json:"url"`
+	EventTypes  []string `json:"event_types"`
+}
+
+func (h *PageHandler) CreateWebhookSubscription(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	var req CreateWebhookRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request payload",
+		})
+	}
+
+	if req.Name == "" || req.URL == "" || len(req.EventTypes) == 0 {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Name, URL, and at least one event type are required",
+		})
+	}
+
+	// Validate event types
+	validEventTypes := map[string]database.WebhookEventType{
+		"file.created": database.WebhookEventTypeFileCreated,
+		"file.deleted": database.WebhookEventTypeFileDeleted,
+		"user.login":   database.WebhookEventTypeUserLogin,
+		"user.logout":  database.WebhookEventTypeUserLogout,
+	}
+
+	eventTypes := make([]database.WebhookEventType, 0, len(req.EventTypes))
+	for _, et := range req.EventTypes {
+		if validType, ok := validEventTypes[et]; ok {
+			eventTypes = append(eventTypes, validType)
+		} else {
+			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Invalid event type: " + et,
+			})
+		}
+	}
+
+	// Create the webhook subscription in the database
+	secret, err := util.RandomString(32)
+	if err != nil {
+		h.logger.Error("Failed to generate webhook secret", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create webhook",
+		})
+	}
+	webhook, err := h.db.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{
+		OwnerID:     userID,
+		Name:        req.Name,
+		Description: req.Description,
+		URL:         req.URL,
+		EventTypes:  eventTypes,
+		IsActive:    true,
+		Secret:      secret,
+	})
+	if err != nil {
+		h.logger.Error("Failed to create webhook", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create webhook",
+		})
+	}
+
+	return JSONResponse(w, http.StatusCreated, ApiResponse{
+		Status: APIResponseStatusSuccess,
+		Data: map[string]any{
+			"id":          webhook.ID.String(),
+			"name":        webhook.Name,
+			"description": webhook.Description,
+			"url":         webhook.URL,
+			"event_types": webhook.EventTypes,
+			"is_active":   webhook.IsActive,
+			"created_at":  webhook.CreatedAt,
+		},
+	})
+}
+
+func (h *PageHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	// Get webhook ID from URL path
+	webhookID := r.PathValue("id")
+	if webhookID == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Webhook ID is required",
+		})
+	}
+
+	webhookUUID, err := uuid.Parse(webhookID)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid webhook ID format",
+		})
+	}
+
+	// First check if the webhook exists and belongs to this user by listing user webhooks
+	if err := h.db.DeleteWebhookByID(ctx, webhookUUID, database.DeleteWebhookParams{
+		OwnerID: util.Some(userID),
+	}); err != nil {
+		h.logger.Error("Failed to delete webhook", "error", err, "webhookID", webhookID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to delete webhook",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Webhook deleted successfully",
+	})
 }
 
 func (h *PageHandler) ShowAuditLogsPage(w http.ResponseWriter, r *http.Request) error {

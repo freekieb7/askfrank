@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-type Webhook struct {
+type WebhookSubscription struct {
 	ID           string
 	Name         string
 	Description  string
@@ -29,7 +29,8 @@ type Webhook struct {
 
 type WebhooksPageProps struct {
 	component.AppLayoutProps
-	Webhooks []Webhook
+	Subscriptions []WebhookSubscription
+	EventTypes    []string
 }
 
 func WebhooksPage(props WebhooksPageProps) templ.Component {
@@ -69,8 +70,8 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if len(props.Webhooks) == 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"empty-state\"><p class=\"text-muted\">You haven't created any webhooks yet.</p><p class=\"text-sm mt-2 text-muted\">Create a webhook to integrate with AskFrank's API</p></div>")
+			if len(props.Subscriptions) == 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"empty-state\"><p class=\"text-muted\">You haven't created any subscriptions yet.</p><p class=\"text-sm mt-2 text-muted\">Create a subscription to integrate with AskFrank's API</p></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -79,15 +80,15 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				for _, webhook := range props.Webhooks {
+				for _, subscription := range props.Subscriptions {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<tr><td><div class=\"text-sm font-medium\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var3 string
-					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(webhook.Name)
+					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(subscription.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 72, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 73, Col: 64}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 					if templ_7745c5c3_Err != nil {
@@ -98,9 +99,9 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var4 string
-					templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(webhook.URL)
+					templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(subscription.URL)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 73, Col: 57}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 74, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 					if templ_7745c5c3_Err != nil {
@@ -111,9 +112,9 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var5 string
-					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(webhook.Description)
+					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(subscription.Description)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 76, Col: 65}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 77, Col: 70}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 					if templ_7745c5c3_Err != nil {
@@ -124,9 +125,9 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var6 string
-					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(len(webhook.EventTypes))
+					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(len(subscription.EventTypes))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 80, Col: 38}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 81, Col: 43}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -137,9 +138,9 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var7 string
-					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(webhook.EventTypes, ", "))
+					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(subscription.EventTypes, ", "))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 81, Col: 75}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 82, Col: 80}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -149,16 +150,16 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					if webhook.Activity.IsZero() {
+					if subscription.Activity.IsZero() {
 						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "Never")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					} else {
 						var templ_7745c5c3_Var8 string
-						templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(webhook.Activity.Format("Jan 2, 2006 15:04"))
+						templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(subscription.Activity.Format("Jan 2, 2006 15:04"))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 88, Col: 59}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 89, Col: 64}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 						if templ_7745c5c3_Err != nil {
@@ -169,16 +170,16 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					if webhook.ResponseTime.IsZero() {
+					if subscription.ResponseTime.IsZero() {
 						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "Never")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					} else {
 						var templ_7745c5c3_Var9 string
-						templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(webhook.ResponseTime.Format("Jan 2, 2006 15:04"))
+						templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(subscription.ResponseTime.Format("Jan 2, 2006 15:04"))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 95, Col: 63}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 96, Col: 68}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 						if templ_7745c5c3_Err != nil {
@@ -189,18 +190,105 @@ func WebhooksPage(props WebhooksPageProps) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					fmt.Sprintf("%.2f%%", webhook.ErrorRate)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div></td></tr>")
+					var templ_7745c5c3_Var10 string
+					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.2f%%", subscription.ErrorRate))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 100, Col: 64}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div></td><td class=\"text-right\"><div class=\"flex items-center justify-end space-x-2\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.JSFuncCall("confirmDeleteWebhook", subscription.ID, subscription.Name))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<button type=\"button\" onclick=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var11 templ.ComponentScript = templ.JSFuncCall("confirmDeleteWebhook", subscription.ID, subscription.Name)
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11.Call)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\" class=\"btn-danger btn-sm\"><i class=\"fas fa-trash\"></i></button></div></td></tr>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</tbody></table></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</tbody></table></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div><!-- Create Webhook Modal --><div id=\"createWebhookModal\" class=\"modal-overlay hidden\"><div class=\"modal-content\"><div class=\"modal-header\"><h3 class=\"modal-title\">Create New Webhook</h3><button type=\"button\" class=\"modal-close\" onclick=\"document.getElementById('createWebhookModal').classList.add('hidden')\"><i class=\"fas fa-times\"></i></button></div><form id=\"createWebhookForm\" class=\"p-4\" onsubmit=\"event.preventDefault(); createWebhook();\"><div class=\"mb-4\"><label for=\"webhookName\" class=\"form-label\">Client Name</label> <input type=\"text\" id=\"webhookName\" name=\"name\" required class=\"form-input\" placeholder=\"My Application\"></div><div class=\"mb-4\"><label for=\"webhookDescription\" class=\"form-label\">Description (optional)</label> <input type=\"text\" id=\"webhookDescription\" name=\"description\" class=\"form-input\" placeholder=\"A brief description of your application\"></div><div class=\"mb-4\"><label for=\"webhookURL\" class=\"form-label\">Webhook URL</label> <input type=\"text\" id=\"webhookURL\" name=\"url\" class=\"form-input\" placeholder=\"https://example.com/webhook\"></div><div class=\"mb-4\"><label class=\"form-label\">Allowed Scopes</label><div class=\"space-y-2\"><div class=\"flex items-center\"><input type=\"checkbox\" id=\"scope_read\" name=\"scopes\" value=\"read\" class=\"form-checkbox\" checked> <label for=\"scope_read\" class=\"ml-2 block text-sm\">Read</label></div><div class=\"flex items-center\"><input type=\"checkbox\" id=\"scope_write\" name=\"scopes\" value=\"write\" class=\"form-checkbox\"> <label for=\"scope_write\" class=\"ml-2 block text-sm\">Write</label></div></div></div><div class=\"modal-footer\"><button type=\"button\" class=\"btn-secondary\" onclick=\"document.getElementById('createWebhookModal').classList.add('hidden')\">Cancel</button> <button type=\"button\" id=\"createWebhookButton\" class=\"btn-primary\" onclick=\"createWebhook()\">Create Webhook</button></div></form></div></div><!-- Delete Confirmation Modal --><div id=\"deleteWebhookModal\" class=\"modal-overlay hidden\"><div class=\"modal-content max-w-md\"><div class=\"p-4\"><div class=\"flex items-center justify-center text-red-500 mb-4\"><i class=\"fas fa-exclamation-triangle text-4xl\"></i></div><h3 class=\"modal-title text-center mb-2\">Delete Webhook</h3><p class=\"text-sm text-center text-muted mb-4\">Are you sure you want to delete <span id=\"deleteWebhookName\" class=\"font-medium\"></span>? This action cannot be undone.</p><form id=\"deleteWebhookForm\" class=\"flex justify-center space-x-4\" onsubmit=\"event.preventDefault();\"><input type=\"hidden\" id=\"deleteWebhookId\" name=\"webhookId\"> <button type=\"button\" class=\"btn-secondary\" onclick=\"document.getElementById('deleteWebhookModal').classList.add('hidden')\">Cancel</button> <button type=\"button\" onclick=\"deleteWebhook(document.getElementById('deleteWebhookId').value)\" class=\"btn-danger\">Delete</button></form></div></div></div><script>\n\t\t\t\t\tasync function createWebhook() {\n\t\t\t\t\t\t// Get CSRF token\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');\n\t\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\t// Get form values\n\t\t\t\t\t\tconst name = document.getElementById('webhookName').value;\n\t\t\t\t\t\tconst description = document.getElementById('webhookDescription').value;\n\n\t\t\t\t\t\t// Get selected event types\n\t\t\t\t\t\tconst selectedEventTypes = [];\n\t\t\t\t\t\tif (document.getElementById('event_type_1').checked) {\n\t\t\t\t\t\t\tselectedEventTypes.push('event_type_1');\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (document.getElementById('event_type_2').checked) {\n\t\t\t\t\t\t\tselectedEventTypes.push('event_type_2');\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Validate form\n\t\t\t\t\t\tif (!name) {\n\t\t\t\t\t\t\talert('Webhook name is required');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (selectedEventTypes.length === 0) {\n\t\t\t\t\t\t\talert('At least one event type must be selected');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Disable button and show loading state\n\t\t\t\t\t\tconst button = document.getElementById('createWebhookButton');\n\t\t\t\t\t\tbutton.disabled = true;\n\t\t\t\t\t\tbutton.textContent = 'Creating...';\n\t\t\t\t\t\t\n                        // todo from here do more\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t// Send request to create webhook\n\t\t\t\t\t\t\tconst response = await fetch('/developer/webhooks/create-webhook', {\n\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken,\n\t\t\t\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\tbody: new URLSearchParams({\n\t\t\t\t\t\t\t\t\t'name': name,\n\t\t\t\t\t\t\t\t\t'description': description,\n\t\t\t\t\t\t\t\t\t'redirectURIs': redirectURIs,\n\t\t\t\t\t\t\t\t\t'isPublic': isPublic,\n\t\t\t\t\t\t\t\t\t'scopes': selectedScopes.join(',')\n\t\t\t\t\t\t\t\t})\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tthrow new Error(`HTTP error! status: ${response.status}`);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\tconst data = await response.json();\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Hide the modal\n\t\t\t\t\t\t\tdocument.getElementById('createClientModal').classList.add('hidden');\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Show success and client details if available\n\t\t\t\t\t\t\tif (data.id) {\n\t\t\t\t\t\t\t\t// Show the client details in the details modal\n\t\t\t\t\t\t\t\tdocument.getElementById('detailsClientName').textContent = data.name;\n\t\t\t\t\t\t\t\tdocument.getElementById('detailsClientId').textContent = data.id;\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Show or hide secret based on client type\n\t\t\t\t\t\t\t\tconst secretContainer = document.getElementById('secretContainer');\n\t\t\t\t\t\t\t\tif (data.isPublic) {\n\t\t\t\t\t\t\t\t\tsecretContainer.classList.add('hidden');\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tsecretContainer.classList.remove('hidden');\n\t\t\t\t\t\t\t\t\tdocument.getElementById('detailsClientSecret').textContent = data.secret || 'N/A';\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Show redirect URIs\n\t\t\t\t\t\t\t\tconst uriList = document.getElementById('detailsRedirectUris');\n\t\t\t\t\t\t\t\turiList.innerHTML = '';\n\t\t\t\t\t\t\t\tdata.redirectURIs.forEach(uri => {\n\t\t\t\t\t\t\t\t\tconst li = document.createElement('li');\n\t\t\t\t\t\t\t\t\tli.textContent = uri;\n\t\t\t\t\t\t\t\t\turiList.appendChild(li);\n\t\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Show scopes\n\t\t\t\t\t\t\t\tconst scopesEl = document.getElementById('detailsScopes');\n\t\t\t\t\t\t\t\tscopesEl.innerHTML = '';\n\t\t\t\t\t\t\t\tif (data.allowedScopes && data.allowedScopes.length > 0) {\n\t\t\t\t\t\t\t\t\tscopesEl.textContent = data.allowedScopes.join(', ');\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tscopesEl.textContent = 'No scopes defined';\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Show the details modal\n\t\t\t\t\t\t\t\tdocument.getElementById('clientDetailsModal').classList.remove('hidden');\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t// If we don't have details, just reload the page\n\t\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\t\tconsole.error('Error creating OAuth client:', error);\n\t\t\t\t\t\t\talert('Failed to create OAuth client. Please try again.');\n\t\t\t\t\t\t} finally {\n\t\t\t\t\t\t\t// Reset button state\n\t\t\t\t\t\t\tbutton.disabled = false;\n\t\t\t\t\t\t\tbutton.textContent = 'Create Client';\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Reset form\n\t\t\t\t\t\t\tdocument.getElementById('createClientForm').reset();\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tfunction showClientDetails(clientId) {\n\t\t\t\t\t\t// Get CSRF token\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');\n\t\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Fetch client details from the server\n\t\t\t\t\t\tfetch(`/api/developer/clients/${clientId}`, {\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t})\n\t\t\t\t\t\t\t.then(response => response.json())\n\t\t\t\t\t\t\t.then(client => {\n\t\t\t\t\t\t\t\tdocument.getElementById('detailsClientName').textContent = client.name;\n\t\t\t\t\t\t\t\tdocument.getElementById('detailsClientId').textContent = client.id;\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Show or hide secret based on client type\n\t\t\t\t\t\t\t\tconst secretContainer = document.getElementById('secretContainer');\n\t\t\t\t\t\t\t\tif (client.isPublic) {\n\t\t\t\t\t\t\t\t\tsecretContainer.classList.add('hidden');\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tsecretContainer.classList.remove('hidden');\n\t\t\t\t\t\t\t\t\tdocument.getElementById('detailsClientSecret').textContent = client.secret || 'N/A';\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Show redirect URIs\n\t\t\t\t\t\t\t\tconst uriList = document.getElementById('detailsRedirectUris');\n\t\t\t\t\t\t\t\turiList.innerHTML = '';\n\t\t\t\t\t\t\t\tclient.redirectURIs.forEach(uri => {\n\t\t\t\t\t\t\t\t\tconst li = document.createElement('li');\n\t\t\t\t\t\t\t\t\tli.textContent = uri;\n\t\t\t\t\t\t\t\t\turiList.appendChild(li);\n\t\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Show scopes\n\t\t\t\t\t\t\t\tconst scopesEl = document.getElementById('detailsScopes');\n\t\t\t\t\t\t\t\tscopesEl.innerHTML = '';\n\t\t\t\t\t\t\t\tif (client.allowedScopes && client.allowedScopes.length > 0) {\n\t\t\t\t\t\t\t\t\tscopesEl.textContent = client.allowedScopes.join(', ');\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tscopesEl.textContent = 'No scopes defined';\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\tdocument.getElementById('clientDetailsModal').classList.remove('hidden');\n\t\t\t\t\t\t\t})\n\t\t\t\t\t\t\t.catch(error => {\n\t\t\t\t\t\t\t\tconsole.error('Error fetching client details:', error);\n\t\t\t\t\t\t\t\talert('Failed to load client details');\n\t\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tfunction confirmDeleteClient(clientId, clientName) {\n\t\t\t\t\t\tdocument.getElementById('deleteClientName').textContent = clientName;\n\t\t\t\t\t\tdocument.getElementById('deleteClientId').value = clientId;\n\t\t\t\t\t\tdocument.getElementById('deleteClientModal').classList.remove('hidden');\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tasync function deleteOAuthClient(clientId) {\n\t\t\t\t\t\t// Get CSRF token\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');\n\t\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t// Send delete request\n\t\t\t\t\t\t\tconst response = await fetch(`/developer/clients/${clientId}/delete`, {\n\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tthrow new Error(`HTTP error! status: ${response.status}`);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Hide the modal and refresh the page\n\t\t\t\t\t\t\tdocument.getElementById('deleteClientModal').classList.add('hidden');\n\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\t\tconsole.error('Error deleting OAuth client:', error);\n\t\t\t\t\t\t\talert('Failed to delete OAuth client. Please try again.');\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tfunction copyToClipboard(elementId) {\n\t\t\t\t\t\tconst text = document.getElementById(elementId).textContent;\n\t\t\t\t\t\tnavigator.clipboard.writeText(text).then(() => {\n\t\t\t\t\t\t\t// Show a temporary tooltip or notification\n\t\t\t\t\t\t\talert('Copied to clipboard!');\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t</script></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</div><!-- Create Webhook Modal --><div id=\"createWebhookModal\" class=\"modal-overlay hidden\"><div class=\"modal-container\"><div class=\"modal-content\"><div class=\"modal-header\"><h3 class=\"modal-title\">Create New Webhook</h3><button type=\"button\" class=\"modal-close\" onclick=\"document.getElementById('createWebhookModal').classList.add('hidden')\"><i class=\"fas fa-times\"></i></button></div><form id=\"createWebhookForm\" class=\"p-4\" onsubmit=\"event.preventDefault(); createWebhook();\"><div class=\"mb-4\"><label for=\"webhookName\" class=\"form-label\">Name</label> <input type=\"text\" id=\"webhookName\" name=\"name\" required class=\"form-input\" placeholder=\"My Application\"></div><div class=\"mb-4\"><label for=\"webhookDescription\" class=\"form-label\">Description (optional)</label> <input type=\"text\" id=\"webhookDescription\" name=\"description\" class=\"form-input\" placeholder=\"A brief description of your application\"></div><div class=\"mb-4\"><label for=\"webhookURL\" class=\"form-label\">Webhook URL</label> <input type=\"text\" id=\"webhookURL\" name=\"url\" class=\"form-input\" placeholder=\"https://example.com/webhook\"></div><div class=\"mb-4\"><label class=\"form-label\">Event Types</label><div class=\"space-y-2\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for i, eventType := range props.EventTypes {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"flex items-center\"><input type=\"checkbox\" id=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var12 string
+				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("event_type_%d", i))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 169, Col: 49}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\" name=\"eventTypes\" value=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var13 string
+				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(eventType)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 171, Col: 30}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" class=\"form-checkbox\"> <label for=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var14 string
+				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("event_type_%d", i))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 174, Col: 56}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\" class=\"ml-2 block text-sm\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var15 string
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(eventType)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/webhooks.templ`, Line: 174, Col: 97}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</label></div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</div></div><div class=\"modal-footer\"><button type=\"button\" class=\"btn-secondary\" onclick=\"document.getElementById('createWebhookModal').classList.add('hidden')\">Cancel</button> <button type=\"button\" id=\"createWebhookButton\" class=\"btn-primary\" onclick=\"createWebhook()\">Create Webhook</button></div></form></div></div></div><!-- Delete Confirmation Modal --><div id=\"deleteWebhookModal\" class=\"modal-overlay hidden\"><div class=\"modal-container\"><div class=\"modal-content max-w-md\"><div class=\"p-4\"><div class=\"flex items-center justify-center text-red-500 mb-4\"><i class=\"fas fa-exclamation-triangle text-4xl\"></i></div><h3 class=\"modal-title text-center mb-2\">Delete Webhook</h3><p class=\"text-sm text-center text-muted mb-4\">Are you sure you want to delete <span id=\"deleteWebhookName\" class=\"font-medium\"></span>? This action cannot be undone.</p><form id=\"deleteWebhookForm\" class=\"flex justify-center space-x-4\" onsubmit=\"event.preventDefault();\"><input type=\"hidden\" id=\"deleteWebhookId\" name=\"webhookId\"> <button type=\"button\" class=\"btn-secondary\" onclick=\"document.getElementById('deleteWebhookModal').classList.add('hidden')\">Cancel</button> <button type=\"button\" onclick=\"deleteWebhook(document.getElementById('deleteWebhookId').value)\" class=\"btn-danger\">Delete</button></form></div></div></div></div><script>\n\t\t\t\t\tasync function createWebhook() {\n\t\t\t\t\t\t// Get CSRF token\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');\n\t\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\t// Get form values\n\t\t\t\t\t\tconst name = document.getElementById('webhookName').value;\n\t\t\t\t\t\tconst description = document.getElementById('webhookDescription').value;\n\t\t\t\t\t\tconst url = document.getElementById('webhookURL').value;\n\n\t\t\t\t\t\t// Get selected event types\n\t\t\t\t\t\tconst selectedEventTypes = [];\n\t\t\t\t\t\tconst checkboxes = document.querySelectorAll('input[name=\"eventTypes\"]:checked');\n\t\t\t\t\t\tcheckboxes.forEach(checkbox => {\n\t\t\t\t\t\t\tselectedEventTypes.push(checkbox.value);\n\t\t\t\t\t\t});\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Validate form\n\t\t\t\t\t\tif (!name) {\n\t\t\t\t\t\t\talert('Webhook name is required');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (!url) {\n\t\t\t\t\t\t\talert('Webhook URL is required');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (selectedEventTypes.length === 0) {\n\t\t\t\t\t\t\talert('At least one event type must be selected');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Disable button and show loading state\n\t\t\t\t\t\tconst button = document.getElementById('createWebhookButton');\n\t\t\t\t\t\tbutton.disabled = true;\n\t\t\t\t\t\tbutton.textContent = 'Creating...';\n\t\t\t\t\t\t\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t// Send request to create webhook\n\t\t\t\t\t\t\tconst response = await fetch('/developers/webhooks', {\n\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken,\n\t\t\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\t\t\t\tname: name,\n\t\t\t\t\t\t\t\t\tdescription: description,\n\t\t\t\t\t\t\t\t\turl: url,\n\t\t\t\t\t\t\t\t\tevent_types: selectedEventTypes\n\t\t\t\t\t\t\t\t})\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tconst errorData = await response.json().catch(() => null);\n\t\t\t\t\t\t\t\tthrow new Error(errorData?.message || `HTTP error! status: ${response.status}`);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\tconst data = await response.json();\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Hide the modal\n\t\t\t\t\t\t\tdocument.getElementById('createWebhookModal').classList.add('hidden');\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Show success and reload the page\n\t\t\t\t\t\t\talert('Webhook created successfully!');\n\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\t\tconsole.error('Error creating webhook:', error);\n\t\t\t\t\t\t\talert('Failed to create webhook: ' + error.message);\n\t\t\t\t\t\t} finally {\n\t\t\t\t\t\t\t// Reset button state\n\t\t\t\t\t\t\tbutton.disabled = false;\n\t\t\t\t\t\t\tbutton.textContent = 'Create Webhook';\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Reset form\n\t\t\t\t\t\t\tdocument.getElementById('createWebhookForm').reset();\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tfunction confirmDeleteWebhook(webhookId, webhookName) {\n\t\t\t\t\t\tdocument.getElementById('deleteWebhookName').textContent = webhookName;\n\t\t\t\t\t\tdocument.getElementById('deleteWebhookId').value = webhookId;\n\t\t\t\t\t\tdocument.getElementById('deleteWebhookModal').classList.remove('hidden');\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tasync function deleteWebhook(webhookId) {\n\t\t\t\t\t\t// Get CSRF token\n\t\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]')?.getAttribute('content');\n\t\t\t\t\t\tif (!csrfToken) {\n\t\t\t\t\t\t\talert('CSRF token not found');\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\t\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t// Send delete request\n\t\t\t\t\t\t\tconst response = await fetch(`/developers/webhooks/${webhookId}/delete`, {\n\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\t\tconst errorData = await response.json().catch(() => null);\n\t\t\t\t\t\t\t\tthrow new Error(errorData?.message || `HTTP error! status: ${response.status}`);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t// Hide the modal and refresh the page\n\t\t\t\t\t\t\tdocument.getElementById('deleteWebhookModal').classList.add('hidden');\n\t\t\t\t\t\t\talert('Webhook deleted successfully!');\n\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\t\tconsole.error('Error deleting webhook:', error);\n\t\t\t\t\t\t\talert('Failed to delete webhook: ' + error.message);\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t</script></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

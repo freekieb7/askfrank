@@ -6,7 +6,7 @@ CREATE TABLE tbl_user (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    password_hash bytea NOT NULL,
+    password_hash TEXT NOT NULL,
     is_email_verified BOOLEAN NOT NULL,
     is_bot BOOLEAN NOT NULL,
     stripe_customer_id TEXT NOT NULL,
@@ -143,43 +143,57 @@ CREATE INDEX idx_audit_log_owner_id ON tbl_audit_log_event (owner_id);
 CREATE INDEX idx_audit_log_event_event_type ON tbl_audit_log_event (event_type);
 CREATE INDEX idx_audit_log_event_created_at ON tbl_audit_log_event (created_at);
 
-CREATE TABLE tbl_webhook (
+CREATE TABLE tbl_webhook_subscription (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     url TEXT NOT NULL,
     secret TEXT NOT NULL,      -- Secret for signing the webhook payload
-    event_types TEXT[] NOT NULL, -- e.g., 'file_uploaded', 'file_deleted'
+    event_types TEXT[] NOT NULL, -- e.g., 'file.uploaded', 'file.deleted'
     is_active BOOLEAN NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_webhook_owner_id ON tbl_webhook (owner_id);
-CREATE INDEX idx_webhook_event_types ON tbl_webhook USING GIN (event_types);
-CREATE INDEX idx_webhook_is_active ON tbl_webhook (is_active);
-CREATE INDEX idx_webhook_url ON tbl_webhook (url);
-CREATE INDEX idx_webhook_created_at ON tbl_webhook (created_at);
+CREATE INDEX idx_webhook_subscription_owner_id ON tbl_webhook_subscription (owner_id);
+CREATE INDEX idx_webhook_subscription_event_types ON tbl_webhook_subscription USING GIN (event_types);
+CREATE INDEX idx_webhook_subscription_is_active ON tbl_webhook_subscription (is_active);
+CREATE INDEX idx_webhook_subscription_url ON tbl_webhook_subscription (url);
+CREATE INDEX idx_webhook_subscription_created_at ON tbl_webhook_subscription (created_at);
 
 CREATE TABLE tbl_webhook_event (
     id UUID PRIMARY KEY,
-    webhook_id UUID NOT NULL REFERENCES tbl_webhook(id) ON DELETE CASCADE,
     event_type TEXT NOT NULL,  -- e.g., 'file_uploaded', 'file_deleted'
     payload JSONB NOT NULL,    -- The payload sent to the webhook
-    status TEXT NOT NULL,      -- e.g., 'pending', 'sent', 'failed'
-    attempts INT NOT NULL,     -- Number of delivery attempts
-    last_attempt_at TIMESTAMP, -- Timestamp of the last delivery attempt
-    response_code INT,         -- HTTP response code from the last attempt
-    response_body TEXT,        -- HTTP response body from the last attempt
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_webhook_event_webhook_id ON tbl_webhook_event (webhook_id);
 CREATE INDEX idx_webhook_event_event_type ON tbl_webhook_event (event_type);
-CREATE INDEX idx_webhook_event_status ON tbl_webhook_event (status);
 CREATE INDEX idx_webhook_event_created_at ON tbl_webhook_event (created_at);
+
+CREATE TABLE tbl_webhook_delivery (
+    id UUID PRIMARY KEY,
+    event_id UUID NOT NULL REFERENCES tbl_webhook_event(id) ON DELETE CASCADE,
+    subscription_id UUID NOT NULL REFERENCES tbl_webhook_subscription(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',       -- e.g., 'pending', 'sent', 'failed'
+    retry_count INT NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMP,
+    last_attempt_at TIMESTAMP,
+    last_response_code INT,
+    last_response_body TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_webhook_delivery_event_id ON tbl_webhook_delivery (event_id);
+CREATE INDEX idx_webhook_delivery_subscription_id ON tbl_webhook_delivery (subscription_id);
+CREATE INDEX idx_webhook_delivery_status ON tbl_webhook_delivery (status);
+CREATE INDEX idx_webhook_delivery_retry_count ON tbl_webhook_delivery (retry_count);
+CREATE INDEX idx_webhook_delivery_last_attempt_at ON tbl_webhook_delivery (last_attempt_at);
+CREATE INDEX idx_webhook_delivery_last_response_code ON tbl_webhook_delivery (last_response_code);
+CREATE INDEX idx_webhook_delivery_created_at ON tbl_webhook_delivery (created_at);
 
 CREATE TABLE tbl_calendar_event (
     id UUID PRIMARY KEY,

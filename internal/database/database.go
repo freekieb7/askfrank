@@ -30,7 +30,7 @@ type User struct {
 	ID               uuid.UUID
 	Name             string
 	Email            string
-	PasswordHash     []byte
+	PasswordHash     string
 	IsEmailVerified  bool
 	IsBot            bool
 	StripeCustomerID string
@@ -121,39 +121,60 @@ type AuditLogEvent struct {
 	CreatedAt time.Time
 }
 
-type Webhook struct {
+type WebhookEventType string
+
+const (
+	WebhookEventTypeFileCreated WebhookEventType = "file.created"
+	WebhookEventTypeFileDeleted WebhookEventType = "file.deleted"
+	WebhookEventTypeUserLogin   WebhookEventType = "user.login"
+	WebhookEventTypeUserLogout  WebhookEventType = "user.logout"
+)
+
+type WebhookSubscription struct {
 	ID          uuid.UUID
 	OwnerID     uuid.UUID
 	Name        string
 	Description string
 	URL         string
 	Secret      string
-	EventTypes  []string
+	EventTypes  []WebhookEventType
 	IsActive    bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
-type WebhookEventStatus string
+type WebhookEvent struct {
+	ID        uuid.UUID
+	EventType WebhookEventType
+	Payload   json.RawMessage
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type WebhookDeliveryStatus string
 
 const (
-	WebhookEventStatusPending WebhookEventStatus = "pending"
-	WebhookEventStatusSent    WebhookEventStatus = "sent"
-	WebhookEventStatusFailed  WebhookEventStatus = "failed"
+	WebhookDeliveryStatusPending WebhookDeliveryStatus = "pending"
+	WebhookDeliveryStatusSent    WebhookDeliveryStatus = "sent"
+	WebhookDeliveryStatusFailed  WebhookDeliveryStatus = "failed"
 )
 
-type WebhookEvent struct {
-	ID            uuid.UUID
-	WebhookID     uuid.UUID
-	Payload       json.RawMessage
-	Status        WebhookEventStatus
-	EventType     string
-	Attempts      int
-	LastAttemptAt util.Optional[time.Time]
-	ResponseCode  util.Optional[int]
-	ResponseBody  util.Optional[string]
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+type WebhookDelivery struct {
+	ID               uuid.UUID
+	EventID          uuid.UUID
+	SubscriptionID   uuid.UUID
+	URL              string
+	Secret           string
+	Payload          []byte
+	EventType        WebhookEventType
+	Status           WebhookDeliveryStatus
+	RetryCount       int
+	LastAttemptAt    util.Optional[time.Time]
+	NextAttemptAt    util.Optional[time.Time]
+	LastResponseCode util.Optional[int]
+	LastResponseBody util.Optional[string]
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type CalendarEventStatus string
@@ -304,7 +325,7 @@ var (
 type CreateUserParams struct {
 	Name             string
 	Email            string
-	PasswordHash     []byte
+	PasswordHash     string
 	IsEmailVerified  bool
 	IsBot            bool
 	StripeCustomerID string
@@ -1296,24 +1317,25 @@ func (db *Database) ListAuditLogEvents(ctx context.Context, params ListAuditLogE
 	}
 
 	if err := rows.Err(); err != nil {
+		db.logger.Error("ListAuditLogEvents error", "error", err)
 		return nil, err
 	}
 
 	return events, nil
 }
 
-type CreateWebhookParams struct {
+type CreateWebhookSubscriptionParams struct {
 	OwnerID     uuid.UUID
 	Name        string
 	Description string
 	URL         string
 	Secret      string
-	EventTypes  []string
+	EventTypes  []WebhookEventType
 	IsActive    bool
 }
 
-func (db *Database) CreateWebhook(ctx context.Context, params CreateWebhookParams) (Webhook, error) {
-	webhook := Webhook{
+func (db *Database) CreateWebhookSubscription(ctx context.Context, params CreateWebhookSubscriptionParams) (WebhookSubscription, error) {
+	subscription := WebhookSubscription{
 		ID:          uuid.New(),
 		OwnerID:     params.OwnerID,
 		Name:        params.Name,
@@ -1326,25 +1348,25 @@ func (db *Database) CreateWebhook(ctx context.Context, params CreateWebhookParam
 		UpdatedAt:   time.Now(),
 	}
 
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_webhook (id, owner_id, name, description, url, secret, event_types, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		webhook.ID, webhook.OwnerID, webhook.Name, webhook.Description, webhook.URL, webhook.Secret, webhook.EventTypes, webhook.IsActive, webhook.CreatedAt, webhook.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateWebhook: failed to insert webhook (owner_id=%s, url=%s): %w", webhook.OwnerID, webhook.URL, err)
-		db.logger.Error("CreateWebhook error", "error", err)
-		return webhook, err
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_webhook_subscription (id, owner_id, name, description, url, secret, event_types, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		subscription.ID, subscription.OwnerID, subscription.Name, subscription.Description, subscription.URL, subscription.Secret, subscription.EventTypes, subscription.IsActive, subscription.CreatedAt, subscription.UpdatedAt); err != nil {
+		err = fmt.Errorf("CreateWebhookSubscription: failed to insert webhook subscription (owner_id=%s, url=%s): %w", subscription.OwnerID, subscription.URL, err)
+		db.logger.Error("CreateWebhookSubscription error", "error", err)
+		return subscription, err
 	}
-	return webhook, nil
+	return subscription, nil
 }
 
-type ListWebhooksParams struct {
+type ListWebhookSubscriptionsParams struct {
 	OwnerID util.Optional[uuid.UUID]
 	Active  util.Optional[bool]
 }
 
-func (db *Database) ListWebhooks(ctx context.Context, params ListWebhooksParams) ([]Webhook, error) {
-	var webhooks []Webhook
+func (db *Database) ListWebhookSubscriptions(ctx context.Context, params ListWebhookSubscriptionsParams) ([]WebhookSubscription, error) {
+	var subscriptions []WebhookSubscription
 
 	var query strings.Builder
-	query.WriteString(`SELECT id, owner_id, name, description, url, secret, event_types, is_active, created_at, updated_at FROM tbl_webhook WHERE 1=1`)
+	query.WriteString(`SELECT id, owner_id, name, description, url, secret, event_types, is_active, created_at, updated_at FROM tbl_webhook_subscription WHERE 1=1`)
 	var args []any
 	argNum := 1
 
@@ -1362,27 +1384,28 @@ func (db *Database) ListWebhooks(ctx context.Context, params ListWebhooksParams)
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListWebhooks error", "error", err)
+		db.logger.Error("ListWebhookSubscriptions error", "error", err)
 		return nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var webhook Webhook
-		if err := rows.Scan(&webhook.ID, &webhook.OwnerID, &webhook.Name, &webhook.Description, &webhook.URL, &webhook.Secret, &webhook.EventTypes, &webhook.IsActive, &webhook.CreatedAt, &webhook.UpdatedAt); err != nil {
+		var subscription WebhookSubscription
+		if err := rows.Scan(&subscription.ID, &subscription.OwnerID, &subscription.Name, &subscription.Description, &subscription.URL, &subscription.Secret, &subscription.EventTypes, &subscription.IsActive, &subscription.CreatedAt, &subscription.UpdatedAt); err != nil {
 			return nil, err
 		}
-		webhooks = append(webhooks, webhook)
+		subscriptions = append(subscriptions, subscription)
 	}
 
 	if err := rows.Err(); err != nil {
+		db.logger.Error("ListWebhookSubscriptions error", "error", err)
 		return nil, err
 	}
 
-	return webhooks, nil
+	return subscriptions, nil
 }
 
-type UpdateWebhookParams struct {
+type UpdateWebhookSubscriptionParams struct {
 	Name        util.Optional[string]
 	Description util.Optional[string]
 	URL         util.Optional[string]
@@ -1391,9 +1414,9 @@ type UpdateWebhookParams struct {
 	IsActive    util.Optional[bool]
 }
 
-func (db *Database) UpdateWebhookByID(ctx context.Context, id uuid.UUID, params UpdateWebhookParams) error {
+func (db *Database) UpdateWebhookSubscriptionByID(ctx context.Context, id uuid.UUID, params UpdateWebhookSubscriptionParams) error {
 	var query strings.Builder
-	query.WriteString(`UPDATE tbl_webhook SET `)
+	query.WriteString(`UPDATE tbl_webhook_subscription SET `)
 	args := []any{}
 	argNum := 1
 
@@ -1444,72 +1467,78 @@ func (db *Database) UpdateWebhookByID(ctx context.Context, id uuid.UUID, params 
 	return nil
 }
 
-func (db *Database) DeleteWebhookByID(ctx context.Context, id uuid.UUID) error {
-	if _, err := db.Exec(ctx, `DELETE FROM tbl_webhook WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteWebhook: failed to delete webhook (id=%s): %w", id, err)
-		db.logger.Error("DeleteWebhook error", "error", err)
+type DeleteWebhookParams struct {
+	OwnerID util.Optional[uuid.UUID]
+}
+
+func (db *Database) DeleteWebhookByID(ctx context.Context, id uuid.UUID, params DeleteWebhookParams) error {
+	var query strings.Builder
+	query.WriteString(`DELETE FROM tbl_webhook WHERE id = $1`)
+	args := []any{id}
+	argNum := 2
+
+	if params.OwnerID.Some {
+		query.WriteString(fmt.Sprintf(" AND owner_id = $%d", argNum))
+		args = append(args, params.OwnerID.Data)
+		argNum++
+	}
+
+	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
+		err = fmt.Errorf("DeleteWebhookByID: failed to delete webhook (id=%s): %w", id, err)
+		db.logger.Error("DeleteWebhookByID error", "error", err)
 		return err
 	}
 	return nil
 }
 
 type CreateWebhookEventParams struct {
-	WebhookID     uuid.UUID
-	EventType     string
-	Payload       json.RawMessage
-	Status        WebhookEventStatus
-	Attempts      int
-	LastAttemptAt util.Optional[time.Time]
-	ResponseCode  util.Optional[int]
-	ResponseBody  util.Optional[string]
+	EventType WebhookEventType
+	Payload   json.RawMessage
 }
 
 func (db *Database) CreateWebhookEvent(ctx context.Context, params CreateWebhookEventParams) (WebhookEvent, error) {
 	event := WebhookEvent{
-		ID:            uuid.New(),
-		WebhookID:     params.WebhookID,
-		EventType:     params.EventType,
-		Payload:       params.Payload,
-		Status:        params.Status,
-		Attempts:      params.Attempts,
-		LastAttemptAt: params.LastAttemptAt,
-		ResponseCode:  params.ResponseCode,
-		ResponseBody:  params.ResponseBody,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		ID:        uuid.New(),
+		EventType: params.EventType,
+		Payload:   params.Payload,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_webhook_event (id, webhook_id, event_type, payload, status, attempts, last_attempt_at, response_code, response_body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		event.ID, event.WebhookID, event.EventType, event.Payload, event.Status, event.Attempts, event.LastAttemptAt, event.ResponseCode, event.ResponseBody, event.CreatedAt, event.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateWebhookEvent: failed to insert webhook event (webhook_id=%s): %w", event.WebhookID, err)
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_webhook_event (id, event_type, payload, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`,
+		event.ID, event.EventType, event.Payload, event.CreatedAt, event.UpdatedAt); err != nil {
 		db.logger.Error("CreateWebhookEvent error", "error", err)
 		return event, err
 	}
+
+	if _, err := db.Exec(ctx, `
+        INSERT INTO tbl_webhook_delivery (id, event_id, subscription_id, status, retry_count, created_at, updated_at)
+        SELECT gen_random_uuid(), $1, s.id, $3, 0, NOW(), NOW()
+        FROM tbl_webhook_subscription s
+        WHERE s.is_active = true AND $2 = ANY(s.event_types)
+    `, event.ID, string(event.EventType), WebhookDeliveryStatusPending); err != nil {
+		db.logger.Error("CreateWebhookEvent delivery creation error", "error", err)
+		return event, err
+	}
+
 	return event, nil
 }
 
 type ListWebhookEventsParams struct {
-	WebhookID util.Optional[uuid.UUID]
-	Status    util.Optional[WebhookEventStatus]
+	EventTypes util.Optional[[]string]
 }
 
 func (db *Database) ListWebhookEvents(ctx context.Context, params ListWebhookEventsParams) ([]WebhookEvent, error) {
 	var events []WebhookEvent
 
 	var query strings.Builder
-	query.WriteString(`SELECT id, webhook_id, event_type, payload, status, attempts, last_attempt_at, response_code, response_body, created_at, updated_at FROM tbl_webhook_event WHERE 1=1`)
+	query.WriteString(`SELECT id, event_type, payload, status, attempts, last_attempt_at, response_code, response_body, created_at, updated_at FROM tbl_webhook_event WHERE 1=1`)
 	var args []any
 	argNum := 1
 
-	if params.WebhookID.Some {
-		query.WriteString(fmt.Sprintf(" AND webhook_id = $%d", argNum))
-		args = append(args, params.WebhookID.Data)
-		argNum++
-	}
-
-	if params.Status.Some {
-		query.WriteString(fmt.Sprintf(" AND status = $%d", argNum))
-		args = append(args, params.Status.Data)
+	if params.EventTypes.Some && len(params.EventTypes.Data) > 0 {
+		query.WriteString(fmt.Sprintf(" AND event_type = ANY($%d)", argNum))
+		args = append(args, params.EventTypes.Data)
 		argNum++
 	}
 
@@ -1522,30 +1551,120 @@ func (db *Database) ListWebhookEvents(ctx context.Context, params ListWebhookEve
 
 	for rows.Next() {
 		var event WebhookEvent
-		if err := rows.Scan(&event.ID, &event.WebhookID, &event.EventType, &event.Payload, &event.Status, &event.Attempts, &event.LastAttemptAt, &event.ResponseCode, &event.ResponseBody, &event.CreatedAt, &event.UpdatedAt); err != nil {
+		if err := rows.Scan(&event.ID, &event.EventType, &event.Payload, &event.CreatedAt, &event.UpdatedAt); err != nil {
+			db.logger.Error("ListWebhookEvents error", "error", err)
 			return nil, err
 		}
 		events = append(events, event)
 	}
 
 	if err := rows.Err(); err != nil {
+		db.logger.Error("ListWebhookEvents error", "error", err)
 		return nil, err
 	}
 
 	return events, nil
 }
 
-type UpdateWebhookEventParams struct {
-	Status        util.Optional[WebhookEventStatus]
-	Attempts      util.Optional[int]
-	LastAttemptAt util.Optional[time.Time]
-	ResponseCode  util.Optional[int]
-	ResponseBody  util.Optional[string]
+type ListWebhookDeliveriesParams struct {
+	Status         util.Optional[WebhookDeliveryStatus]
+	SubscriptionID util.Optional[uuid.UUID]
+	EventID        util.Optional[uuid.UUID]
+	MaxRetries     util.Optional[int]
+	ReadyForRetry  util.Optional[bool] // For deliveries that should be retried (NextAttemptAt <= NOW())
 }
 
-func (db *Database) UpdateWebhookEventByID(ctx context.Context, id uuid.UUID, params UpdateWebhookEventParams) error {
+func (db *Database) ListWebhookDeliveries(ctx context.Context, params ListWebhookDeliveriesParams) ([]WebhookDelivery, error) {
 	var query strings.Builder
-	query.WriteString(`UPDATE tbl_webhook_event SET `)
+	query.WriteString(`
+		SELECT 
+			wd.id, wd.event_id, wd.subscription_id, 
+			ws.url, ws.secret, 
+			we.payload, we.event_type,
+			wd.status, wd.retry_count, wd.last_attempt_at, wd.next_attempt_at,
+			wd.last_response_code, wd.last_response_body, wd.created_at, wd.updated_at
+		FROM tbl_webhook_delivery wd
+		JOIN tbl_webhook_subscription ws ON wd.subscription_id = ws.id
+		JOIN tbl_webhook_event we ON wd.event_id = we.id
+		WHERE 1=1`)
+
+	args := []any{}
+	argIndex := 1
+
+	if params.Status.Some {
+		query.WriteString(fmt.Sprintf(` AND wd.status = $%d`, argIndex))
+		args = append(args, params.Status.Data)
+		argIndex++
+	}
+
+	if params.SubscriptionID.Some {
+		query.WriteString(fmt.Sprintf(` AND wd.subscription_id = $%d`, argIndex))
+		args = append(args, params.SubscriptionID.Data)
+		argIndex++
+	}
+
+	if params.EventID.Some {
+		query.WriteString(fmt.Sprintf(` AND wd.event_id = $%d`, argIndex))
+		args = append(args, params.EventID.Data)
+		argIndex++
+	}
+
+	if params.MaxRetries.Some {
+		query.WriteString(fmt.Sprintf(` AND wd.retry_count < $%d`, argIndex))
+		args = append(args, params.MaxRetries.Data)
+		argIndex++
+	}
+
+	if params.ReadyForRetry.Some && params.ReadyForRetry.Data {
+		query.WriteString(` AND (wd.next_attempt_at IS NULL OR wd.next_attempt_at <= NOW())`)
+	}
+
+	query.WriteString(` ORDER BY wd.created_at ASC LIMIT 100`)
+
+	rows, err := db.Query(ctx, query.String(), args...)
+	if err != nil {
+		db.logger.Error("ListWebhookDeliveries query error", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var deliveries []WebhookDelivery
+	for rows.Next() {
+		var delivery WebhookDelivery
+		err := rows.Scan(
+			&delivery.ID, &delivery.EventID, &delivery.SubscriptionID,
+			&delivery.URL, &delivery.Secret,
+			&delivery.Payload, &delivery.EventType,
+			&delivery.Status, &delivery.RetryCount, &delivery.LastAttemptAt, &delivery.NextAttemptAt,
+			&delivery.LastResponseCode, &delivery.LastResponseBody, &delivery.CreatedAt, &delivery.UpdatedAt,
+		)
+		if err != nil {
+			db.logger.Error("ListWebhookDeliveries scan error", "error", err)
+			return nil, err
+		}
+		deliveries = append(deliveries, delivery)
+	}
+
+	if err := rows.Err(); err != nil {
+		db.logger.Error("ListWebhookDeliveries rows error", "error", err)
+		return nil, err
+	}
+
+	return deliveries, nil
+}
+
+type UpdateWebhookDeliveryParams struct {
+	Status           util.Optional[WebhookDeliveryStatus]
+	RetryCount       util.Optional[int]
+	LastAttemptAt    util.Optional[util.Optional[time.Time]]
+	NextAttemptAt    util.Optional[util.Optional[time.Time]]
+	LastResponseCode util.Optional[util.Optional[int]]
+	LastResponseBody util.Optional[util.Optional[string]]
+}
+
+func (db *Database) UpdateWebhookDeliveryByID(ctx context.Context, id uuid.UUID, params UpdateWebhookDeliveryParams) error {
+	var query strings.Builder
+	query.WriteString(`UPDATE tbl_webhook_delivery SET `)
 	args := []any{}
 	argNum := 1
 
@@ -1554,24 +1673,34 @@ func (db *Database) UpdateWebhookEventByID(ctx context.Context, id uuid.UUID, pa
 		args = append(args, params.Status.Data)
 		argNum++
 	}
-	if params.Attempts.Some {
-		query.WriteString(fmt.Sprintf("attempts = $%d, ", argNum))
-		args = append(args, params.Attempts.Data)
+
+	if params.RetryCount.Some {
+		query.WriteString(fmt.Sprintf("retry_count = $%d, ", argNum))
+		args = append(args, params.RetryCount.Data)
 		argNum++
 	}
+
 	if params.LastAttemptAt.Some {
 		query.WriteString(fmt.Sprintf("last_attempt_at = $%d, ", argNum))
 		args = append(args, params.LastAttemptAt.Data)
 		argNum++
 	}
-	if params.ResponseCode.Some {
-		query.WriteString(fmt.Sprintf("response_code = $%d, ", argNum))
-		args = append(args, params.ResponseCode.Data)
+
+	if params.NextAttemptAt.Some {
+		query.WriteString(fmt.Sprintf("next_attempt_at = $%d, ", argNum))
+		args = append(args, params.NextAttemptAt.Data)
 		argNum++
 	}
-	if params.ResponseBody.Some {
-		query.WriteString(fmt.Sprintf("response_body = $%d, ", argNum))
-		args = append(args, params.ResponseBody.Data)
+
+	if params.LastResponseCode.Some {
+		query.WriteString(fmt.Sprintf("last_response_code = $%d, ", argNum))
+		args = append(args, params.LastResponseCode.Data)
+		argNum++
+	}
+
+	if params.LastResponseBody.Some {
+		query.WriteString(fmt.Sprintf("last_response_body = $%d, ", argNum))
+		args = append(args, params.LastResponseBody.Data)
 		argNum++
 	}
 
@@ -1579,8 +1708,17 @@ func (db *Database) UpdateWebhookEventByID(ctx context.Context, id uuid.UUID, pa
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateWebhookEvent: failed to update webhook event (id=%s): %w", id, err)
-		db.logger.Error("UpdateWebhookEvent error", "error", err)
+		err = fmt.Errorf("UpdateWebhookDelivery: failed to update webhook delivery (id=%s): %w", id, err)
+		db.logger.Error("UpdateWebhookDelivery error", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (db *Database) DeleteWebhookDeliveryByID(ctx context.Context, id uuid.UUID) error {
+	if _, err := db.Exec(ctx, `DELETE FROM tbl_webhook_delivery WHERE id = $1`, id); err != nil {
+		err = fmt.Errorf("DeleteWebhookDelivery: failed to delete webhook delivery (id=%s): %w", id, err)
+		db.logger.Error("DeleteWebhookDelivery error", "error", err)
 		return err
 	}
 	return nil

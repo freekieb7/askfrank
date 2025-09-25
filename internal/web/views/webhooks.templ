@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type Webhook struct {
+type WebhookSubscription struct {
 	ID           string
 	Name         string
 	Description  string
@@ -21,7 +21,8 @@ type Webhook struct {
 
 type WebhooksPageProps struct {
 	component.AppLayoutProps
-	Webhooks []Webhook
+	Subscriptions []WebhookSubscription
+	EventTypes    []string
 }
 
 templ WebhooksPage(props WebhooksPageProps) {
@@ -47,10 +48,10 @@ templ WebhooksPage(props WebhooksPageProps) {
 						<h2 class="card-title mb-0">Your Webhooks</h2>
 						<p class="card-subtitle">Applications that can receive webhook events</p>
 					</div>
-					if len(props.Webhooks) == 0 {
+					if len(props.Subscriptions) == 0 {
 						<div class="empty-state">
-							<p class="text-muted">You haven't created any webhooks yet.</p>
-							<p class="text-sm mt-2 text-muted">Create a webhook to integrate with AskFrank's API</p>
+							<p class="text-muted">You haven't created any subscriptions yet.</p>
+							<p class="text-sm mt-2 text-muted">Create a subscription to integrate with AskFrank's API</p>
 						</div>
 					} else {
 						<div class="table-container">
@@ -66,37 +67,48 @@ templ WebhooksPage(props WebhooksPageProps) {
 									</tr>
 								</thead>
 								<tbody>
-									for _, webhook := range props.Webhooks {
+									for _, subscription := range props.Subscriptions {
 										<tr>
 											<td>
-												<div class="text-sm font-medium">{ webhook.Name }</div>
-												<div class="text-xs text-muted">{ webhook.URL }</div>
+												<div class="text-sm font-medium">{ subscription.Name }</div>
+												<div class="text-xs text-muted">{ subscription.URL }</div>
 											</td>
 											<td>
-												<div class="text-sm text-muted">{ webhook.Description }</div>
+												<div class="text-sm text-muted">{ subscription.Description }</div>
 											</td>
 											<td>
 												<div class="text-sm text-muted">
-													{ len(webhook.EventTypes) } events
-													<span class="tooltip">{ strings.Join(webhook.EventTypes, ", ") }</span>
+													{ len(subscription.EventTypes) } events
+													<span class="tooltip">{ strings.Join(subscription.EventTypes, ", ") }</span>
 												</div>
 											</td>
 											<td class="text-sm text-muted">
-												if webhook.Activity.IsZero() {
+												if subscription.Activity.IsZero() {
 													Never
 												} else {
-													{ webhook.Activity.Format("Jan 2, 2006 15:04") }
+													{ subscription.Activity.Format("Jan 2, 2006 15:04") }
 												}
 											</td>
 											<td class="text-sm text-muted">
-												if webhook.ResponseTime.IsZero() {
+												if subscription.ResponseTime.IsZero() {
 													Never
 												} else {
-													{ webhook.ResponseTime.Format("Jan 2, 2006 15:04") }
+													{ subscription.ResponseTime.Format("Jan 2, 2006 15:04") }
 												}
 											</td>
 											<td class="text-sm text-muted">
-												<div>{{ fmt.Sprintf("%.2f%%", webhook.ErrorRate) }}</div>
+												<div>{ fmt.Sprintf("%.2f%%", subscription.ErrorRate) }</div>
+											</td>
+											<td class="text-right">
+												<div class="flex items-center justify-end space-x-2">
+													<button
+														type="button"
+														onclick={ templ.JSFuncCall("confirmDeleteWebhook", subscription.ID, subscription.Name) }
+														class="btn-danger btn-sm"
+													>
+														<i class="fas fa-trash"></i>
+													</button>
+												</div>
 											</td>
 										</tr>
 									}
@@ -107,104 +119,112 @@ templ WebhooksPage(props WebhooksPageProps) {
 				</div>
 				<!-- Create Webhook Modal -->
 				<div id="createWebhookModal" class="modal-overlay hidden">
-					<div class="modal-content">
-						<div class="modal-header">
-							<h3 class="modal-title">Create New Webhook</h3>
-							<button type="button" class="modal-close" onclick="document.getElementById('createWebhookModal').classList.add('hidden')">
-								<i class="fas fa-times"></i>
-							</button>
-						</div>
-						<form id="createWebhookForm" class="p-4" onsubmit="event.preventDefault(); createWebhook();">
-							<div class="mb-4">
-								<label for="webhookName" class="form-label">Client Name</label>
-								<input
-									type="text"
-									id="webhookName"
-									name="name"
-									required
-									class="form-input"
-									placeholder="My Application"
-								/>
+					<div class="modal-container">
+						<div class="modal-content">
+							<div class="modal-header">
+								<h3 class="modal-title">Create New Webhook</h3>
+								<button type="button" class="modal-close" onclick="document.getElementById('createWebhookModal').classList.add('hidden')">
+									<i class="fas fa-times"></i>
+								</button>
 							</div>
-							<div class="mb-4">
-								<label for="webhookDescription" class="form-label">Description (optional)</label>
-								<input
-									type="text"
-									id="webhookDescription"
-									name="description"
-									class="form-input"
-									placeholder="A brief description of your application"
-								/>
-							</div>
-							<div class="mb-4">
-								<label for="webhookURL" class="form-label">Webhook URL</label>
-								<input
-									type="text"
-									id="webhookURL"
-									name="url"
-									class="form-input"
-									placeholder="https://example.com/webhook"
-								/>
-							</div>
-							<div class="mb-4">
-								<label class="form-label">Allowed Scopes</label>
-								<div class="space-y-2">
-									<div class="flex items-center">
-										<input type="checkbox" id="scope_read" name="scopes" value="read" class="form-checkbox" checked/>
-										<label for="scope_read" class="ml-2 block text-sm">Read</label>
-									</div>
-									<div class="flex items-center">
-										<input type="checkbox" id="scope_write" name="scopes" value="write" class="form-checkbox"/>
-										<label for="scope_write" class="ml-2 block text-sm">Write</label>
+							<form id="createWebhookForm" class="p-4" onsubmit="event.preventDefault(); createWebhook();">
+								<div class="mb-4">
+									<label for="webhookName" class="form-label">Name</label>
+									<input
+										type="text"
+										id="webhookName"
+										name="name"
+										required
+										class="form-input"
+										placeholder="My Application"
+									/>
+								</div>
+								<div class="mb-4">
+									<label for="webhookDescription" class="form-label">Description (optional)</label>
+									<input
+										type="text"
+										id="webhookDescription"
+										name="description"
+										class="form-input"
+										placeholder="A brief description of your application"
+									/>
+								</div>
+								<div class="mb-4">
+									<label for="webhookURL" class="form-label">Webhook URL</label>
+									<input
+										type="text"
+										id="webhookURL"
+										name="url"
+										class="form-input"
+										placeholder="https://example.com/webhook"
+									/>
+								</div>
+								<div class="mb-4">
+									<label class="form-label">Event Types</label>
+									<div class="space-y-2">
+										for i, eventType := range props.EventTypes {
+											<div class="flex items-center">
+												<input
+													type="checkbox"
+													id={ fmt.Sprintf("event_type_%d", i) }
+													name="eventTypes"
+													value={ eventType }
+													class="form-checkbox"
+												/>
+												<label for={ fmt.Sprintf("event_type_%d", i) } class="ml-2 block text-sm">{ eventType }</label>
+											</div>
+										}
 									</div>
 								</div>
-							</div>
-							<div class="modal-footer">
-								<button
-									type="button"
-									class="btn-secondary"
-									onclick="document.getElementById('createWebhookModal').classList.add('hidden')"
-								>
-									Cancel
-								</button>
-								<button
-									type="button"
-									id="createWebhookButton"
-									class="btn-primary"
-									onclick="createWebhook()"
-								>
-									Create Webhook
-								</button>
-							</div>
-						</form>
+								<div class="modal-footer">
+									<button
+										type="button"
+										class="btn-secondary"
+										onclick="document.getElementById('createWebhookModal').classList.add('hidden')"
+									>
+										Cancel
+									</button>
+									<button
+										type="button"
+										id="createWebhookButton"
+										class="btn-primary"
+										onclick="createWebhook()"
+									>
+										Create Webhook
+									</button>
+								</div>
+							</form>
+						</div>
 					</div>
 				</div>
 				<!-- Delete Confirmation Modal -->
 				<div id="deleteWebhookModal" class="modal-overlay hidden">
-					<div class="modal-content max-w-md">
-						<div class="p-4">
-							<div class="flex items-center justify-center text-red-500 mb-4">
-								<i class="fas fa-exclamation-triangle text-4xl"></i>
+					<div class="modal-container">
+						<div class="modal-content max-w-md">
+							<div class="p-4">
+								<div class="flex items-center justify-center text-red-500 mb-4">
+									<i class="fas fa-exclamation-triangle text-4xl"></i>
+								</div>
+								<h3 class="modal-title text-center mb-2">Delete Webhook</h3>
+								<p class="text-sm text-center text-muted mb-4">Are you sure you want to delete <span id="deleteWebhookName" class="font-medium"></span>? This action cannot be undone.</p>
+								<form id="deleteWebhookForm" class="flex justify-center space-x-4" onsubmit="event.preventDefault();">
+									<input type="hidden" id="deleteWebhookId" name="webhookId"/>
+									<button
+										type="button"
+										class="btn-secondary"
+										onclick="document.getElementById('deleteWebhookModal').classList.add('hidden')"
+									>
+										Cancel
+									</button>
+									<button
+										type="button"
+										onclick="deleteWebhook(document.getElementById('deleteWebhookId').value)"
+										class="btn-danger"
+									>
+										Delete
+									</button>
+								</form>
 							</div>
-							<h3 class="modal-title text-center mb-2">Delete Webhook</h3>
-							<p class="text-sm text-center text-muted mb-4">Are you sure you want to delete <span id="deleteWebhookName" class="font-medium"></span>? This action cannot be undone.</p>
-							<form id="deleteWebhookForm" class="flex justify-center space-x-4" onsubmit="event.preventDefault();">
-								<input type="hidden" id="deleteWebhookId" name="webhookId"/>
-								<button
-									type="button"
-									class="btn-secondary"
-									onclick="document.getElementById('deleteWebhookModal').classList.add('hidden')"
-								>
-									Cancel
-								</button>
-								<button
-									type="button"
-									onclick="deleteWebhook(document.getElementById('deleteWebhookId').value)"
-									class="btn-danger"
-								>
-									Delete
-								</button>
-							</form>
 						</div>
 					</div>
 				</div>
@@ -220,19 +240,22 @@ templ WebhooksPage(props WebhooksPageProps) {
 						// Get form values
 						const name = document.getElementById('webhookName').value;
 						const description = document.getElementById('webhookDescription').value;
+						const url = document.getElementById('webhookURL').value;
 
 						// Get selected event types
 						const selectedEventTypes = [];
-						if (document.getElementById('event_type_1').checked) {
-							selectedEventTypes.push('event_type_1');
-						}
-						if (document.getElementById('event_type_2').checked) {
-							selectedEventTypes.push('event_type_2');
-						}
+						const checkboxes = document.querySelectorAll('input[name="eventTypes"]:checked');
+						checkboxes.forEach(checkbox => {
+							selectedEventTypes.push(checkbox.value);
+						});
 						
 						// Validate form
 						if (!name) {
 							alert('Webhook name is required');
+							return;
+						}
+						if (!url) {
+							alert('Webhook URL is required');
 							return;
 						}
 						if (selectedEventTypes.length === 0) {
@@ -245,146 +268,55 @@ templ WebhooksPage(props WebhooksPageProps) {
 						button.disabled = true;
 						button.textContent = 'Creating...';
 						
-                        // todo from here do more
 						try {
 							// Send request to create webhook
-							const response = await fetch('/developer/webhooks/create-webhook', {
+							const response = await fetch('/developers/webhooks', {
 								method: 'POST',
 								headers: {
 									'X-CSRF-Token': csrfToken,
-									'Content-Type': 'application/x-www-form-urlencoded',
+									'Content-Type': 'application/json',
 								},
-								body: new URLSearchParams({
-									'name': name,
-									'description': description,
-									'redirectURIs': redirectURIs,
-									'isPublic': isPublic,
-									'scopes': selectedScopes.join(',')
+								body: JSON.stringify({
+									name: name,
+									description: description,
+									url: url,
+									event_types: selectedEventTypes
 								})
 							});
 							
 							if (!response.ok) {
-								throw new Error(`HTTP error! status: ${response.status}`);
+								const errorData = await response.json().catch(() => null);
+								throw new Error(errorData?.message || `HTTP error! status: ${response.status}`);
 							}
 							
 							const data = await response.json();
 							
 							// Hide the modal
-							document.getElementById('createClientModal').classList.add('hidden');
+							document.getElementById('createWebhookModal').classList.add('hidden');
 							
-							// Show success and client details if available
-							if (data.id) {
-								// Show the client details in the details modal
-								document.getElementById('detailsClientName').textContent = data.name;
-								document.getElementById('detailsClientId').textContent = data.id;
-								
-								// Show or hide secret based on client type
-								const secretContainer = document.getElementById('secretContainer');
-								if (data.isPublic) {
-									secretContainer.classList.add('hidden');
-								} else {
-									secretContainer.classList.remove('hidden');
-									document.getElementById('detailsClientSecret').textContent = data.secret || 'N/A';
-								}
-								
-								// Show redirect URIs
-								const uriList = document.getElementById('detailsRedirectUris');
-								uriList.innerHTML = '';
-								data.redirectURIs.forEach(uri => {
-									const li = document.createElement('li');
-									li.textContent = uri;
-									uriList.appendChild(li);
-								});
-								
-								// Show scopes
-								const scopesEl = document.getElementById('detailsScopes');
-								scopesEl.innerHTML = '';
-								if (data.allowedScopes && data.allowedScopes.length > 0) {
-									scopesEl.textContent = data.allowedScopes.join(', ');
-								} else {
-									scopesEl.textContent = 'No scopes defined';
-								}
-								
-								// Show the details modal
-								document.getElementById('clientDetailsModal').classList.remove('hidden');
-							} else {
-								// If we don't have details, just reload the page
-								window.location.reload();
-							}
+							// Show success and reload the page
+							alert('Webhook created successfully!');
+							window.location.reload();
 						} catch (error) {
-							console.error('Error creating OAuth client:', error);
-							alert('Failed to create OAuth client. Please try again.');
+							console.error('Error creating webhook:', error);
+							alert('Failed to create webhook: ' + error.message);
 						} finally {
 							// Reset button state
 							button.disabled = false;
-							button.textContent = 'Create Client';
+							button.textContent = 'Create Webhook';
 							
 							// Reset form
-							document.getElementById('createClientForm').reset();
+							document.getElementById('createWebhookForm').reset();
 						}
 					}
 					
-					function showClientDetails(clientId) {
-						// Get CSRF token
-						const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-						if (!csrfToken) {
-							alert('CSRF token not found');
-							return;
-						}
-						
-						// Fetch client details from the server
-						fetch(`/api/developer/clients/${clientId}`, {
-							headers: {
-								'X-CSRF-Token': csrfToken
-							}
-						})
-							.then(response => response.json())
-							.then(client => {
-								document.getElementById('detailsClientName').textContent = client.name;
-								document.getElementById('detailsClientId').textContent = client.id;
-								
-								// Show or hide secret based on client type
-								const secretContainer = document.getElementById('secretContainer');
-								if (client.isPublic) {
-									secretContainer.classList.add('hidden');
-								} else {
-									secretContainer.classList.remove('hidden');
-									document.getElementById('detailsClientSecret').textContent = client.secret || 'N/A';
-								}
-								
-								// Show redirect URIs
-								const uriList = document.getElementById('detailsRedirectUris');
-								uriList.innerHTML = '';
-								client.redirectURIs.forEach(uri => {
-									const li = document.createElement('li');
-									li.textContent = uri;
-									uriList.appendChild(li);
-								});
-								
-								// Show scopes
-								const scopesEl = document.getElementById('detailsScopes');
-								scopesEl.innerHTML = '';
-								if (client.allowedScopes && client.allowedScopes.length > 0) {
-									scopesEl.textContent = client.allowedScopes.join(', ');
-								} else {
-									scopesEl.textContent = 'No scopes defined';
-								}
-								
-								document.getElementById('clientDetailsModal').classList.remove('hidden');
-							})
-							.catch(error => {
-								console.error('Error fetching client details:', error);
-								alert('Failed to load client details');
-							});
+					function confirmDeleteWebhook(webhookId, webhookName) {
+						document.getElementById('deleteWebhookName').textContent = webhookName;
+						document.getElementById('deleteWebhookId').value = webhookId;
+						document.getElementById('deleteWebhookModal').classList.remove('hidden');
 					}
 					
-					function confirmDeleteClient(clientId, clientName) {
-						document.getElementById('deleteClientName').textContent = clientName;
-						document.getElementById('deleteClientId').value = clientId;
-						document.getElementById('deleteClientModal').classList.remove('hidden');
-					}
-					
-					async function deleteOAuthClient(clientId) {
+					async function deleteWebhook(webhookId) {
 						// Get CSRF token
 						const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 						if (!csrfToken) {
@@ -394,7 +326,7 @@ templ WebhooksPage(props WebhooksPageProps) {
 						
 						try {
 							// Send delete request
-							const response = await fetch(`/developer/clients/${clientId}/delete`, {
+							const response = await fetch(`/developers/webhooks/${webhookId}/delete`, {
 								method: 'POST',
 								headers: {
 									'X-CSRF-Token': csrfToken
@@ -402,24 +334,18 @@ templ WebhooksPage(props WebhooksPageProps) {
 							});
 							
 							if (!response.ok) {
-								throw new Error(`HTTP error! status: ${response.status}`);
+								const errorData = await response.json().catch(() => null);
+								throw new Error(errorData?.message || `HTTP error! status: ${response.status}`);
 							}
 							
 							// Hide the modal and refresh the page
-							document.getElementById('deleteClientModal').classList.add('hidden');
+							document.getElementById('deleteWebhookModal').classList.add('hidden');
+							alert('Webhook deleted successfully!');
 							window.location.reload();
 						} catch (error) {
-							console.error('Error deleting OAuth client:', error);
-							alert('Failed to delete OAuth client. Please try again.');
+							console.error('Error deleting webhook:', error);
+							alert('Failed to delete webhook: ' + error.message);
 						}
-					}
-					
-					function copyToClipboard(elementId) {
-						const text = document.getElementById(elementId).textContent;
-						navigator.clipboard.writeText(text).then(() => {
-							// Show a temporary tooltip or notification
-							alert('Copied to clipboard!');
-						});
 					}
 				</script>
 			</div>

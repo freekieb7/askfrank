@@ -1207,6 +1207,88 @@ type ApiResponse struct {
 	Data    any               `json:"data,omitempty"`
 }
 
+// TriggerTestWebhookEvent creates a test webhook event for testing webhook delivery
+func (h *ApiHandler) TriggerTestWebhookEvent(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Parse request body
+	var req struct {
+		EventType string `json:"event_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validate event type
+	var eventType database.WebhookEventType
+	switch req.EventType {
+	case string(database.WebhookEventTypeFileCreated):
+		eventType = database.WebhookEventTypeFileCreated
+	case string(database.WebhookEventTypeFileDeleted):
+		eventType = database.WebhookEventTypeFileDeleted
+	case string(database.WebhookEventTypeUserLogin):
+		eventType = database.WebhookEventTypeUserLogin
+	case string(database.WebhookEventTypeUserLogout):
+		eventType = database.WebhookEventTypeUserLogout
+	default:
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid event type. Must be one of: file.created, file.deleted, user.login, user.logout",
+		})
+	}
+
+	// Import the daemon package for test helper
+	// Note: In production, you might want to move this logic to a service layer
+	testPayload := map[string]interface{}{
+		"event_type": string(eventType),
+		"timestamp":  time.Now().Format(time.RFC3339),
+		"test":       true,
+		"data": map[string]interface{}{
+			"message": "This is a test webhook event triggered via API",
+			"id":      "test-api-" + time.Now().Format("20060102-150405"),
+		},
+	}
+
+	payloadBytes, err := json.Marshal(testPayload)
+	if err != nil {
+		h.logger.Error("Failed to marshal test payload", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create test payload",
+		})
+	}
+
+	// Create the webhook event
+	event, err := h.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
+		EventType: eventType,
+		Payload:   payloadBytes,
+	})
+	if err != nil {
+		h.logger.Error("Failed to create test webhook event", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create webhook event",
+		})
+	}
+
+	h.logger.Info("Test webhook event created via API",
+		"event_id", event.ID,
+		"event_type", eventType)
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Test webhook event created successfully",
+		Data: map[string]interface{}{
+			"event_id":   event.ID.String(),
+			"event_type": string(eventType),
+			"created_at": event.CreatedAt,
+		},
+	})
+}
+
 // JSONResponse writes a JSON response with the given status code and body.
 func JSONResponse(w http.ResponseWriter, status int, body ApiResponse) error {
 	w.WriteHeader(status)

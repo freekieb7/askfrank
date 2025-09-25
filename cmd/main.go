@@ -97,7 +97,7 @@ func run(ctx context.Context) error {
 	// })
 
 	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &db, &stripeClient)
-	// apiHandler := api.NewApiHandler(logger, &db, &sessionStore)
+	apiHandler := web.NewApiHandler(logger, &db, &sessionStore)
 
 	// Middleware
 	// Enable gzip compression
@@ -168,15 +168,22 @@ func run(ctx context.Context) error {
 
 			// Developer routes
 			group.Group("/developers", func(devGroup *web.Router) {
-				devGroup.GET("/clients", pageHandler.ShowOAuthClientsPage)
-				devGroup.POST("/clients", pageHandler.CreateOAuthClient)
-				devGroup.GET("/clients/:id", pageHandler.GetOAuthClient)
-				devGroup.POST("/clients/:id/delete", pageHandler.DeleteOAuthClient)
-				devGroup.GET("/webhooks", pageHandler.ShowWebhooksPage)
-				// devGroup.POST("/webhooks", pageHandler.CreateWebhook)
-				// devGroup.GET("/webhooks/:id", pageHandler.GetWebhook)
-				// devGroup.POST("/webhooks/:id/delete", pageHandler.DeleteWebhook)
+				devGroup.Group("/clients", func(clientGroup *web.Router) {
+					clientGroup.GET("", pageHandler.ShowOAuthClientsPage)
+					clientGroup.POST("", pageHandler.CreateOAuthClient)
+					clientGroup.GET("/:id", pageHandler.GetOAuthClient)
+					clientGroup.POST("/:id/delete", pageHandler.DeleteOAuthClient)
+				})
+
+				devGroup.Group("/webhooks", func(webhookGroup *web.Router) {
+					webhookGroup.GET("", pageHandler.ShowWebhooksPage)
+					webhookGroup.POST("", pageHandler.CreateWebhookSubscription)
+					// webhookGroup.GET("/:id", pageHandler.GetWebhook)
+					webhookGroup.POST("/:id/delete", pageHandler.DeleteWebhook)
+				})
+
 				devGroup.GET("/logs", pageHandler.ShowAuditLogsPage)
+
 			})
 
 			// Add UI routes for video chat
@@ -185,6 +192,18 @@ func run(ctx context.Context) error {
 		}, web.AuthenticatedSessionMiddleware(&sessionStore))
 
 	}, web.SessionMiddleware(&sessionStore), web.LocalizationMiddleware(), web.CSRFMiddleware(logger, &sessionStore))
+
+	// API routes (for testing and integration)
+	router.Group("/api", func(apiGroup *web.Router) {
+		// Public API routes
+		apiGroup.GET("/health", apiHandler.Healthy)
+
+		// Protected API routes (require session authentication)
+		apiGroup.Group("", func(protectedApiGroup *web.Router) {
+			// Webhook testing endpoint
+			protectedApiGroup.POST("/webhook/test", apiHandler.TriggerTestWebhookEvent)
+		}, web.AuthenticatedSessionMiddleware(&sessionStore))
+	})
 
 	// // WebRTC signaling
 	// app.Use("/ws/rtc", func(c *fiber.Ctx) error {
@@ -278,6 +297,7 @@ func run(ctx context.Context) error {
 
 	manager := daemon.NewDaemonManager()
 	manager.Add("cleanup", daemon.CleanupTask(&db, logger))
+	manager.Add("webhooks", daemon.SendWebhookDeliveriesTask(&db, logger))
 
 	logger.Info("Starting supervised daemons...")
 	manager.Start(ctx)
