@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1285,6 +1286,233 @@ func (h *ApiHandler) TriggerTestWebhookEvent(w http.ResponseWriter, r *http.Requ
 			"event_id":   event.ID.String(),
 			"event_type": string(eventType),
 			"created_at": event.CreatedAt,
+		},
+	})
+}
+
+// MarkNotificationAsRead marks a specific notification as read
+func (h *ApiHandler) MarkNotificationAsRead(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get user session
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		h.logger.Error("Failed to get session", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	if !sess.UserID.Some {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
+	if err != nil {
+		h.logger.Error("Failed to get user from database", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	// Get notification ID from URL path
+	notificationID := r.URL.Path[len("/api/notifications/"):]
+	notificationID = strings.TrimSuffix(notificationID, "/read")
+
+	// Parse UUID
+	uuid, err := uuid.Parse(notificationID)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid notification ID",
+		})
+	}
+
+	// Mark notification as read in database
+	err = h.db.MarkNotificationAsRead(r.Context(), database.MarkNotificationAsReadParams{
+		ID:     uuid,
+		UserID: user.ID,
+	})
+
+	if err != nil {
+		h.logger.Error("Failed to mark notification as read", "error", err, "notification_id", notificationID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to mark notification as read",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Notification marked as read",
+	})
+}
+
+// MarkAllNotificationsAsRead marks all notifications for the current user as read
+func (h *ApiHandler) MarkAllNotificationsAsRead(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get user session
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		h.logger.Error("Failed to get session", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	if !sess.UserID.Some {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
+	if err != nil {
+		h.logger.Error("Failed to get user from database", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	// Mark all notifications as read in database
+	err = h.db.MarkAllNotificationsAsRead(r.Context(), user.ID)
+	if err != nil {
+		h.logger.Error("Failed to mark all notifications as read", "error", err, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to mark notifications as read",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "All notifications marked as read",
+	})
+}
+
+// GetNotifications returns recent notifications for the current user
+func (h *ApiHandler) GetNotifications(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get user session
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		h.logger.Error("Failed to get session", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	if !sess.UserID.Some {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
+	if err != nil {
+		h.logger.Error("Failed to get user from database", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	// Get limit from query parameter (default 20)
+	limit := int32(20)
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.ParseInt(limitStr, 10, 32); err == nil && parsedLimit > 0 {
+			limit = int32(parsedLimit)
+		}
+	}
+
+	// Get notifications from database
+	notifications, err := h.db.GetUserNotifications(r.Context(), database.GetUserNotificationsParams{
+		UserID: user.ID,
+		Limit:  limit,
+	})
+
+	if err != nil {
+		h.logger.Error("Failed to get notifications", "error", err, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to retrieve notifications",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Notifications retrieved successfully",
+		Data:    notifications,
+	})
+}
+
+// CreateTestNotification creates a test notification for the current user
+func (h *ApiHandler) CreateTestNotification(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get user session
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		h.logger.Error("Failed to get session", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	if !sess.UserID.Some {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
+	if err != nil {
+		h.logger.Error("Failed to get user from database", "error", err)
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	// Create a test notification
+	notification, err := h.db.CreateNotification(ctx, database.CreateNotificationParams{
+		OwnerID:   user.ID,
+		Type:      database.NotificationTypeInfo,
+		Title:     "Test Notification",
+		Message:   "This is a test notification to demonstrate the notification system.",
+		ActionURL: util.Some("/dashboard"),
+		Read:      false,
+	})
+
+	if err != nil {
+		h.logger.Error("Failed to create test notification", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create notification",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Test notification created successfully",
+		Data: map[string]interface{}{
+			"notification_id": notification.ID.String(),
+			"title":           notification.Title,
+			"message":         notification.Message,
 		},
 	})
 }

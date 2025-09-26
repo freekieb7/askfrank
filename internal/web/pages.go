@@ -62,8 +62,47 @@ func (h *PageHandler) layoutProps(ctx context.Context, title string) component.L
 	}
 }
 
-func (h *PageHandler) appLayoutProps(layoutProps component.LayoutProps, r *http.Request) component.AppLayoutProps {
-	// userID := c.Locals("user_id").(uuid.UUID)
+func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.LayoutProps, r *http.Request) component.AppLayoutProps {
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	// Get recent notifications for the dropdown (limit to 10)
+	recentNotifications, err := h.db.GetUserNotifications(ctx, database.GetUserNotificationsParams{
+		UserID: userID,
+		Limit:  10,
+	})
+	if err != nil {
+		h.logger.Error("Failed to get recent notifications", "error", err)
+		recentNotifications = []database.Notification{}
+	}
+
+	// Count unread notifications
+	unreadNotifications, err := h.db.ListNotifications(ctx, database.ListNotificationsParams{
+		OwnerID: util.Some(userID),
+		Read:    util.Some(false),
+	})
+	if err != nil {
+		h.logger.Error("Failed to get unread notifications count", "error", err)
+		unreadNotifications = []database.Notification{}
+	}
+
+	// Convert notifications to component format
+	componentNotifications := make([]component.Notification, len(recentNotifications))
+	for i, dbNotification := range recentNotifications {
+		componentNotifications[i] = component.Notification{
+			ID:        dbNotification.ID.String(),
+			Title:     dbNotification.Title,
+			Message:   dbNotification.Message,
+			Type:      string(dbNotification.Type),
+			IsRead:    dbNotification.Read,
+			CreatedAt: dbNotification.CreatedAt.Format("2 Jan 2006 15:04"),
+			ActionURL: "",
+		}
+
+		if dbNotification.ActionURL.Some {
+			componentNotifications[i].ActionURL = dbNotification.ActionURL.Data
+		}
+	}
+
 	return component.AppLayoutProps{
 		LayoutProps: layoutProps,
 		MenuItems: []component.MenuItem{
@@ -82,6 +121,9 @@ func (h *PageHandler) appLayoutProps(layoutProps component.LayoutProps, r *http.
 				{Name: "Logs", URL: "/developers/logs", Icon: "fas fa-file-alt", Active: strings.HasPrefix(r.URL.Path, "/developers/logs")},
 			}},
 		},
+		HasUnreadNotification: len(unreadNotifications) > 0,
+		UnreadCount:           len(unreadNotifications),
+		RecentNotifications:   componentNotifications,
 	}
 }
 
@@ -104,7 +146,7 @@ func (h *PageHandler) ShowHomePage(w http.ResponseWriter, r *http.Request) error
 
 	ctx := r.Context()
 	return render(ctx, w, views.HomePage(views.HomePageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Home"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Home"), r),
 	}))
 }
 
@@ -271,6 +313,16 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 		Payload:   json.RawMessage(payload),
 	}); err != nil {
 		h.logger.Error("Failed to create webhook event for user login", "error", err)
+		// Continue, but log
+	}
+
+	if _, err := h.db.CreateNotification(ctx, database.CreateNotificationParams{
+		OwnerID: user.ID,
+		Type:    database.NotificationTypeInfo,
+		Message: "You have successfully logged in.",
+		Read:    false,
+	}); err != nil {
+		h.logger.Error("Failed to create notification for user login", "error", err)
 		// Continue, but log
 	}
 
@@ -471,6 +523,19 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
+	if _, err := h.db.CreateNotification(ctx, database.CreateNotificationParams{
+		OwnerID: user.ID,
+		Type:    database.NotificationTypeInfo,
+		Message: "Welcome to AskFrank! Your account has been created successfully.",
+		Read:    false,
+	}); err != nil {
+		h.logger.Error("Failed to create notification", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create notification, please try again later",
+		})
+	}
+
 	// Set user ID in session
 	sess.UserID = util.Some(user.ID)
 
@@ -486,7 +551,7 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 func (h *PageHandler) ShowBillingPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	return render(ctx, w, views.BillingPage(views.BillingPageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Billing"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Billing"), r),
 	}))
 }
 
@@ -609,7 +674,7 @@ func (h *PageHandler) ShowMyDrivePage(w http.ResponseWriter, r *http.Request) er
 
 	currentFolderID := ""
 	return render(ctx, w, views.DrivePage(views.DrivePageProps{
-		AppLayoutProps:  h.appLayoutProps(h.layoutProps(ctx, "My Drive"), r),
+		AppLayoutProps:  h.appLayoutProps(ctx, h.layoutProps(ctx, "My Drive"), r),
 		Files:           viewFiles,
 		Breadcrumbs:     breadcrumbs,
 		CurrentFolderID: currentFolderID,
@@ -1058,7 +1123,7 @@ func (h *PageHandler) ShowSharedFilePage(w http.ResponseWriter, r *http.Request)
 
 	currentFolderID := ""
 	return render(ctx, w, views.DrivePage(views.DrivePageProps{
-		AppLayoutProps:  h.appLayoutProps(h.layoutProps(ctx, "Shared with me"), r),
+		AppLayoutProps:  h.appLayoutProps(ctx, h.layoutProps(ctx, "Shared with me"), r),
 		Files:           viewFiles,
 		Breadcrumbs:     breadcrumbs,
 		CurrentFolderID: currentFolderID,
@@ -1094,7 +1159,7 @@ func (h *PageHandler) ShowOAuthClientsPage(w http.ResponseWriter, r *http.Reques
 	}
 
 	return render(ctx, w, views.OAuthClientsPage(views.OAuthClientsPageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "OAuth Clients"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "OAuth Clients"), r),
 		Clients:        viewClients,
 	}))
 }
@@ -1386,7 +1451,7 @@ func (h *PageHandler) ShowFolderPage(w http.ResponseWriter, r *http.Request) err
 
 	currentFolderID := ""
 	return render(ctx, w, views.DrivePage(views.DrivePageProps{
-		AppLayoutProps:  h.appLayoutProps(h.layoutProps(ctx, "My Drive"), r),
+		AppLayoutProps:  h.appLayoutProps(ctx, h.layoutProps(ctx, "My Drive"), r),
 		Files:           viewFiles,
 		Breadcrumbs:     breadcrumbs,
 		CurrentFolderID: currentFolderID,
@@ -1396,7 +1461,7 @@ func (h *PageHandler) ShowFolderPage(w http.ResponseWriter, r *http.Request) err
 func (h *PageHandler) ShowCreateMeetingPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	return render(ctx, w, views.CreateMeetingPage(views.CreateMeetingPageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Create Meeting"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Create Meeting"), r),
 	}))
 }
 
@@ -1409,7 +1474,7 @@ func (h *PageHandler) ShowMeetingPage(w http.ResponseWriter, r *http.Request) er
 	}
 
 	return render(ctx, w, views.MeetingPage(views.MeetingPageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Meeting"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Meeting"), r),
 		MeetingID:      meetingID,
 	}))
 }
@@ -1471,7 +1536,7 @@ func (h *PageHandler) ShowCalendarPage(w http.ResponseWriter, r *http.Request) e
 	}
 
 	return render(ctx, w, views.CalendarPage(views.CalendarPageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Calendar"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Calendar"), r),
 		Days:           viewDays,
 	}))
 }
@@ -1514,7 +1579,7 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 		})
 	}
 	return render(ctx, w, views.WebhooksPage(views.WebhooksPageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Webhooks"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Webhooks"), r),
 		Subscriptions:  viewSubscriptions,
 		EventTypes: []string{
 			string(database.WebhookEventTypeFileCreated),
@@ -1717,7 +1782,7 @@ func (h *PageHandler) ShowAuditLogsPage(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	return render(ctx, w, views.AuditLogsPage(views.AuditLogsPageProps{
-		AppLayoutProps: h.appLayoutProps(h.layoutProps(ctx, "Audit Logs"), r),
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Audit Logs"), r),
 		Events:         viewEvents,
 	}))
 }

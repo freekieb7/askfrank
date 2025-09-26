@@ -202,6 +202,12 @@ func run(ctx context.Context) error {
 		apiGroup.Group("", func(protectedApiGroup *web.Router) {
 			// Webhook testing endpoint
 			protectedApiGroup.POST("/webhook/test", apiHandler.TriggerTestWebhookEvent)
+
+			// Notification endpoints
+			protectedApiGroup.POST("/notifications/:id/read", apiHandler.MarkNotificationAsRead)
+			protectedApiGroup.POST("/notifications/mark-all-read", apiHandler.MarkAllNotificationsAsRead)
+			protectedApiGroup.GET("/notifications", apiHandler.GetNotifications)
+			protectedApiGroup.POST("/notifications/test", apiHandler.CreateTestNotification)
 		}, web.AuthenticatedSessionMiddleware(&sessionStore))
 	})
 

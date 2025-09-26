@@ -229,7 +229,9 @@ type Notification struct {
 	ID        uuid.UUID
 	OwnerID   uuid.UUID
 	Type      NotificationType
+	Title     string
 	Message   string
+	ActionURL util.Optional[string]
 	Read      bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -1931,10 +1933,12 @@ func (db *Database) DeleteCalendarEventAttendee(ctx context.Context, attendeeID 
 }
 
 type CreateNotificationParams struct {
-	OwnerID uuid.UUID
-	Type    NotificationType
-	Message string
-	Read    bool
+	OwnerID   uuid.UUID
+	Type      NotificationType
+	Title     string
+	Message   string
+	ActionURL util.Optional[string]
+	Read      bool
 }
 
 func (db *Database) CreateNotification(ctx context.Context, params CreateNotificationParams) (Notification, error) {
@@ -1942,19 +1946,179 @@ func (db *Database) CreateNotification(ctx context.Context, params CreateNotific
 		ID:        uuid.New(),
 		OwnerID:   params.OwnerID,
 		Type:      params.Type,
+		Title:     params.Title,
 		Message:   params.Message,
+		ActionURL: params.ActionURL,
 		Read:      params.Read,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_notification (id, owner_id, type, message, read, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		notification.ID, notification.OwnerID, notification.Type, notification.Message, notification.Read, notification.CreatedAt, notification.UpdatedAt); err != nil {
+	var actionURL *string
+	if params.ActionURL.Some {
+		actionURL = &params.ActionURL.Data
+	}
+
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_notification (id, owner_id, type, title, message, action_url, read, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		notification.ID, notification.OwnerID, notification.Type, notification.Title, notification.Message, actionURL, notification.Read, notification.CreatedAt, notification.UpdatedAt); err != nil {
 		err = fmt.Errorf("CreateNotification: failed to insert notification (owner_id=%s): %w", notification.OwnerID, err)
 		db.logger.Error("CreateNotification error", "error", err)
 		return notification, err
 	}
 	return notification, nil
+}
+
+type ListNotificationsParams struct {
+	OwnerID util.Optional[uuid.UUID]
+	Read    util.Optional[bool]
+}
+
+func (db *Database) ListNotifications(ctx context.Context, params ListNotificationsParams) ([]Notification, error) {
+	var notifications []Notification
+
+	var query strings.Builder
+	query.WriteString(`SELECT id, owner_id, type, title, message, action_url, read, created_at, updated_at FROM tbl_notification WHERE 1=1`)
+	var args []any
+	argNum := 1
+
+	if params.OwnerID.Some {
+		query.WriteString(fmt.Sprintf(" AND owner_id = $%d", argNum))
+		args = append(args, params.OwnerID.Data)
+		argNum++
+	}
+
+	if params.Read.Some {
+		query.WriteString(fmt.Sprintf(" AND read = $%d", argNum))
+		args = append(args, params.Read.Data)
+		argNum++
+	}
+
+	query.WriteString(" ORDER BY created_at DESC")
+
+	rows, err := db.Query(ctx, query.String(), args...)
+	if err != nil {
+		db.logger.Error("ListNotifications error", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var notification Notification
+		var actionURL *string
+		if err := rows.Scan(&notification.ID, &notification.OwnerID, &notification.Type, &notification.Title, &notification.Message, &actionURL, &notification.Read, &notification.CreatedAt, &notification.UpdatedAt); err != nil {
+			return nil, err
+		}
+
+		if actionURL != nil {
+			notification.ActionURL = util.Some(*actionURL)
+		} else {
+			notification.ActionURL = util.None[string]()
+		}
+
+		notifications = append(notifications, notification)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return notifications, nil
+}
+
+type UpdateNotificationParams struct {
+	ID      uuid.UUID
+	OwnerID uuid.UUID
+	Type    NotificationType
+	Message string
+	Read    bool
+}
+
+func (db *Database) UpdateNotificationByID(ctx context.Context, id uuid.UUID, params UpdateNotificationParams) error {
+	if _, err := db.Exec(ctx, `UPDATE tbl_notification SET owner_id = $1, type = $2, message = $3, read = $4, updated_at = $5 WHERE id = $6`,
+		params.OwnerID, params.Type, params.Message, params.Read, time.Now(), id); err != nil {
+		err = fmt.Errorf("UpdateNotification: failed to update notification (id=%s): %w", id, err)
+		db.logger.Error("UpdateNotification error", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (db *Database) DeleteNotificationByID(ctx context.Context, id uuid.UUID) error {
+	if _, err := db.Exec(ctx, `DELETE FROM tbl_notification WHERE id = $1`, id); err != nil {
+		err = fmt.Errorf("DeleteNotification: failed to delete notification (id=%s): %w", id, err)
+		db.logger.Error("DeleteNotification error", "error", err)
+		return err
+	}
+	return nil
+}
+
+type MarkNotificationAsReadParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (db *Database) MarkNotificationAsRead(ctx context.Context, params MarkNotificationAsReadParams) error {
+	if _, err := db.Exec(ctx, `UPDATE tbl_notification SET read = true, updated_at = $1 WHERE id = $2 AND owner_id = $3`,
+		time.Now(), params.ID, params.UserID); err != nil {
+		err = fmt.Errorf("MarkNotificationAsRead: failed to mark notification as read (id=%s, user_id=%s): %w", params.ID, params.UserID, err)
+		db.logger.Error("MarkNotificationAsRead error", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (db *Database) MarkAllNotificationsAsRead(ctx context.Context, userID uuid.UUID) error {
+	if _, err := db.Exec(ctx, `UPDATE tbl_notification SET read = true, updated_at = $1 WHERE owner_id = $2 AND read = false`,
+		time.Now(), userID); err != nil {
+		err = fmt.Errorf("MarkAllNotificationsAsRead: failed to mark all notifications as read (user_id=%s): %w", userID, err)
+		db.logger.Error("MarkAllNotificationsAsRead error", "error", err)
+		return err
+	}
+	return nil
+}
+
+type GetUserNotificationsParams struct {
+	UserID uuid.UUID
+	Limit  int32
+}
+
+func (db *Database) GetUserNotifications(ctx context.Context, params GetUserNotificationsParams) ([]Notification, error) {
+	var notifications []Notification
+
+	rows, err := db.Query(ctx,
+		`SELECT id, owner_id, type, title, message, action_url, read, created_at, updated_at 
+		 FROM tbl_notification 
+		 WHERE owner_id = $1 
+		 ORDER BY created_at DESC 
+		 LIMIT $2`,
+		params.UserID, params.Limit)
+	if err != nil {
+		db.logger.Error("GetUserNotifications error", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var notification Notification
+		var actionURL *string
+		if err := rows.Scan(&notification.ID, &notification.OwnerID, &notification.Type, &notification.Title, &notification.Message, &actionURL, &notification.Read, &notification.CreatedAt, &notification.UpdatedAt); err != nil {
+			return nil, err
+		}
+
+		if actionURL != nil {
+			notification.ActionURL = util.Some(*actionURL)
+		} else {
+			notification.ActionURL = util.None[string]()
+		}
+
+		notifications = append(notifications, notification)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return notifications, nil
 }
 
 type CreateOAuthClientParams struct {
