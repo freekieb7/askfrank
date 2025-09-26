@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"hp/internal/web/views/component"
 	"time"
 )
@@ -13,6 +14,7 @@ type CalendarEvent struct {
 	EndTime     time.Time `json:"end"`
 	AllDay      bool      `json:"all_day"`
 	Location    string    `json:"location"`
+	Status      string    `json:"status"` // confirmed, tentative, cancelled
 }
 
 type CalendarDay struct {
@@ -22,7 +24,9 @@ type CalendarDay struct {
 
 type CalendarPageProps struct {
 	component.AppLayoutProps
-	Days []CalendarDay
+	Days         []CalendarDay
+	CurrentMonth time.Time
+	Events       []CalendarEvent // All events for JavaScript
 }
 
 templ CalendarPage(props CalendarPageProps) {
@@ -32,38 +36,606 @@ templ CalendarPage(props CalendarPageProps) {
 			<div class="page-header">
 				<div class="min-w-0 flex-1">
 					<h2 class="page-title">Calendar</h2>
-					<p class="page-subtitle">View and manage your appointments.</p>
+					<p class="page-subtitle">Schedule and manage your appointments and meetings.</p>
 				</div>
 				<div class="mt-4 flex md:ml-4 md:mt-0 space-x-3">
-					<button type="button" class="btn-secondary w-auto">
-						<i class="fas fa-download icon-with-text"></i>
-						Export
+					<!-- View Toggle -->
+					<div class="flex rounded-lg shadow-sm" role="group" id="view-toggle">
+						<button type="button" class="view-btn active" data-view="month">
+							<i class="fas fa-th mr-2"></i>Month
+						</button>
+						<button type="button" class="view-btn" data-view="week">
+							<i class="fas fa-bars mr-2"></i>Week
+						</button>
+						<button type="button" class="view-btn" data-view="day">
+							<i class="fas fa-square mr-2"></i>Day
+						</button>
+					</div>
+					<button type="button" class="btn-secondary w-auto" id="today-btn">
+						<i class="fas fa-calendar-day mr-2"></i>Today
 					</button>
-					<button type="button" class="btn-primary w-auto">
-						<i class="fas fa-plus icon-with-text"></i>
-						New Appointment
+					<button type="button" class="btn-primary w-auto" id="new-event-btn">
+						<i class="fas fa-plus mr-2"></i>New Appointment
 					</button>
 				</div>
 			</div>
-			<!-- Calendar placeholder -->
-			<div class="grid grid-cols-7 gap-2">
-				for i, day := range props.Days {
-					<div class="p-2 border border-gray-300 rounded-lg text-center">
-						<div class="gap-2 text-sm">
-							if i < 7 {
-								{ day.Date.Weekday().String() } { day.Date.Day() }
-							} else {
-								{ day.Date.Day() }
-							}
-							for _, event := range day.Events {
-								<div class="bg-ocean text-white p-1 rounded-md">
-									{ event.Title }
-								</div>
-							}
+			<!-- Calendar Navigation -->
+			<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+				<div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+					<div class="flex items-center justify-between">
+						<div class="flex items-center space-x-4">
+							<button id="prev-period" class="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+								<i class="fas fa-chevron-left"></i>
+							</button>
+							<h3 id="calendar-title" class="text-xl font-semibold text-gray-900 dark:text-white">
+								{ props.CurrentMonth.Format("January 2006") }
+							</h3>
+							<button id="next-period" class="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+								<i class="fas fa-chevron-right"></i>
+							</button>
 						</div>
 					</div>
-				}
+				</div>
+				<!-- Calendar Content -->
+				<div class="p-6">
+					<!-- Month View -->
+					<div id="month-view" class="calendar-view active">
+						<!-- Days of week header -->
+						<div class="grid grid-cols-7 gap-px mb-2">
+							<div class="calendar-day-header">Sun</div>
+							<div class="calendar-day-header">Mon</div>
+							<div class="calendar-day-header">Tue</div>
+							<div class="calendar-day-header">Wed</div>
+							<div class="calendar-day-header">Thu</div>
+							<div class="calendar-day-header">Fri</div>
+							<div class="calendar-day-header">Sat</div>
+						</div>
+						<!-- Calendar Grid -->
+						<div id="calendar-grid" class="grid grid-cols-7 gap-px bg-gray-200 dark:bg-gray-600 rounded-lg overflow-hidden">
+							<!-- Days will be populated by JavaScript -->
+						</div>
+					</div>
+					<!-- Week View -->
+					<div id="week-view" class="calendar-view hidden">
+						<div class="flex">
+							<!-- Time column -->
+							<div class="week-time-column">
+								for hour := 0; hour < 24; hour++ {
+									<div class="week-time-slot">
+										{ fmt.Sprintf("%02d:00", hour) }
+									</div>
+								}
+							</div>
+							<!-- Days columns -->
+							<div class="flex-1 grid grid-cols-7 gap-px" id="week-grid">
+								<!-- Week days will be populated by JavaScript -->
+							</div>
+						</div>
+					</div>
+					<!-- Day View -->
+					<div id="day-view" class="calendar-view hidden">
+						<div class="flex">
+							<!-- Time column -->
+							<div class="day-time-column">
+								for hour := 0; hour < 24; hour++ {
+									<div class="day-time-slot">
+										{ fmt.Sprintf("%02d:00", hour) }
+									</div>
+								}
+							</div>
+							<!-- Day column -->
+							<div class="flex-1" id="day-grid">
+								<!-- Day events will be populated by JavaScript -->
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<!-- Event Modal -->
+			<div id="event-modal" class="modal hidden">
+				<div class="modal-overlay"></div>
+				<div class="modal-content">
+					<div class="modal-header">
+						<h3 id="modal-title" class="text-lg font-semibold text-gray-900 dark:text-white">New Appointment</h3>
+						<button type="button" id="close-modal" class="modal-close">
+							<i class="fas fa-times"></i>
+						</button>
+					</div>
+					<form id="event-form" class="modal-body">
+						<div class="form-group">
+							<label for="event-title" class="form-label">Title</label>
+							<input type="text" id="event-title" name="title" class="form-input" placeholder="Appointment title" required/>
+						</div>
+						<div class="form-group">
+							<label for="event-description" class="form-label">Description</label>
+							<textarea id="event-description" name="description" rows="3" class="form-input" placeholder="Add details about the appointment"></textarea>
+						</div>
+						<div class="grid grid-cols-2 gap-4">
+							<div class="form-group">
+								<label for="event-start-date" class="form-label">Start Date</label>
+								<input type="date" id="event-start-date" name="start_date" class="form-input" required/>
+							</div>
+							<div class="form-group">
+								<label for="event-start-time" class="form-label">Start Time</label>
+								<input type="time" id="event-start-time" name="start_time" class="form-input" required/>
+							</div>
+						</div>
+						<div class="grid grid-cols-2 gap-4">
+							<div class="form-group">
+								<label for="event-end-date" class="form-label">End Date</label>
+								<input type="date" id="event-end-date" name="end_date" class="form-input" required/>
+							</div>
+							<div class="form-group">
+								<label for="event-end-time" class="form-label">End Time</label>
+								<input type="time" id="event-end-time" name="end_time" class="form-input" required/>
+							</div>
+						</div>
+						<div class="form-group">
+							<label class="flex items-center">
+								<input type="checkbox" id="event-all-day" name="all_day" class="form-checkbox"/>
+								<span class="ml-2 text-sm text-gray-700 dark:text-gray-300">All day event</span>
+							</label>
+						</div>
+						<div class="form-group">
+							<label for="event-location" class="form-label">Location</label>
+							<input type="text" id="event-location" name="location" class="form-input" placeholder="Meeting room, office, or virtual"/>
+						</div>
+						<div class="form-group">
+							<label for="event-status" class="form-label">Status</label>
+							<select id="event-status" name="status" class="form-select">
+								<option value="confirmed">Confirmed</option>
+								<option value="tentative">Tentative</option>
+								<option value="cancelled">Cancelled</option>
+							</select>
+						</div>
+						<input type="hidden" id="event-id" name="id"/>
+					</form>
+					<div class="modal-footer">
+						<button type="button" id="delete-event-btn" class="btn-secondary-red mr-auto hidden">
+							<i class="fas fa-trash mr-2"></i>Delete
+						</button>
+						<button type="button" id="cancel-event-btn" class="btn-secondary">Cancel</button>
+						<button type="submit" form="event-form" id="save-event-btn" class="btn-primary">
+							<i class="fas fa-save mr-2"></i>Save
+						</button>
+					</div>
+				</div>
 			</div>
 		</div>
+		<!-- Calendar JavaScript -->
+		@templ.JSONScript("calendar-events", props.Events)
+		@templ.JSONScript("calendar-month", props.CurrentMonth)
+		@CalendarScript()
 	}
+}
+
+script CalendarScript() {
+	document.addEventListener('DOMContentLoaded', function() {
+		// Get calendar data from JSON script elements
+		const calendarEvents = JSON.parse(document.getElementById('calendar-events').textContent);
+		const monthData = JSON.parse(document.getElementById('calendar-month').textContent);
+		const currentMonth = new Date(monthData.split('-')[0], parseInt(monthData.split('-')[1]) - 1, 1);
+
+		// Calendar state
+		let currentView = 'month';
+		let currentDate = new Date(currentMonth);
+		let events = calendarEvents || [];
+		let selectedEventId = null;
+
+		// DOM elements
+		const calendarTitle = document.getElementById('calendar-title');
+		const calendarGrid = document.getElementById('calendar-grid');
+		const weekGrid = document.getElementById('week-grid');
+		const dayGrid = document.getElementById('day-grid');
+		const eventModal = document.getElementById('event-modal');
+		const eventForm = document.getElementById('event-form');
+
+		// View buttons
+		document.querySelectorAll('.view-btn').forEach(btn => {
+			btn.addEventListener('click', function() {
+				switchView(this.dataset.view);
+			});
+		});
+
+		// Navigation buttons
+		document.getElementById('prev-period').addEventListener('click', () => navigatePeriod(-1));
+		document.getElementById('next-period').addEventListener('click', () => navigatePeriod(1));
+		document.getElementById('today-btn').addEventListener('click', goToToday);
+
+		// Modal events
+		document.getElementById('new-event-btn').addEventListener('click', () => openEventModal());
+		document.getElementById('close-modal').addEventListener('click', closeEventModal);
+		document.getElementById('cancel-event-btn').addEventListener('click', closeEventModal);
+		document.getElementById('delete-event-btn').addEventListener('click', deleteEvent);
+
+		// Form submission
+		eventForm.addEventListener('submit', function(e) {
+			e.preventDefault();
+			saveEvent();
+		});
+
+		// All-day checkbox handler
+		document.getElementById('event-all-day').addEventListener('change', function() {
+			const timeInputs = ['event-start-time', 'event-end-time'];
+			timeInputs.forEach(id => {
+				document.getElementById(id).disabled = this.checked;
+			});
+		});
+
+		// Modal overlay click to close
+		document.querySelector('.modal-overlay').addEventListener('click', closeEventModal);
+
+		// Initialize calendar
+		renderCalendar();
+
+		// Calendar Functions
+		function switchView(view) {
+			currentView = view;
+			
+			// Update view buttons
+			document.querySelectorAll('.view-btn').forEach(btn => {
+				btn.classList.toggle('active', btn.dataset.view === view);
+			});
+
+			// Show/hide views
+			document.querySelectorAll('.calendar-view').forEach(viewEl => {
+				viewEl.classList.toggle('hidden', !viewEl.id.startsWith(view));
+				viewEl.classList.toggle('active', viewEl.id.startsWith(view));
+			});
+
+			renderCalendar();
+		}
+
+		function navigatePeriod(direction) {
+			if (currentView === 'month') {
+				currentDate.setMonth(currentDate.getMonth() + direction);
+			} else if (currentView === 'week') {
+				currentDate.setDate(currentDate.getDate() + (direction * 7));
+			} else if (currentView === 'day') {
+				currentDate.setDate(currentDate.getDate() + direction);
+			}
+			renderCalendar();
+		}
+
+		function goToToday() {
+			currentDate = new Date();
+			renderCalendar();
+		}
+
+		function renderCalendar() {
+			updateCalendarTitle();
+			
+			if (currentView === 'month') {
+				renderMonthView();
+			} else if (currentView === 'week') {
+				renderWeekView();
+			} else if (currentView === 'day') {
+				renderDayView();
+			}
+		}
+
+		function updateCalendarTitle() {
+			let title = '';
+			if (currentView === 'month') {
+				title = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+			} else if (currentView === 'week') {
+				const weekStart = getWeekStart(currentDate);
+				const weekEnd = new Date(weekStart);
+				weekEnd.setDate(weekEnd.getDate() + 6);
+				title = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+			} else if (currentView === 'day') {
+				title = currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+			}
+			calendarTitle.textContent = title;
+		}
+
+		function renderMonthView() {
+			const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+			const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+			const startDate = getWeekStart(firstDay);
+			
+			calendarGrid.innerHTML = '';
+			
+			// Generate 6 weeks (42 days)
+			for (let i = 0; i < 42; i++) {
+				const date = new Date(startDate);
+				date.setDate(startDate.getDate() + i);
+				
+				const dayElement = createDayElement(date);
+				calendarGrid.appendChild(dayElement);
+			}
+		}
+
+		function createDayElement(date) {
+			const dayEl = document.createElement('div');
+			const isCurrentMonth = date.getMonth() === currentDate.getMonth();
+			const isToday = isDateToday(date);
+			const dayEvents = getEventsForDate(date);
+			
+			dayEl.className = `calendar-day ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}`;
+			dayEl.dataset.date = formatDate(date);
+			
+			dayEl.innerHTML = `
+				<div class="calendar-day-number">${date.getDate()}</div>
+				<div class="calendar-day-events">
+					${dayEvents.map(event => `
+						<div class="calendar-event ${event.status}" onclick="editEvent('${event.id}')" title="${event.title}">
+							<span class="event-title">${event.title}</span>
+							${event.location ? `<span class="event-location">${event.location}</span>` : ''}
+						</div>
+					`).join('')}
+				</div>
+			`;
+			
+			// Add click handler for creating events
+			dayEl.addEventListener('click', function(e) {
+				if (e.target === dayEl || e.target.className.includes('calendar-day')) {
+					openEventModal(date);
+				}
+			});
+			
+			return dayEl;
+		}
+
+		function renderWeekView() {
+			const weekStart = getWeekStart(currentDate);
+			weekGrid.innerHTML = '';
+			
+			// Create 7 day columns
+			for (let i = 0; i < 7; i++) {
+				const date = new Date(weekStart);
+				date.setDate(weekStart.getDate() + i);
+				
+				const dayColumn = document.createElement('div');
+				dayColumn.className = 'week-day-column';
+				dayColumn.innerHTML = `
+					<div class="week-day-header ${isDateToday(date) ? 'today' : ''}">
+						<div class="week-day-name">${date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+						<div class="week-day-number">${date.getDate()}</div>
+					</div>
+					<div class="week-day-events" data-date="${formatDate(date)}">
+						${createTimeSlots().join('')}
+					</div>
+				`;
+				
+				weekGrid.appendChild(dayColumn);
+			}
+			
+			// Add events to time slots
+			events.forEach(event => {
+				addEventToWeekView(event);
+			});
+		}
+
+		function renderDayView() {
+			dayGrid.innerHTML = createTimeSlots().join('');
+			
+			// Add events for the current day
+			const dayEvents = getEventsForDate(currentDate);
+			dayEvents.forEach(event => {
+				addEventToDayView(event);
+			});
+		}
+
+		function createTimeSlots() {
+			const slots = [];
+			for (let hour = 0; hour < 24; hour++) {
+				slots.push(`
+					<div class="time-slot" data-hour="${hour}">
+						<div class="time-slot-content"></div>
+					</div>
+				`);
+			}
+			return slots;
+		}
+
+		// Event Management Functions
+		function openEventModal(date, eventId) {
+			selectedEventId = eventId;
+			const isEditing = !!eventId;
+			
+			// Reset form
+			eventForm.reset();
+			document.getElementById('delete-event-btn').classList.toggle('hidden', !isEditing);
+			document.getElementById('modal-title').textContent = isEditing ? 'Edit Appointment' : 'New Appointment';
+			
+			if (isEditing) {
+				const event = events.find(e => e.id === eventId);
+				if (event) {
+					populateEventForm(event);
+				}
+			} else if (date) {
+				// Set default date/time for new events
+				const dateStr = formatDate(date);
+				document.getElementById('event-start-date').value = dateStr;
+				document.getElementById('event-end-date').value = dateStr;
+				
+				const now = new Date();
+				const currentHour = now.getHours();
+				const startTime = String(currentHour).padStart(2, '0') + ':00';
+				const endTime = String(currentHour + 1).padStart(2, '0') + ':00';
+				
+				document.getElementById('event-start-time').value = startTime;
+				document.getElementById('event-end-time').value = endTime;
+			}
+			
+			eventModal.classList.remove('hidden');
+			document.getElementById('event-title').focus();
+		}
+
+		function closeEventModal() {
+			eventModal.classList.add('hidden');
+			selectedEventId = null;
+		}
+
+		function populateEventForm(event) {
+			document.getElementById('event-id').value = event.id;
+			document.getElementById('event-title').value = event.title;
+			document.getElementById('event-description').value = event.description || '';
+			document.getElementById('event-location').value = event.location || '';
+			document.getElementById('event-status').value = event.status || 'confirmed';
+			
+			const startDate = new Date(event.start);
+			const endDate = new Date(event.end);
+			
+			document.getElementById('event-start-date').value = formatDate(startDate);
+			document.getElementById('event-end-date').value = formatDate(endDate);
+			
+			if (event.all_day) {
+				document.getElementById('event-all-day').checked = true;
+				document.getElementById('event-start-time').disabled = true;
+				document.getElementById('event-end-time').disabled = true;
+			} else {
+				document.getElementById('event-start-time').value = formatTime(startDate);
+				document.getElementById('event-end-time').value = formatTime(endDate);
+			}
+		}
+
+		function saveEvent() {
+			const formData = new FormData(eventForm);
+			const eventData = {
+				id: formData.get('id') || generateEventId(),
+				title: formData.get('title'),
+				description: formData.get('description'),
+				location: formData.get('location'),
+				status: formData.get('status'),
+				all_day: formData.has('all_day'),
+				start: combineDateTime(formData.get('start_date'), formData.get('start_time')),
+				end: combineDateTime(formData.get('end_date'), formData.get('end_time'))
+			};
+
+			// Validate
+			if (!eventData.title.trim()) {
+				alert('Please enter a title for the appointment.');
+				return;
+			}
+
+			if (new Date(eventData.start) >= new Date(eventData.end)) {
+				alert('End time must be after start time.');
+				return;
+			}
+
+			// Save to server
+			saveEventToServer(eventData);
+		}
+
+		function saveEventToServer(eventData) {
+			// Create a form to submit the data
+			const form = document.createElement('form');
+			form.method = 'POST';
+			form.action = selectedEventId 
+				? `/calendar/events/${selectedEventId}/update`
+				: '/calendar/events/create';
+
+			// Add form data as hidden inputs
+			Object.keys(eventData).forEach(key => {
+				const input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = key;
+				input.value = eventData[key];
+				form.appendChild(input);
+			});
+
+			// Submit form
+			document.body.appendChild(form);
+			form.submit();
+		}
+
+		function deleteEvent() {
+			if (!selectedEventId) return;
+			
+			if (!confirm('Are you sure you want to delete this appointment?')) {
+				return;
+			}
+
+			// Create a form to submit the delete request
+			const form = document.createElement('form');
+			form.method = 'POST';
+			form.action = `/calendar/events/${selectedEventId}/delete`;
+
+			// Submit form
+			document.body.appendChild(form);
+			form.submit();
+		}
+
+		function editEvent(eventId) {
+			openEventModal(null, eventId);
+		}
+
+		// Utility Functions
+		function getWeekStart(date) {
+			const start = new Date(date);
+			const day = start.getDay();
+			const diff = start.getDate() - day;
+			return new Date(start.setDate(diff));
+		}
+
+		function isDateToday(date) {
+			const today = new Date();
+			return date.toDateString() === today.toDateString();
+		}
+
+		function formatDate(date) {
+			return date.toISOString().split('T')[0];
+		}
+
+		function formatTime(date) {
+			return date.toTimeString().slice(0, 5);
+		}
+
+		function combineDateTime(dateStr, timeStr) {
+			if (!timeStr) timeStr = '00:00';
+			return new Date(`${dateStr}T${timeStr}:00`).toISOString();
+		}
+
+		function getEventsForDate(date) {
+			const dateStr = formatDate(date);
+			return events.filter(event => {
+				const eventDate = formatDate(new Date(event.start));
+				return eventDate === dateStr;
+			});
+		}
+
+		function generateEventId() {
+			return 'event_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+		}
+
+		function addEventToWeekView(event) {
+			// Implementation for positioning events in week view
+			const eventDate = new Date(event.start);
+			const dateStr = formatDate(eventDate);
+			const dayColumn = document.querySelector(`[data-date="${dateStr}"]`);
+			
+			if (dayColumn) {
+				const startHour = eventDate.getHours();
+				const timeSlot = dayColumn.querySelector(`[data-hour="${startHour}"]`);
+				
+				if (timeSlot) {
+					const eventEl = document.createElement('div');
+					eventEl.className = `week-event ${event.status}`;
+					eventEl.innerHTML = `<span>${event.title}</span>`;
+					eventEl.onclick = () => editEvent(event.id);
+					timeSlot.appendChild(eventEl);
+				}
+			}
+		}
+
+		function addEventToDayView(event) {
+			const eventDate = new Date(event.start);
+			const startHour = eventDate.getHours();
+			const timeSlot = dayGrid.querySelector(`[data-hour="${startHour}"]`);
+			
+			if (timeSlot) {
+				const eventEl = document.createElement('div');
+				eventEl.className = `day-event ${event.status}`;
+				eventEl.innerHTML = `
+					<div class="event-title">${event.title}</div>
+					<div class="event-time">${formatTime(eventDate)} - ${formatTime(new Date(event.end))}</div>
+					${event.location ? `<div class="event-location">${event.location}</div>` : ''}
+				`;
+				eventEl.onclick = () => editEvent(event.id);
+				timeSlot.appendChild(eventEl);
+			}
+		}
+	});
 }

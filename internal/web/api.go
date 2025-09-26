@@ -1208,124 +1208,17 @@ type ApiResponse struct {
 	Data    any               `json:"data,omitempty"`
 }
 
-// TriggerTestWebhookEvent creates a test webhook event for testing webhook delivery
-func (h *ApiHandler) TriggerTestWebhookEvent(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
-	// Parse request body
-	var req struct {
-		EventType string `json:"event_type"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Invalid request body",
-		})
-	}
-
-	// Validate event type
-	var eventType database.WebhookEventType
-	switch req.EventType {
-	case string(database.WebhookEventTypeFileCreated):
-		eventType = database.WebhookEventTypeFileCreated
-	case string(database.WebhookEventTypeFileDeleted):
-		eventType = database.WebhookEventTypeFileDeleted
-	case string(database.WebhookEventTypeUserLogin):
-		eventType = database.WebhookEventTypeUserLogin
-	case string(database.WebhookEventTypeUserLogout):
-		eventType = database.WebhookEventTypeUserLogout
-	default:
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Invalid event type. Must be one of: file.created, file.deleted, user.login, user.logout",
-		})
-	}
-
-	// Import the daemon package for test helper
-	// Note: In production, you might want to move this logic to a service layer
-	testPayload := map[string]interface{}{
-		"event_type": string(eventType),
-		"timestamp":  time.Now().Format(time.RFC3339),
-		"test":       true,
-		"data": map[string]interface{}{
-			"message": "This is a test webhook event triggered via API",
-			"id":      "test-api-" + time.Now().Format("20060102-150405"),
-		},
-	}
-
-	payloadBytes, err := json.Marshal(testPayload)
-	if err != nil {
-		h.logger.Error("Failed to marshal test payload", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to create test payload",
-		})
-	}
-
-	// Create the webhook event
-	event, err := h.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
-		EventType: eventType,
-		Payload:   payloadBytes,
-	})
-	if err != nil {
-		h.logger.Error("Failed to create test webhook event", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to create webhook event",
-		})
-	}
-
-	h.logger.Info("Test webhook event created via API",
-		"event_id", event.ID,
-		"event_type", eventType)
-
-	return JSONResponse(w, http.StatusOK, ApiResponse{
-		Status:  APIResponseStatusSuccess,
-		Message: "Test webhook event created successfully",
-		Data: map[string]interface{}{
-			"event_id":   event.ID.String(),
-			"event_type": string(eventType),
-			"created_at": event.CreatedAt,
-		},
-	})
-}
-
 // MarkNotificationAsRead marks a specific notification as read
 func (h *ApiHandler) MarkNotificationAsRead(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	// Get user session
-	sess, err := h.sessionStore.Get(ctx, r)
-	if err != nil {
-		h.logger.Error("Failed to get session", "error", err)
-		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Authentication required",
-		})
-	}
-
-	if !sess.UserID.Some {
-		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Authentication required",
-		})
-	}
-
-	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
-	if err != nil {
-		h.logger.Error("Failed to get user from database", "error", err)
-		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Authentication required",
-		})
-	}
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
 	// Get notification ID from URL path
-	notificationID := r.URL.Path[len("/api/notifications/"):]
-	notificationID = strings.TrimSuffix(notificationID, "/read")
+	notificationIDStr := r.PathValue("notification_id")
 
 	// Parse UUID
-	uuid, err := uuid.Parse(notificationID)
+	notificationID, err := uuid.Parse(notificationIDStr)
 	if err != nil {
 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 			Status:  APIResponseStatusError,
@@ -1333,14 +1226,35 @@ func (h *ApiHandler) MarkNotificationAsRead(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
-	// Mark notification as read in database
-	err = h.db.MarkNotificationAsRead(r.Context(), database.MarkNotificationAsReadParams{
-		ID:     uuid,
-		UserID: user.ID,
-	})
-
+	// Verify notification belongs to the user
+	notification, err := h.db.GetNotificationByID(r.Context(), notificationID)
 	if err != nil {
-		h.logger.Error("Failed to mark notification as read", "error", err, "notification_id", notificationID)
+		if err == database.ErrNotificationNotFound {
+			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Notification not found",
+			})
+		}
+
+		h.logger.Error("Failed to get notification", "error", err, "notification_id", notificationID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to retrieve notification",
+		})
+	}
+
+	if notification.OwnerID != userID {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You do not have permission to modify this notification",
+		})
+	}
+
+	// Mark notification as read in database
+	if err := h.db.UpdateNotificationByID(r.Context(), notificationID, database.UpdateNotificationParams{
+		IsRead: util.Some(true),
+	}); err != nil {
+		h.logger.Error("Failed to update notification", "error", err, "notification_id", notificationID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to mark notification as read",
@@ -1403,31 +1317,7 @@ func (h *ApiHandler) MarkAllNotificationsAsRead(w http.ResponseWriter, r *http.R
 func (h *ApiHandler) GetNotifications(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	// Get user session
-	sess, err := h.sessionStore.Get(ctx, r)
-	if err != nil {
-		h.logger.Error("Failed to get session", "error", err)
-		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Authentication required",
-		})
-	}
-
-	if !sess.UserID.Some {
-		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Authentication required",
-		})
-	}
-
-	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
-	if err != nil {
-		h.logger.Error("Failed to get user from database", "error", err)
-		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Authentication required",
-		})
-	}
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
 	// Get limit from query parameter (default 20)
 	limit := int32(20)
@@ -1438,13 +1328,12 @@ func (h *ApiHandler) GetNotifications(w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Get notifications from database
-	notifications, err := h.db.GetUserNotifications(r.Context(), database.GetUserNotificationsParams{
-		UserID: user.ID,
-		Limit:  limit,
+	notifications, err := h.db.ListNotifications(r.Context(), database.ListNotificationsParams{
+		OwnerID: util.Some(userID),
+		Limit:   util.Some(limit),
 	})
-
 	if err != nil {
-		h.logger.Error("Failed to get notifications", "error", err, "user_id", user.ID)
+		h.logger.Error("Failed to get notifications", "error", err, "user_id", userID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to retrieve notifications",
@@ -1458,8 +1347,10 @@ func (h *ApiHandler) GetNotifications(w http.ResponseWriter, r *http.Request) er
 	})
 }
 
-// CreateTestNotification creates a test notification for the current user
-func (h *ApiHandler) CreateTestNotification(w http.ResponseWriter, r *http.Request) error {
+// Calendar API Endpoints
+
+// GetCalendarEvents returns calendar events for the current user
+func (h *ApiHandler) GetCalendarEvents(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	// Get user session
@@ -1488,32 +1379,363 @@ func (h *ApiHandler) CreateTestNotification(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
-	// Create a test notification
-	notification, err := h.db.CreateNotification(ctx, database.CreateNotificationParams{
-		OwnerID:   user.ID,
-		Type:      database.NotificationTypeInfo,
-		Title:     "Test Notification",
-		Message:   "This is a test notification to demonstrate the notification system.",
-		ActionURL: util.Some("/dashboard"),
-		Read:      false,
+	// Get date range from query parameters
+	startDateStr := r.URL.Query().Get("start")
+	endDateStr := r.URL.Query().Get("end")
+
+	var startDate, endDate time.Time
+	if startDateStr != "" {
+		startDate, _ = time.Parse("2006-01-02", startDateStr)
+	} else {
+		startDate = time.Now().AddDate(0, -1, 0) // Default to 1 month ago
+	}
+
+	if endDateStr != "" {
+		endDate, _ = time.Parse("2006-01-02", endDateStr)
+	} else {
+		endDate = time.Now().AddDate(0, 2, 0) // Default to 2 months from now
+	}
+
+	// Get events from database
+	events, err := h.db.ListCalendarEvents(ctx, database.ListCalendarEventsParams{
+		OwnerID:   util.Some(user.ID),
+		StartDate: util.Some(startDate),
+		EndDate:   util.Some(endDate),
 	})
 
 	if err != nil {
-		h.logger.Error("Failed to create test notification", "error", err)
+		h.logger.Error("Failed to get calendar events", "error", err, "user_id", user.ID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
-			Message: "Failed to create notification",
+			Message: "Failed to retrieve calendar events",
 		})
 	}
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
 		Status:  APIResponseStatusSuccess,
-		Message: "Test notification created successfully",
+		Message: "Events retrieved successfully",
+		Data:    events,
+	})
+}
+
+// CreateCalendarEvent creates a new calendar event
+func (h *ApiHandler) CreateCalendarEvent(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get user session
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	if !sess.UserID.Some {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
+	if err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Start       string `json:"start"`
+		End         string `json:"end"`
+		AllDay      bool   `json:"all_day"`
+		Location    string `json:"location"`
+		Status      string `json:"status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.Title == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Title is required",
+		})
+	}
+
+	// Parse dates
+	startTime, err := time.Parse(time.RFC3339, req.Start)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid start time format",
+		})
+	}
+
+	endTime, err := time.Parse(time.RFC3339, req.End)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid end time format",
+		})
+	}
+
+	if startTime.After(endTime) {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "End time must be after start time",
+		})
+	}
+
+	// Set default status if not provided
+	if req.Status == "" {
+		req.Status = "confirmed"
+	}
+
+	// Create event in database
+	event, err := h.db.CreateCalendarEvent(ctx, database.CreateCalendarEventParams{
+		OwnerID:     user.ID,
+		Title:       req.Title,
+		Description: req.Description,
+		StartTime:   startTime,
+		EndTime:     endTime,
+		AllDay:      req.AllDay,
+		Status:      database.CalendarEventStatus(req.Status),
+		Location:    util.Some(req.Location),
+	})
+
+	if err != nil {
+		h.logger.Error("Failed to create calendar event", "error", err, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to create event",
+		})
+	}
+
+	return JSONResponse(w, http.StatusCreated, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Event created successfully",
 		Data: map[string]interface{}{
-			"notification_id": notification.ID.String(),
-			"title":           notification.Title,
-			"message":         notification.Message,
+			"event_id": event.ID.String(),
+			"title":    event.Title,
 		},
+	})
+}
+
+// UpdateCalendarEvent updates an existing calendar event
+func (h *ApiHandler) UpdateCalendarEvent(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get user session
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	if !sess.UserID.Some {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
+	if err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	// Get event ID from URL path
+	eventIDStr := r.URL.Path[len("/api/calendar/events/"):]
+	eventID, err := uuid.Parse(eventIDStr)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid event ID",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Start       string `json:"start"`
+		End         string `json:"end"`
+		AllDay      bool   `json:"all_day"`
+		Location    string `json:"location"`
+		Status      string `json:"status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request body",
+		})
+	}
+
+	// Parse dates
+	startTime, err := time.Parse(time.RFC3339, req.Start)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid start time format",
+		})
+	}
+
+	endTime, err := time.Parse(time.RFC3339, req.End)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid end time format",
+		})
+	}
+
+	// First, verify the event exists and user owns it
+	events, err := h.db.ListCalendarEvents(ctx, database.ListCalendarEventsParams{
+		OwnerID: util.Some(user.ID),
+	})
+	if err != nil {
+		h.logger.Error("Failed to get calendar events", "error", err, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to verify event ownership",
+		})
+	}
+
+	// Check if the event exists and belongs to the user
+	var foundEvent bool
+	for _, event := range events {
+		if event.ID == eventID {
+			foundEvent = true
+			break
+		}
+	}
+
+	if !foundEvent {
+		return JSONResponse(w, http.StatusNotFound, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Event not found or you don't have permission to update it",
+		})
+	}
+
+	// Update event in database
+	err = h.db.UpdateCalendarEventByID(ctx, eventID, database.UpdateCalendarEventParams{
+		Title:       util.Some(req.Title),
+		Description: util.Some(req.Description),
+		StartTime:   util.Some(startTime),
+		EndTime:     util.Some(endTime),
+		AllDay:      util.Some(req.AllDay),
+		Status:      util.Some(database.CalendarEventStatus(req.Status)),
+		Location:    util.Some(util.Some(req.Location)),
+	})
+
+	if err != nil {
+		h.logger.Error("Failed to update calendar event", "error", err, "event_id", eventID, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to update event",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Event updated successfully",
+	})
+}
+
+// DeleteCalendarEvent deletes a calendar event
+func (h *ApiHandler) DeleteCalendarEvent(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get user session
+	sess, err := h.sessionStore.Get(ctx, r)
+	if err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	if !sess.UserID.Some {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	user, err := h.db.GetUserByID(ctx, sess.UserID.Data)
+	if err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Authentication required",
+		})
+	}
+
+	// Get event ID from URL path
+	eventIDStr := r.URL.Path[len("/api/calendar/events/"):]
+	eventID, err := uuid.Parse(eventIDStr)
+	if err != nil {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid event ID",
+		})
+	}
+
+	// First, verify the event exists and user owns it
+	events, err := h.db.ListCalendarEvents(ctx, database.ListCalendarEventsParams{
+		OwnerID: util.Some(user.ID),
+	})
+	if err != nil {
+		h.logger.Error("Failed to get calendar events", "error", err, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to verify event ownership",
+		})
+	}
+
+	// Check if the event exists and belongs to the user
+	var foundEvent bool
+	for _, event := range events {
+		if event.ID == eventID {
+			foundEvent = true
+			break
+		}
+	}
+
+	if !foundEvent {
+		return JSONResponse(w, http.StatusNotFound, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Event not found or you don't have permission to delete it",
+		})
+	}
+
+	// Delete event from database
+	err = h.db.DeleteCalendarEventByID(ctx, eventID)
+	if err != nil {
+		h.logger.Error("Failed to delete calendar event", "error", err, "event_id", eventID, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to delete event",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Event deleted successfully",
 	})
 }
 

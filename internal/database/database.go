@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hp/internal/util"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -14,28 +13,34 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type OrderBy int
+
+const (
+	OrderByASC OrderBy = iota
+	OrderByDESC
+)
+
 type Database struct {
 	*Postgres
-	logger *slog.Logger
 }
 
-func NewDatabase(postgres *Postgres, logger *slog.Logger) Database {
+func NewDatabase(postgres *Postgres) Database {
 	return Database{
 		Postgres: postgres,
-		logger:   logger,
 	}
 }
 
 type User struct {
-	ID               uuid.UUID
-	Name             string
-	Email            string
-	PasswordHash     string
-	IsEmailVerified  bool
-	IsBot            bool
-	StripeCustomerID string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                   uuid.UUID
+	Name                 string
+	Email                string
+	PasswordHash         string
+	IsEmailVerified      bool
+	IsBot                bool
+	StripeCustomerID     string
+	StripeSubscriptionID string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 type Session struct {
@@ -121,15 +126,6 @@ type AuditLogEvent struct {
 	CreatedAt time.Time
 }
 
-type WebhookEventType string
-
-const (
-	WebhookEventTypeFileCreated WebhookEventType = "file.created"
-	WebhookEventTypeFileDeleted WebhookEventType = "file.deleted"
-	WebhookEventTypeUserLogin   WebhookEventType = "user.login"
-	WebhookEventTypeUserLogout  WebhookEventType = "user.logout"
-)
-
 type WebhookSubscription struct {
 	ID          uuid.UUID
 	OwnerID     uuid.UUID
@@ -137,7 +133,7 @@ type WebhookSubscription struct {
 	Description string
 	URL         string
 	Secret      string
-	EventTypes  []WebhookEventType
+	EventTypes  []string
 	IsActive    bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -145,7 +141,7 @@ type WebhookSubscription struct {
 
 type WebhookEvent struct {
 	ID        uuid.UUID
-	EventType WebhookEventType
+	EventType string
 	Payload   json.RawMessage
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -166,7 +162,7 @@ type WebhookDelivery struct {
 	URL              string
 	Secret           string
 	Payload          []byte
-	EventType        WebhookEventType
+	EventType        string
 	Status           WebhookDeliveryStatus
 	RetryCount       int
 	LastAttemptAt    util.Optional[time.Time]
@@ -217,22 +213,14 @@ type CalendarEventAttendee struct {
 	UpdatedAt       time.Time
 }
 
-type NotificationType string
-
-const (
-	NotificationTypeInfo    NotificationType = "info"
-	NotificationTypeWarning NotificationType = "warning"
-	NotificationTypeError   NotificationType = "error"
-)
-
 type Notification struct {
 	ID        uuid.UUID
 	OwnerID   uuid.UUID
-	Type      NotificationType
+	Type      string
 	Title     string
 	Message   string
-	ActionURL util.Optional[string]
-	Read      bool
+	IsRead    bool
+	ActionURL string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -325,32 +313,32 @@ var (
 )
 
 type CreateUserParams struct {
-	Name             string
-	Email            string
-	PasswordHash     string
-	IsEmailVerified  bool
-	IsBot            bool
-	StripeCustomerID string
+	Name                 string
+	Email                string
+	PasswordHash         string
+	IsEmailVerified      bool
+	IsBot                bool
+	StripeCustomerID     string
+	StripeSubscriptionID string
 }
 
 func (db *Database) CreateUser(ctx context.Context, params CreateUserParams) (User, error) {
 	user := User{
-		ID:               uuid.New(),
-		Name:             params.Name,
-		Email:            params.Email,
-		PasswordHash:     params.PasswordHash,
-		IsEmailVerified:  params.IsEmailVerified,
-		IsBot:            params.IsBot,
-		StripeCustomerID: params.StripeCustomerID,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		ID:                   uuid.New(),
+		Name:                 params.Name,
+		Email:                params.Email,
+		PasswordHash:         params.PasswordHash,
+		IsEmailVerified:      params.IsEmailVerified,
+		IsBot:                params.IsBot,
+		StripeCustomerID:     params.StripeCustomerID,
+		StripeSubscriptionID: params.StripeSubscriptionID,
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
 	}
 
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_user (id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		user.ID, user.Name, user.Email, user.PasswordHash, user.IsEmailVerified, user.IsBot, user.StripeCustomerID, user.CreatedAt, user.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateUser: failed to insert user (email=%s): %w", user.Email, err)
-		db.logger.Error("CreateUser error", "error", err)
-		return user, err
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_user (id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, stripe_subscription_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		user.ID, user.Name, user.Email, user.PasswordHash, user.IsEmailVerified, user.IsBot, user.StripeCustomerID, user.StripeSubscriptionID, user.CreatedAt, user.UpdatedAt); err != nil {
+		return user, fmt.Errorf("CreateUser: failed to insert user (email=%s): %w", user.Email, err)
 	}
 	return user, nil
 }
@@ -396,23 +384,20 @@ func (db *Database) ListUsers(ctx context.Context, params ListUsersParams) ([]Us
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListUsers error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListUsers: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var user User
 		if err := rows.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.IsBot, &user.StripeCustomerID, &user.CreatedAt, &user.UpdatedAt); err != nil {
-			db.logger.Error("ListUsers error", "error", err)
-			return nil, err
+			return nil, fmt.Errorf("ListUsers: failed to scan user: %w", err)
 		}
 		users = append(users, user)
 	}
 
 	if err := rows.Err(); err != nil {
-		db.logger.Error("ListUsers error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListUsers: rows error: %w", err)
 	}
 
 	return users, nil
@@ -435,7 +420,7 @@ func (db *Database) GetUser(ctx context.Context, params GetUserParams) (User, er
 	var user User
 
 	var query strings.Builder
-	query.WriteString(`SELECT id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, created_at, updated_at FROM tbl_user WHERE 1=1`)
+	query.WriteString(`SELECT id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, stripe_subscription_id, created_at, updated_at FROM tbl_user WHERE 1=1`)
 	var args []any
 	argNum := 1
 
@@ -452,25 +437,25 @@ func (db *Database) GetUser(ctx context.Context, params GetUserParams) (User, er
 	}
 
 	err := db.QueryRow(ctx, query.String(), args...).Scan(
-		&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.IsBot, &user.StripeCustomerID, &user.CreatedAt, &user.UpdatedAt)
+		&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.IsBot, &user.StripeCustomerID, &user.StripeSubscriptionID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return user, ErrUserNotFound
 		}
-		err = fmt.Errorf("GetUser: failed to scan user (id=%s): %w", params.ID.Data, err)
-		db.logger.Error("GetUser error", "error", err)
-		return user, err
+		return user, fmt.Errorf("GetUser: failed to scan user: %w", err)
 	}
 	return user, nil
 }
 
 type UpdateUserParams struct {
-	Name            util.Optional[string]
-	Email           util.Optional[string]
-	PasswordHash    util.Optional[[]byte]
-	IsEmailVerified util.Optional[bool]
-	IsBot           util.Optional[bool]
-	DeletedAt       util.Optional[time.Time]
+	Name                 util.Optional[string]
+	Email                util.Optional[string]
+	PasswordHash         util.Optional[[]byte]
+	IsEmailVerified      util.Optional[bool]
+	IsBot                util.Optional[bool]
+	StripeCustomerID     util.Optional[string]
+	StripeSubscriptionID util.Optional[string]
+	DeletedAt            util.Optional[time.Time]
 }
 
 func (db *Database) UpdateUserByID(ctx context.Context, userID uuid.UUID, params UpdateUserParams) error {
@@ -509,25 +494,35 @@ func (db *Database) UpdateUserByID(ctx context.Context, userID uuid.UUID, params
 		argNum++
 	}
 
+	if params.StripeCustomerID.Some {
+		query.WriteString(fmt.Sprintf("stripe_customer_id = $%d, ", argNum))
+		args = append(args, params.StripeCustomerID)
+		argNum++
+	}
+
+	if params.StripeSubscriptionID.Some {
+		query.WriteString(fmt.Sprintf("stripe_subscription_id = $%d, ", argNum))
+		args = append(args, params.StripeSubscriptionID)
+		argNum++
+	}
+
 	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
 	args = append(args, time.Now(), userID)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateUser: failed to update user (id=%s): %w", userID, err)
-		db.logger.Error("UpdateUser error", "error", err)
-		return err
+		return fmt.Errorf("UpdateUser: failed to update user (id=%s): %w", userID, err)
 	}
 	return nil
 }
 
-func (db *Database) DeleteUserByID(ctx context.Context, userID uuid.UUID) error {
-	if _, err := db.Exec(ctx, `DELETE FROM tbl_user WHERE id = $1`, userID); err != nil {
-		err = fmt.Errorf("DeleteUser: failed to delete user (id=%s): %w", userID, err)
-		db.logger.Error("DeleteUser error", "error", err)
-		return err
-	}
-	return nil
-}
+// func (db *Database) DeleteUserByID(ctx context.Context, userID uuid.UUID) error {
+// 	if _, err := db.Exec(ctx, `DELETE FROM tbl_user WHERE id = $1`, userID); err != nil {
+// 		err = fmt.Errorf("DeleteUser: failed to delete user (id=%s): %w", userID, err)
+// 		db.logger.Error("DeleteUser error", "error", err)
+// 		return err
+// 	}
+// 	return nil
+// }
 
 type CreatePasswordResetParams struct {
 	Token     string
@@ -549,9 +544,7 @@ func (db *Database) CreatePasswordReset(ctx context.Context, params CreatePasswo
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_password_reset (id, token, user_id, expires_at, used_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		reset.ID, reset.Token, reset.UserID, reset.ExpiresAt, reset.UsedAt, reset.CreatedAt, reset.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreatePasswordReset: failed to insert password reset (user_id=%s): %w", reset.UserID, err)
-		db.logger.Error("CreatePasswordReset error", "error", err)
-		return reset, err
+		return reset, fmt.Errorf("CreatePasswordReset: failed to insert password reset (user_id=%s): %w", reset.UserID, err)
 	}
 	return reset, nil
 }
@@ -576,23 +569,20 @@ func (db *Database) ListPasswordResets(ctx context.Context, params ListPasswordR
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListPasswordResets error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListPasswordResets: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var reset PasswordReset
 		if err := rows.Scan(&reset.ID, &reset.Token, &reset.UserID, &reset.ExpiresAt, &reset.UsedAt, &reset.CreatedAt, &reset.UpdatedAt); err != nil {
-			db.logger.Error("ListPasswordResets error", "error", err)
-			return nil, err
+			return nil, fmt.Errorf("ListPasswordResets: failed to scan password reset: %w", err)
 		}
 		resets = append(resets, reset)
 	}
 
 	if err := rows.Err(); err != nil {
-		db.logger.Error("ListPasswordResets error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListPasswordResets: rows error: %w", err)
 	}
 
 	return resets, nil
@@ -618,9 +608,7 @@ func (db *Database) UpdatePasswordResetByID(ctx context.Context, id uuid.UUID, p
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdatePasswordReset: failed to update password reset (id=%s): %w", id, err)
-		db.logger.Error("UpdatePasswordReset error", "error", err)
-		return err
+		return fmt.Errorf("UpdatePasswordReset: failed to update password reset (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -639,9 +627,7 @@ func (db *Database) CreateGroup(ctx context.Context, params CreateGroupParams) (
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_group (id, name, created_at, updated_at) VALUES ($1, $2, $3, $4)`,
 		group.ID, group.Name, group.CreatedAt, group.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateGroup: failed to insert group (id=%s): %w", group.ID, err)
-		db.logger.Error("CreateGroup error", "error", err)
-		return group, err
+		return group, fmt.Errorf("CreateGroup: failed to insert group (name=%s): %w", group.Name, err)
 	}
 	return group, nil
 }
@@ -666,21 +652,20 @@ func (db *Database) ListGroups(ctx context.Context, params ListGroupsParams) ([]
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListGroups error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListGroups: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var group Group
 		if err := rows.Scan(&group.ID, &group.Name, &group.OwnerID, &group.CreatedAt, &group.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListGroups: failed to scan group: %w", err)
 		}
 		groups = append(groups, group)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListGroups: rows error: %w", err)
 	}
 
 	return groups, nil
@@ -695,9 +680,7 @@ func (db *Database) GetGroupByID(ctx context.Context, id uuid.UUID) (Group, erro
 		if errors.Is(err, pgx.ErrNoRows) {
 			return group, ErrGroupNotFound
 		}
-		err = fmt.Errorf("GetGroup: failed to scan group (id=%s): %w", id, err)
-		db.logger.Error("GetGroup error", "error", err)
-		return group, err
+		return group, fmt.Errorf("GetGroup: failed to get group (id=%s): %w", id, err)
 	}
 	return group, nil
 }
@@ -722,18 +705,14 @@ func (db *Database) UpdateGroupByID(ctx context.Context, id uuid.UUID, params Up
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateGroup: failed to update group (id=%s): %w", id, err)
-		db.logger.Error("UpdateGroup error", "error", err)
-		return err
+		return fmt.Errorf("UpdateGroup: failed to update group (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteGroupByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_group WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteGroup: failed to delete group (id=%s): %w", id, err)
-		db.logger.Error("DeleteGroup error", "error", err)
-		return err
+		return fmt.Errorf("DeleteGroup: failed to delete group (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -756,9 +735,7 @@ func (db *Database) CreateGroupMember(ctx context.Context, params CreateGroupMem
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_group_member (id, group_id, user_id, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
 		groupMember.ID, groupMember.GroupID, groupMember.UserID, groupMember.Role, groupMember.CreatedAt, groupMember.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateGroupMember: failed to insert group member (group_id=%s, user_id=%s): %w", groupMember.GroupID, groupMember.UserID, err)
-		db.logger.Error("CreateGroupMember error", "error", err)
-		return err
+		return fmt.Errorf("CreateGroupMember: failed to insert group member (group_id=%s, user_id=%s): %w", groupMember.GroupID, groupMember.UserID, err)
 	}
 	return nil
 }
@@ -783,21 +760,20 @@ func (db *Database) ListGroupMembers(ctx context.Context, params ListGroupMember
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListGroupMembers error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListGroupMembers: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var member GroupMember
 		if err := rows.Scan(&member.ID, &member.GroupID, &member.UserID, &member.Role, &member.CreatedAt, &member.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListGroupMembers: failed to scan group member: %w", err)
 		}
 		members = append(members, member)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListGroupMembers: rows error: %w", err)
 	}
 
 	return members, nil
@@ -807,9 +783,7 @@ func (db *Database) ListGroupMembers(ctx context.Context, params ListGroupMember
 
 func (db *Database) DeleteGroupMemberByID(ctx context.Context, groupID, userID uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_group_member WHERE group_id = $1 AND user_id = $2`, groupID, userID); err != nil {
-		err = fmt.Errorf("DeleteGroupMember: failed to delete group member (group_id=%s, user_id=%s): %w", groupID, userID, err)
-		db.logger.Error("DeleteGroupMember error", "error", err)
-		return err
+		return fmt.Errorf("DeleteGroupMember: failed to delete group member (group_id=%s, user_id=%s): %w", groupID, userID, err)
 	}
 	return nil
 }
@@ -839,9 +813,7 @@ func (db *Database) CreateGroupInvite(ctx context.Context, params GroupInvitePar
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_group_invite (id, token, group_id, invited_by_user_id, email, role, expires_at, used_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		invite.ID, invite.Token, invite.GroupID, invite.InvitedByUserID, invite.Email, invite.Role, invite.ExpiresAt, invite.UsedAt, invite.CreatedAt, invite.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateGroupInvite: failed to insert group invite (group_id=%s, email=%s): %w", invite.GroupID, invite.Email, err)
-		db.logger.Error("CreateGroupInvite error", "error", err)
-		return err
+		return fmt.Errorf("CreateGroupInvite: failed to insert group invite (group_id=%s, email=%s): %w", invite.GroupID, invite.Email, err)
 	}
 	return nil
 }
@@ -866,21 +838,20 @@ func (db *Database) ListGroupInvites(ctx context.Context, params ListGroupInvite
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListGroupInvites error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListGroupInvites: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var invite GroupInvite
 		if err := rows.Scan(&invite.ID, &invite.Token, &invite.GroupID, &invite.InvitedByUserID, &invite.Email, &invite.Role, &invite.CreatedAt, &invite.UpdatedAt, &invite.ExpiresAt, &invite.UsedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListGroupInvites: failed to scan group invite: %w", err)
 		}
 		invites = append(invites, invite)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListGroupInvites: rows error: %w", err)
 	}
 
 	return invites, nil
@@ -892,10 +863,9 @@ func (db *Database) GetGroupInviteByID(ctx context.Context, id uuid.UUID) (Group
 	query := `SELECT id, token, group_id, invited_by_user_id, email, role, created_at, updated_at, expires_at, used_at FROM tbl_group_invite WHERE id = $1`
 	if err := db.QueryRow(ctx, query, id).Scan(&invite.ID, &invite.Token, &invite.GroupID, &invite.InvitedByUserID, &invite.Email, &invite.Role, &invite.CreatedAt, &invite.UpdatedAt, &invite.ExpiresAt, &invite.UsedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return GroupInvite{}, ErrGroupInviteNotFound
+			return invite, ErrGroupInviteNotFound
 		}
-		db.logger.Error("GetGroupInvite error", "error", err)
-		return GroupInvite{}, err
+		return invite, fmt.Errorf("GetGroupInvite: failed to get group invite (id=%s): %w", id, err)
 	}
 
 	return invite, nil
@@ -928,18 +898,14 @@ func (db *Database) UpdateGroupInviteByID(ctx context.Context, id uuid.UUID, par
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateGroupInvite: failed to update group invite (id=%s): %w", id, err)
-		db.logger.Error("UpdateGroupInvite error", "error", err)
-		return err
+		return fmt.Errorf("UpdateGroupInvite: failed to update group invite (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteGroupInvite(ctx context.Context, inviteID uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_group_invite WHERE id = $1`, inviteID); err != nil {
-		err = fmt.Errorf("DeleteGroupInvite: failed to delete group invite (id=%s): %w", inviteID, err)
-		db.logger.Error("DeleteGroupInvite error", "error", err)
-		return err
+		return fmt.Errorf("DeleteGroupInvite: failed to delete group invite (id=%s): %w", inviteID, err)
 	}
 	return nil
 }
@@ -969,16 +935,12 @@ func (db *Database) CreateFile(ctx context.Context, params CreateFileParams) (Fi
 	}
 
 	if file.MimeType != "application/askfrank.folder" && (!file.S3Key.Some || !file.Path.Some) {
-		err := errors.New("CreateFile: S3Key or Path is required for non-folder files")
-		db.logger.Error("CreateFile error", "error", err)
-		return file, err
+		return file, fmt.Errorf("CreateFile: S3Key or Path is required for non-folder files")
 	}
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_file (id, owner_id, parent_id, name, mime_type, path, s3_key, size_bytes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		file.ID, file.OwnerID, file.ParentID, file.Name, file.MimeType, file.Path, file.S3Key, file.SizeBytes, file.CreatedAt, file.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateFile: failed to insert file (owner_id=%s, name=%s): %w", file.OwnerID, file.Name, err)
-		db.logger.Error("CreateFile error", "error", err)
-		return file, err
+		return file, fmt.Errorf("CreateFile: failed to insert file (owner_id=%s, name=%s): %w", file.OwnerID, file.Name, err)
 	}
 	return file, nil
 }
@@ -1014,21 +976,20 @@ func (db *Database) ListFiles(ctx context.Context, params ListFilesParams) ([]Fi
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListFiles error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListFiles: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var file File
 		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.Path, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListFiles: failed to scan file: %w", err)
 		}
 		files = append(files, file)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListFiles: rows error: %w", err)
 	}
 
 	return files, nil
@@ -1042,9 +1003,7 @@ func (db *Database) GetFileByID(ctx context.Context, id uuid.UUID) (File, error)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return file, ErrFileNotFound
 		}
-		err = fmt.Errorf("GetFile: failed to scan file (id=%s): %w", id, err)
-		db.logger.Error("GetFile error", "error", err)
-		return file, err
+		return file, fmt.Errorf("GetFile: failed to scan file (id=%s): %w", id, err)
 	}
 	return file, nil
 }
@@ -1094,22 +1053,19 @@ func (db *Database) UpdateFileByID(ctx context.Context, id uuid.UUID, params Upd
 		args = append(args, params.SizeBytes.Data)
 		argNum++
 	}
+
 	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateFile: failed to update file (id=%s): %w", id, err)
-		db.logger.Error("UpdateFile error", "error", err)
-		return err
+		return fmt.Errorf("UpdateFile: failed to update file (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteFileByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_file WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteFile: failed to delete file (id=%s): %w", id, err)
-		db.logger.Error("DeleteFile error", "error", err)
-		return err
+		return fmt.Errorf("DeleteFile: failed to delete file (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -1132,9 +1088,7 @@ func (db *Database) CreateFileShare(ctx context.Context, params CreateFileShareP
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_file_share (id, file_id, shared_with_user_id, permission, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
 		share.ID, share.FileID, share.SharedWithUserID, share.Permission, share.CreatedAt, share.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateFileShare: failed to insert file share (file_id=%s, shared_with_user_id=%s): %w", share.FileID, share.SharedWithUserID, err)
-		db.logger.Error("CreateFileShare error", "error", err)
-		return share, err
+		return share, fmt.Errorf("CreateFileShare: failed to insert file share (file_id=%s, shared_with_user_id=%s): %w", share.FileID, share.SharedWithUserID, err)
 	}
 	return share, nil
 }
@@ -1159,21 +1113,20 @@ func (db *Database) ListFileShares(ctx context.Context, params ListFileSharesPar
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListFileShares error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListFileShares: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var share FileShare
 		if err := rows.Scan(&share.ID, &share.FileID, &share.SharedWithUserID, &share.Permission, &share.CreatedAt, &share.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListFileShares: failed to scan file share: %w", err)
 		}
 		shares = append(shares, share)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListFileShares: rows error: %w", err)
 	}
 
 	return shares, nil
@@ -1183,9 +1136,7 @@ func (db *Database) ListFileShares(ctx context.Context, params ListFileSharesPar
 
 func (db *Database) DeleteFileShareByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_file_share WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteFileShare: failed to delete file share (id=%s): %w", id, err)
-		db.logger.Error("DeleteFileShare error", "error", err)
-		return err
+		return fmt.Errorf("DeleteFileShare: failed to delete file share (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -1213,21 +1164,20 @@ func (db *Database) ListSharedFiles(ctx context.Context, params ListSharedFilesP
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListSharedFiles error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListSharedFiles: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var file File
 		if err := rows.Scan(&file.ID, &file.OwnerID, &file.ParentID, &file.Name, &file.MimeType, &file.Path, &file.S3Key, &file.SizeBytes, &file.CreatedAt, &file.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListSharedFiles: failed to scan file: %w", err)
 		}
 		files = append(files, file)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListSharedFiles: rows error: %w", err)
 	}
 
 	return files, nil
@@ -1236,8 +1186,7 @@ func (db *Database) ListSharedFiles(ctx context.Context, params ListSharedFilesP
 type CreateAuditLogEventParams struct {
 	OwnerID   uuid.UUID
 	EventType string
-	EventData AuditLogEventChange
-	CreatedAt time.Time
+	EventData json.RawMessage
 }
 
 type AuditLogEventChange struct {
@@ -1247,26 +1196,17 @@ type AuditLogEventChange struct {
 }
 
 func (db *Database) CreateAuditLogEvent(ctx context.Context, params CreateAuditLogEventParams) (AuditLogEvent, error) {
-	eventData, err := json.Marshal(params.EventData)
-	if err != nil {
-		err = fmt.Errorf("CreateAuditLogEvent: failed to marshal event data: %w", err)
-		db.logger.Error("CreateAuditLogEvent error", "error", err)
-		return AuditLogEvent{}, err
-	}
-
 	event := AuditLogEvent{
 		ID:        uuid.New(),
 		OwnerID:   params.OwnerID,
 		EventType: params.EventType,
-		EventData: eventData,
-		CreatedAt: params.CreatedAt,
+		EventData: params.EventData,
+		CreatedAt: time.Now(),
 	}
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_audit_log_event (id, owner_id, event_type, event_data, created_at) VALUES ($1, $2, $3, $4, $5)`,
 		event.ID, event.OwnerID, event.EventType, event.EventData, event.CreatedAt); err != nil {
-		err = fmt.Errorf("CreateAuditLogEvent: failed to insert audit log event (owner_id=%s): %w", event.OwnerID, err)
-		db.logger.Error("CreateAuditLogEvent error", "error", err)
-		return event, err
+		return event, fmt.Errorf("CreateAuditLogEvent: failed to insert audit log event (owner_id=%s): %w", event.OwnerID, err)
 	}
 	return event, nil
 }
@@ -1290,13 +1230,11 @@ func (db *Database) ListAuditLogEvents(ctx context.Context, params ListAuditLogE
 		args = append(args, params.OwnerID.Data)
 		argNum++
 	}
-
 	if params.StartTime.Some {
 		query.WriteString(fmt.Sprintf(" AND created_at >= $%d", argNum))
 		args = append(args, params.StartTime.Data)
 		argNum++
 	}
-
 	if params.EndTime.Some {
 		query.WriteString(fmt.Sprintf(" AND created_at <= $%d", argNum))
 		args = append(args, params.EndTime.Data)
@@ -1305,22 +1243,20 @@ func (db *Database) ListAuditLogEvents(ctx context.Context, params ListAuditLogE
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListAuditLogEvents error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListAuditLogEvents: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var event AuditLogEvent
 		if err := rows.Scan(&event.ID, &event.OwnerID, &event.EventType, &event.EventData, &event.CreatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListAuditLogEvents: failed to scan audit log event: %w", err)
 		}
 		events = append(events, event)
 	}
 
 	if err := rows.Err(); err != nil {
-		db.logger.Error("ListAuditLogEvents error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListAuditLogEvents: rows error: %w", err)
 	}
 
 	return events, nil
@@ -1332,7 +1268,7 @@ type CreateWebhookSubscriptionParams struct {
 	Description string
 	URL         string
 	Secret      string
-	EventTypes  []WebhookEventType
+	EventTypes  []string
 	IsActive    bool
 }
 
@@ -1352,9 +1288,7 @@ func (db *Database) CreateWebhookSubscription(ctx context.Context, params Create
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_webhook_subscription (id, owner_id, name, description, url, secret, event_types, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		subscription.ID, subscription.OwnerID, subscription.Name, subscription.Description, subscription.URL, subscription.Secret, subscription.EventTypes, subscription.IsActive, subscription.CreatedAt, subscription.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateWebhookSubscription: failed to insert webhook subscription (owner_id=%s, url=%s): %w", subscription.OwnerID, subscription.URL, err)
-		db.logger.Error("CreateWebhookSubscription error", "error", err)
-		return subscription, err
+		return subscription, fmt.Errorf("CreateWebhookSubscription: failed to insert webhook subscription (owner_id=%s, url=%s): %w", subscription.OwnerID, subscription.URL, err)
 	}
 	return subscription, nil
 }
@@ -1377,7 +1311,6 @@ func (db *Database) ListWebhookSubscriptions(ctx context.Context, params ListWeb
 		args = append(args, params.OwnerID.Data)
 		argNum++
 	}
-
 	if params.Active.Some {
 		query.WriteString(fmt.Sprintf(" AND active = $%d", argNum))
 		args = append(args, params.Active.Data)
@@ -1386,22 +1319,20 @@ func (db *Database) ListWebhookSubscriptions(ctx context.Context, params ListWeb
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListWebhookSubscriptions error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListWebhookSubscriptions: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var subscription WebhookSubscription
 		if err := rows.Scan(&subscription.ID, &subscription.OwnerID, &subscription.Name, &subscription.Description, &subscription.URL, &subscription.Secret, &subscription.EventTypes, &subscription.IsActive, &subscription.CreatedAt, &subscription.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListWebhookSubscriptions: failed to scan webhook subscription: %w", err)
 		}
 		subscriptions = append(subscriptions, subscription)
 	}
 
 	if err := rows.Err(); err != nil {
-		db.logger.Error("ListWebhookSubscriptions error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListWebhookSubscriptions: rows error: %w", err)
 	}
 
 	return subscriptions, nil
@@ -1427,31 +1358,26 @@ func (db *Database) UpdateWebhookSubscriptionByID(ctx context.Context, id uuid.U
 		args = append(args, params.Name.Data)
 		argNum++
 	}
-
 	if params.Description.Some {
 		query.WriteString(fmt.Sprintf("description = $%d, ", argNum))
 		args = append(args, params.Description.Data)
 		argNum++
 	}
-
 	if params.URL.Some {
 		query.WriteString(fmt.Sprintf("url = $%d, ", argNum))
 		args = append(args, params.URL.Data)
 		argNum++
 	}
-
 	if params.Secret.Some {
 		query.WriteString(fmt.Sprintf("secret = $%d, ", argNum))
 		args = append(args, params.Secret.Data)
 		argNum++
 	}
-
 	if params.EventTypes.Some {
 		query.WriteString(fmt.Sprintf("event_types = $%d, ", argNum))
 		args = append(args, params.EventTypes.Data)
 		argNum++
 	}
-
 	if params.IsActive.Some {
 		query.WriteString(fmt.Sprintf("is_active = $%d, ", argNum))
 		args = append(args, params.IsActive.Data)
@@ -1462,9 +1388,7 @@ func (db *Database) UpdateWebhookSubscriptionByID(ctx context.Context, id uuid.U
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateWebhook: failed to update webhook (id=%s): %w", id, err)
-		db.logger.Error("UpdateWebhook error", "error", err)
-		return err
+		return fmt.Errorf("UpdateWebhook: failed to update webhook (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -1486,15 +1410,13 @@ func (db *Database) DeleteWebhookByID(ctx context.Context, id uuid.UUID, params 
 	}
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("DeleteWebhookByID: failed to delete webhook (id=%s): %w", id, err)
-		db.logger.Error("DeleteWebhookByID error", "error", err)
-		return err
+		return fmt.Errorf("DeleteWebhookByID: failed to delete webhook (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 type CreateWebhookEventParams struct {
-	EventType WebhookEventType
+	EventType string
 	Payload   json.RawMessage
 }
 
@@ -1509,8 +1431,7 @@ func (db *Database) CreateWebhookEvent(ctx context.Context, params CreateWebhook
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_webhook_event (id, event_type, payload, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`,
 		event.ID, event.EventType, event.Payload, event.CreatedAt, event.UpdatedAt); err != nil {
-		db.logger.Error("CreateWebhookEvent error", "error", err)
-		return event, err
+		return event, fmt.Errorf("CreateWebhookEvent: failed to insert webhook event: %w", err)
 	}
 
 	if _, err := db.Exec(ctx, `
@@ -1519,8 +1440,7 @@ func (db *Database) CreateWebhookEvent(ctx context.Context, params CreateWebhook
         FROM tbl_webhook_subscription s
         WHERE s.is_active = true AND $2 = ANY(s.event_types)
     `, event.ID, string(event.EventType), WebhookDeliveryStatusPending); err != nil {
-		db.logger.Error("CreateWebhookEvent delivery creation error", "error", err)
-		return event, err
+		return event, fmt.Errorf("CreateWebhookEvent: failed to create webhook delivery: %w", err)
 	}
 
 	return event, nil
@@ -1546,23 +1466,20 @@ func (db *Database) ListWebhookEvents(ctx context.Context, params ListWebhookEve
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListWebhookEvents error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListWebhookEvents: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var event WebhookEvent
 		if err := rows.Scan(&event.ID, &event.EventType, &event.Payload, &event.CreatedAt, &event.UpdatedAt); err != nil {
-			db.logger.Error("ListWebhookEvents error", "error", err)
-			return nil, err
+			return nil, fmt.Errorf("ListWebhookEvents: failed to scan webhook event: %w", err)
 		}
 		events = append(events, event)
 	}
 
 	if err := rows.Err(); err != nil {
-		db.logger.Error("ListWebhookEvents error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListWebhookEvents: rows error: %w", err)
 	}
 
 	return events, nil
@@ -1625,8 +1542,7 @@ func (db *Database) ListWebhookDeliveries(ctx context.Context, params ListWebhoo
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListWebhookDeliveries query error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListWebhookDeliveries: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
@@ -1641,15 +1557,13 @@ func (db *Database) ListWebhookDeliveries(ctx context.Context, params ListWebhoo
 			&delivery.LastResponseCode, &delivery.LastResponseBody, &delivery.CreatedAt, &delivery.UpdatedAt,
 		)
 		if err != nil {
-			db.logger.Error("ListWebhookDeliveries scan error", "error", err)
-			return nil, err
+			return nil, fmt.Errorf("ListWebhookDeliveries: failed to scan webhook delivery: %w", err)
 		}
 		deliveries = append(deliveries, delivery)
 	}
 
 	if err := rows.Err(); err != nil {
-		db.logger.Error("ListWebhookDeliveries rows error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListWebhookDeliveries: rows error: %w", err)
 	}
 
 	return deliveries, nil
@@ -1675,31 +1589,26 @@ func (db *Database) UpdateWebhookDeliveryByID(ctx context.Context, id uuid.UUID,
 		args = append(args, params.Status.Data)
 		argNum++
 	}
-
 	if params.RetryCount.Some {
 		query.WriteString(fmt.Sprintf("retry_count = $%d, ", argNum))
 		args = append(args, params.RetryCount.Data)
 		argNum++
 	}
-
 	if params.LastAttemptAt.Some {
 		query.WriteString(fmt.Sprintf("last_attempt_at = $%d, ", argNum))
 		args = append(args, params.LastAttemptAt.Data)
 		argNum++
 	}
-
 	if params.NextAttemptAt.Some {
 		query.WriteString(fmt.Sprintf("next_attempt_at = $%d, ", argNum))
 		args = append(args, params.NextAttemptAt.Data)
 		argNum++
 	}
-
 	if params.LastResponseCode.Some {
 		query.WriteString(fmt.Sprintf("last_response_code = $%d, ", argNum))
 		args = append(args, params.LastResponseCode.Data)
 		argNum++
 	}
-
 	if params.LastResponseBody.Some {
 		query.WriteString(fmt.Sprintf("last_response_body = $%d, ", argNum))
 		args = append(args, params.LastResponseBody.Data)
@@ -1710,18 +1619,14 @@ func (db *Database) UpdateWebhookDeliveryByID(ctx context.Context, id uuid.UUID,
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateWebhookDelivery: failed to update webhook delivery (id=%s): %w", id, err)
-		db.logger.Error("UpdateWebhookDelivery error", "error", err)
-		return err
+		return fmt.Errorf("UpdateWebhookDelivery: failed to update webhook delivery (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteWebhookDeliveryByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_webhook_delivery WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteWebhookDelivery: failed to delete webhook delivery (id=%s): %w", id, err)
-		db.logger.Error("DeleteWebhookDelivery error", "error", err)
-		return err
+		return fmt.Errorf("DeleteWebhookDelivery: failed to delete webhook delivery (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -1754,9 +1659,7 @@ func (db *Database) CreateCalendarEvent(ctx context.Context, params CreateCalend
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_calendar_event (id, owner_id, title, description, start_time, end_time, all_day, status, location, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		event.ID, event.OwnerID, event.Title, event.Description, event.StartTime, event.EndTime, event.AllDay, event.Status, event.Location, event.CreatedAt, event.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateCalendarEvent: failed to insert calendar event (owner_id=%s, title=%s): %w", event.OwnerID, event.Title, err)
-		db.logger.Error("CreateCalendarEvent error", "error", err)
-		return event, err
+		return event, fmt.Errorf("CreateCalendarEvent: failed to insert calendar event (owner_id=%s, title=%s): %w", event.OwnerID, event.Title, err)
 	}
 	return event, nil
 }
@@ -1780,13 +1683,11 @@ func (db *Database) ListCalendarEvents(ctx context.Context, params ListCalendarE
 		args = append(args, params.OwnerID.Data)
 		argNum++
 	}
-
 	if params.StartDate.Some {
 		query.WriteString(fmt.Sprintf(" AND start_time >= $%d", argNum))
 		args = append(args, params.StartDate.Data)
 		argNum++
 	}
-
 	if params.EndDate.Some {
 		query.WriteString(fmt.Sprintf(" AND end_time <= $%d", argNum))
 		args = append(args, params.EndDate.Data)
@@ -1795,21 +1696,20 @@ func (db *Database) ListCalendarEvents(ctx context.Context, params ListCalendarE
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListCalendarEvents error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListCalendarEvents: failed to execute query: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var event CalendarEvent
 		if err := rows.Scan(&event.ID, &event.OwnerID, &event.Title, &event.Description, &event.StartTime, &event.EndTime, &event.AllDay, &event.Status, &event.Location, &event.CreatedAt, &event.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListCalendarEvents: failed to scan calendar event: %w", err)
 		}
 		events = append(events, event)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListCalendarEvents: rows error: %w", err)
 	}
 
 	return events, nil
@@ -1874,18 +1774,14 @@ func (db *Database) UpdateCalendarEventByID(ctx context.Context, id uuid.UUID, p
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateCalendarEvent: failed to update calendar event (id=%s): %w", id, err)
-		db.logger.Error("UpdateCalendarEvent error", "error", err)
-		return err
+		return fmt.Errorf("UpdateCalendarEvent: failed to update calendar event (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteCalendarEventByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_calendar_event WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteCalendarEvent: failed to delete calendar event (id=%s): %w", id, err)
-		db.logger.Error("DeleteCalendarEvent error", "error", err)
-		return err
+		return fmt.Errorf("DeleteCalendarEvent: failed to delete calendar event (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -1908,37 +1804,27 @@ func (db *Database) CreateCalendarEventAttendee(ctx context.Context, params Crea
 		UpdatedAt:       time.Now(),
 	}
 
-	if !params.UserID.Some && !params.Email.Some {
-		err := errors.New("CreateCalendarEventAttendee: either UserID or Email must be provided")
-		db.logger.Error("CreateCalendarEventAttendee error", "error", err)
-		return attendee, err
-	}
-
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_calendar_event_attendee (id, calendar_event_id, user_id, email, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		attendee.ID, attendee.CalendarEventID, attendee.UserID, attendee.Email, attendee.Status, attendee.CreatedAt, attendee.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateCalendarEventAttendee: failed to insert calendar event attendee (calendar_event_id=%s): %w", attendee.CalendarEventID, err)
-		db.logger.Error("CreateCalendarEventAttendee error", "error", err)
-		return attendee, err
+		return attendee, fmt.Errorf("CreateCalendarEventAttendee: failed to insert calendar event attendee (calendar_event_id=%s): %w", attendee.CalendarEventID, err)
 	}
 	return attendee, nil
 }
 
 func (db *Database) DeleteCalendarEventAttendee(ctx context.Context, attendeeID uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_calendar_event_attendee WHERE id = $1`, attendeeID); err != nil {
-		err = fmt.Errorf("DeleteCalendarEventAttendee: failed to delete calendar event attendee (id=%s): %w", attendeeID, err)
-		db.logger.Error("DeleteCalendarEventAttendee error", "error", err)
-		return err
+		return fmt.Errorf("DeleteCalendarEventAttendee: failed to delete calendar event attendee (id=%s): %w", attendeeID, err)
 	}
 	return nil
 }
 
 type CreateNotificationParams struct {
 	OwnerID   uuid.UUID
-	Type      NotificationType
+	Type      string
 	Title     string
 	Message   string
-	ActionURL util.Optional[string]
-	Read      bool
+	IsRead    bool
+	ActionURL string
 }
 
 func (db *Database) CreateNotification(ctx context.Context, params CreateNotificationParams) (Notification, error) {
@@ -1948,36 +1834,31 @@ func (db *Database) CreateNotification(ctx context.Context, params CreateNotific
 		Type:      params.Type,
 		Title:     params.Title,
 		Message:   params.Message,
+		IsRead:    params.IsRead,
 		ActionURL: params.ActionURL,
-		Read:      params.Read,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 
-	var actionURL *string
-	if params.ActionURL.Some {
-		actionURL = &params.ActionURL.Data
-	}
-
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_notification (id, owner_id, type, title, message, action_url, read, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		notification.ID, notification.OwnerID, notification.Type, notification.Title, notification.Message, actionURL, notification.Read, notification.CreatedAt, notification.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateNotification: failed to insert notification (owner_id=%s): %w", notification.OwnerID, err)
-		db.logger.Error("CreateNotification error", "error", err)
-		return notification, err
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_notification (id, owner_id, type, title, message, is_read, action_url, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		notification.ID, notification.OwnerID, notification.Type, notification.Title, notification.Message, notification.IsRead, notification.ActionURL, notification.CreatedAt, notification.UpdatedAt); err != nil {
+		return notification, fmt.Errorf("CreateNotification: failed to insert notification (owner_id=%s): %w", notification.OwnerID, err)
 	}
 	return notification, nil
 }
 
 type ListNotificationsParams struct {
-	OwnerID util.Optional[uuid.UUID]
-	Read    util.Optional[bool]
+	OwnerID          util.Optional[uuid.UUID]
+	Read             util.Optional[bool]
+	Limit            util.Optional[int32]
+	OrderByCreatedAt util.Optional[OrderBy]
 }
 
 func (db *Database) ListNotifications(ctx context.Context, params ListNotificationsParams) ([]Notification, error) {
 	var notifications []Notification
 
 	var query strings.Builder
-	query.WriteString(`SELECT id, owner_id, type, title, message, action_url, read, created_at, updated_at FROM tbl_notification WHERE 1=1`)
+	query.WriteString(`SELECT id, owner_id, type, title, message, is_read, action_url, created_at, updated_at FROM tbl_notification WHERE 1=1`)
 	var args []any
 	argNum := 1
 
@@ -1986,83 +1867,101 @@ func (db *Database) ListNotifications(ctx context.Context, params ListNotificati
 		args = append(args, params.OwnerID.Data)
 		argNum++
 	}
-
 	if params.Read.Some {
-		query.WriteString(fmt.Sprintf(" AND read = $%d", argNum))
+		query.WriteString(fmt.Sprintf(" AND is_read = $%d", argNum))
 		args = append(args, params.Read.Data)
 		argNum++
 	}
 
-	query.WriteString(" ORDER BY created_at DESC")
+	if params.OrderByCreatedAt.Some {
+		if params.OrderByCreatedAt.Data == OrderByASC {
+			query.WriteString(" ORDER BY created_at ASC")
+		} else {
+			query.WriteString(" ORDER BY created_at DESC")
+		}
+	}
+
+	if params.Limit.Some {
+		query.WriteString(fmt.Sprintf(" LIMIT $%d", argNum))
+		args = append(args, params.Limit.Data)
+		argNum++
+	}
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListNotifications error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListNotifications: failed to query notifications: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var notification Notification
-		var actionURL *string
-		if err := rows.Scan(&notification.ID, &notification.OwnerID, &notification.Type, &notification.Title, &notification.Message, &actionURL, &notification.Read, &notification.CreatedAt, &notification.UpdatedAt); err != nil {
-			return nil, err
-		}
-
-		if actionURL != nil {
-			notification.ActionURL = util.Some(*actionURL)
-		} else {
-			notification.ActionURL = util.None[string]()
+		if err := rows.Scan(&notification.ID, &notification.OwnerID, &notification.Type, &notification.Title, &notification.Message, &notification.IsRead, &notification.ActionURL, &notification.CreatedAt, &notification.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("ListNotifications: failed to scan notification: %w", err)
 		}
 
 		notifications = append(notifications, notification)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListNotifications: failed to iterate over notifications: %w", err)
 	}
 
 	return notifications, nil
 }
 
+func (db *Database) GetNotificationByID(ctx context.Context, id uuid.UUID) (Notification, error) {
+	var notification Notification
+	err := db.QueryRow(ctx, `SELECT id, owner_id, type, title, message, is_read, action_url, created_at, updated_at FROM tbl_notification WHERE id = $1`, id).
+		Scan(&notification.ID, &notification.OwnerID, &notification.Type, &notification.Title, &notification.Message, &notification.IsRead, &notification.CreatedAt, &notification.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return notification, ErrNotificationNotFound
+		}
+		return notification, fmt.Errorf("GetNotificationByID: failed to query notification (id=%s): %w", id, err)
+	}
+	return notification, nil
+}
+
 type UpdateNotificationParams struct {
-	ID      uuid.UUID
-	OwnerID uuid.UUID
-	Type    NotificationType
-	Message string
-	Read    bool
+	Type    util.Optional[string]
+	Message util.Optional[string]
+	IsRead  util.Optional[bool]
 }
 
 func (db *Database) UpdateNotificationByID(ctx context.Context, id uuid.UUID, params UpdateNotificationParams) error {
-	if _, err := db.Exec(ctx, `UPDATE tbl_notification SET owner_id = $1, type = $2, message = $3, read = $4, updated_at = $5 WHERE id = $6`,
-		params.OwnerID, params.Type, params.Message, params.Read, time.Now(), id); err != nil {
-		err = fmt.Errorf("UpdateNotification: failed to update notification (id=%s): %w", id, err)
-		db.logger.Error("UpdateNotification error", "error", err)
-		return err
+	var query strings.Builder
+	query.WriteString(`UPDATE tbl_notification SET `)
+	args := []any{}
+	argNum := 1
+
+	if params.Type.Some {
+		query.WriteString(fmt.Sprintf("type = $%d, ", argNum))
+		args = append(args, params.Type.Data)
+		argNum++
+	}
+	if params.Message.Some {
+		query.WriteString(fmt.Sprintf("message = $%d, ", argNum))
+		args = append(args, params.Message.Data)
+		argNum++
+	}
+	if params.IsRead.Some {
+		query.WriteString(fmt.Sprintf("is_read = $%d, ", argNum))
+		args = append(args, params.IsRead.Data)
+		argNum++
+	}
+
+	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
+	args = append(args, time.Now(), id)
+
+	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
+		return fmt.Errorf("UpdateNotification: failed to update notification (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteNotificationByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_notification WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteNotification: failed to delete notification (id=%s): %w", id, err)
-		db.logger.Error("DeleteNotification error", "error", err)
-		return err
-	}
-	return nil
-}
-
-type MarkNotificationAsReadParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
-}
-
-func (db *Database) MarkNotificationAsRead(ctx context.Context, params MarkNotificationAsReadParams) error {
-	if _, err := db.Exec(ctx, `UPDATE tbl_notification SET read = true, updated_at = $1 WHERE id = $2 AND owner_id = $3`,
-		time.Now(), params.ID, params.UserID); err != nil {
-		err = fmt.Errorf("MarkNotificationAsRead: failed to mark notification as read (id=%s, user_id=%s): %w", params.ID, params.UserID, err)
-		db.logger.Error("MarkNotificationAsRead error", "error", err)
-		return err
+		return fmt.Errorf("DeleteNotification: failed to delete notification (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -2070,55 +1969,9 @@ func (db *Database) MarkNotificationAsRead(ctx context.Context, params MarkNotif
 func (db *Database) MarkAllNotificationsAsRead(ctx context.Context, userID uuid.UUID) error {
 	if _, err := db.Exec(ctx, `UPDATE tbl_notification SET read = true, updated_at = $1 WHERE owner_id = $2 AND read = false`,
 		time.Now(), userID); err != nil {
-		err = fmt.Errorf("MarkAllNotificationsAsRead: failed to mark all notifications as read (user_id=%s): %w", userID, err)
-		db.logger.Error("MarkAllNotificationsAsRead error", "error", err)
-		return err
+		return fmt.Errorf("MarkAllNotificationsAsRead: failed to mark all notifications as read (user_id=%s): %w", userID, err)
 	}
 	return nil
-}
-
-type GetUserNotificationsParams struct {
-	UserID uuid.UUID
-	Limit  int32
-}
-
-func (db *Database) GetUserNotifications(ctx context.Context, params GetUserNotificationsParams) ([]Notification, error) {
-	var notifications []Notification
-
-	rows, err := db.Query(ctx,
-		`SELECT id, owner_id, type, title, message, action_url, read, created_at, updated_at 
-		 FROM tbl_notification 
-		 WHERE owner_id = $1 
-		 ORDER BY created_at DESC 
-		 LIMIT $2`,
-		params.UserID, params.Limit)
-	if err != nil {
-		db.logger.Error("GetUserNotifications error", "error", err)
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var notification Notification
-		var actionURL *string
-		if err := rows.Scan(&notification.ID, &notification.OwnerID, &notification.Type, &notification.Title, &notification.Message, &actionURL, &notification.Read, &notification.CreatedAt, &notification.UpdatedAt); err != nil {
-			return nil, err
-		}
-
-		if actionURL != nil {
-			notification.ActionURL = util.Some(*actionURL)
-		} else {
-			notification.ActionURL = util.None[string]()
-		}
-
-		notifications = append(notifications, notification)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return notifications, nil
 }
 
 type CreateOAuthClientParams struct {
@@ -2145,9 +1998,7 @@ func (db *Database) CreateOAuthClient(ctx context.Context, params CreateOAuthCli
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_oauth_client (id, owner_id, name, secret, redirect_uris, is_public, allowed_scopes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		client.ID, client.OwnerID, client.Name, client.Secret, client.RedirectURIs, client.IsPublic, client.AllowedScopes, client.CreatedAt, client.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateOAuthClient: failed to insert OAuth client (owner_id=%s): %w", client.OwnerID, err)
-		db.logger.Error("CreateOAuthClient error", "error", err)
-		return client, err
+		return client, fmt.Errorf("CreateOAuthClient: failed to insert OAuth client (owner_id=%s): %w", client.OwnerID, err)
 	}
 	return client, nil
 }
@@ -2172,21 +2023,20 @@ func (db *Database) ListOAuthClients(ctx context.Context, params ListOAuthClient
 
 	rows, err := db.Query(ctx, query.String(), args...)
 	if err != nil {
-		db.logger.Error("ListOAuthClients error", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("ListOAuthClients: failed to query OAuth clients: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var client OAuthClient
 		if err := rows.Scan(&client.ID, &client.OwnerID, &client.Name, &client.Secret, &client.RedirectURIs, &client.IsPublic, &client.AllowedScopes, &client.CreatedAt, &client.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ListOAuthClients: failed to scan OAuth client: %w", err)
 		}
 		clients = append(clients, client)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListOAuthClients: failed to iterate over OAuth clients: %w", err)
 	}
 
 	return clients, nil
@@ -2200,9 +2050,7 @@ func (db *Database) GetOAuthClientByID(ctx context.Context, id uuid.UUID) (OAuth
 		if errors.Is(err, pgx.ErrNoRows) {
 			return client, ErrOAuthClientNotFound
 		}
-		err = fmt.Errorf("GetOAuthClient: failed to scan OAuth client (id=%s): %w", id, err)
-		db.logger.Error("GetOAuthClient error", "error", err)
-		return client, err
+		return client, fmt.Errorf("GetOAuthClient: failed to scan OAuth client (id=%s): %w", id, err)
 	}
 	return client, nil
 }
@@ -2226,47 +2074,38 @@ func (db *Database) UpdateOAuthClientByID(ctx context.Context, id uuid.UUID, par
 		args = append(args, params.Name.Data)
 		argNum++
 	}
-
 	if params.Secret.Some {
 		query.WriteString(fmt.Sprintf("secret = $%d, ", argNum))
 		args = append(args, params.Secret.Data)
 		argNum++
 	}
-
 	if params.RedirectURIs.Some {
 		query.WriteString(fmt.Sprintf("redirect_uris = $%d, ", argNum))
 		args = append(args, params.RedirectURIs.Data)
 		argNum++
 	}
-
 	if params.IsPublic.Some {
 		query.WriteString(fmt.Sprintf("is_public = $%d, ", argNum))
 		args = append(args, params.IsPublic.Data)
 		argNum++
 	}
-
 	if params.AllowedScopes.Some {
 		query.WriteString(fmt.Sprintf("allowed_scopes = $%d, ", argNum))
 		args = append(args, params.AllowedScopes.Data)
 		argNum++
 	}
-
 	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateOAuthClient: failed to update OAuth client (id=%s): %w", id, err)
-		db.logger.Error("UpdateOAuthClient error", "error", err)
-		return err
+		return fmt.Errorf("UpdateOAuthClient: failed to update OAuth client (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteOAuthClientByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_oauth_client WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteOAuthClient: failed to delete OAuth client (id=%s): %w", id, err)
-		db.logger.Error("DeleteOAuthClient error", "error", err)
-		return err
+		return fmt.Errorf("DeleteOAuthClient: failed to delete OAuth client (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -2293,9 +2132,7 @@ func (db *Database) CreateOAuthAccessToken(ctx context.Context, params CreateOAu
 	}
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_oauth_access_token (id, token, client_id, user_id, data, expires_at, revoked_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, token.ID, token.Token, token.ClientID, token.UserID, token.Data, token.ExpiresAt, token.RevokedAt, token.CreatedAt, token.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateOAuthAccessToken: failed to insert OAuth access token (id=%s): %w", token.ID, err)
-		db.logger.Error("CreateOAuthAccessToken error", "error", err)
-		return token, err
+		return token, fmt.Errorf("CreateOAuthAccessToken: failed to insert OAuth access token (id=%s): %w", token.ID, err)
 	}
 	return token, nil
 }
@@ -2326,7 +2163,6 @@ func (db *Database) GetOAuthAccessToken(ctx context.Context, params GetOAuthAcce
 		args = append(args, params.ID.Data)
 		argNum++
 	}
-
 	if params.Token.Some {
 		query.WriteString(fmt.Sprintf(" AND token = $%d", argNum))
 		args = append(args, params.Token.Data)
@@ -2338,9 +2174,7 @@ func (db *Database) GetOAuthAccessToken(ctx context.Context, params GetOAuthAcce
 		if errors.Is(err, pgx.ErrNoRows) {
 			return accessToken, ErrOAuthAccessTokenNotFound
 		}
-		err = fmt.Errorf("GetOAuthAccessToken: failed to scan OAuth access token: %w", err)
-		db.logger.Error("GetOAuthAccessToken error", "error", err)
-		return accessToken, err
+		return accessToken, fmt.Errorf("GetOAuthAccessToken: failed to scan OAuth access token: %w", err)
 	}
 	return accessToken, nil
 }
@@ -2365,9 +2199,7 @@ func (db *Database) UpdateOAuthAccessTokenByID(ctx context.Context, id uuid.UUID
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateOAuthAccessToken: failed to update OAuth access token (id=%s): %w", id, err)
-		db.logger.Error("UpdateOAuthAccessToken error", "error", err)
-		return err
+		return fmt.Errorf("UpdateOAuthAccessToken: failed to update OAuth access token (id=%s): %w", id, err)
 	}
 	return nil
 }
@@ -2401,9 +2233,7 @@ func (db *Database) CreateOAuthAuthorizationCode(ctx context.Context, params Cre
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_oauth_auth_code (id, token, client_id, user_id, scopes, code_challenge, code_challenge_method, redirect_uri, expires_at, used_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		authCode.ID, authCode.Token, authCode.ClientID, authCode.UserID, authCode.Scopes, authCode.CodeChallenge, authCode.CodeChallengeMethod, authCode.RedirectURI, authCode.ExpiresAt, authCode.UsedAt, authCode.CreatedAt, authCode.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateOAuthAuthorizationCode: failed to insert OAuth authorization code (token=%s): %w", authCode.Token, err)
-		db.logger.Error("CreateOAuthAuthorizationCode error", "error", err)
-		return authCode, err
+		return authCode, fmt.Errorf("CreateOAuthAuthorizationCode: failed to insert OAuth authorization code (token=%s): %w", authCode.Token, err)
 	}
 	return authCode, nil
 }
@@ -2433,7 +2263,6 @@ func (db *Database) GetOAuthAuthorizationCode(ctx context.Context, params GetOAu
 		args = append(args, params.ID.Data)
 		argNum++
 	}
-
 	if params.Token.Some {
 		query.WriteString(fmt.Sprintf(" AND token = $%d", argNum))
 		args = append(args, params.Token.Data)
@@ -2446,9 +2275,7 @@ func (db *Database) GetOAuthAuthorizationCode(ctx context.Context, params GetOAu
 		if errors.Is(err, pgx.ErrNoRows) {
 			return authCode, ErrOAuthAuthorizationCodeNotFound
 		}
-		err = fmt.Errorf("GetOAuthAuthorizationCode: failed to scan OAuth authorization code: %w", err)
-		db.logger.Error("GetOAuthAuthorizationCode error", "error", err)
-		return authCode, err
+		return authCode, fmt.Errorf("GetOAuthAuthorizationCode: failed to scan OAuth authorization code: %w", err)
 	}
 	return authCode, nil
 }
@@ -2472,9 +2299,7 @@ func (db *Database) UpdateOAuthAuthorizationCode(ctx context.Context, codeID uui
 	args = append(args, time.Now(), codeID)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateOAuthAuthorizationCode: failed to update OAuth authorization code (id=%s): %w", codeID, err)
-		db.logger.Error("UpdateOAuthAuthorizationCode error", "error", err)
-		return err
+		return fmt.Errorf("UpdateOAuthAuthorizationCode: failed to update OAuth authorization code (id=%s): %w", codeID, err)
 	}
 	return nil
 }
@@ -2497,9 +2322,7 @@ func (db *Database) CreateOAuthRefreshTokenChain(ctx context.Context, params Cre
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_oauth_refresh_token_chain (id, client_id, user_id, scopes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
 		chain.ID, chain.ClientID, chain.UserID, chain.Scopes, chain.CreatedAt, chain.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateOAuthRefreshTokenChain: failed to insert OAuth refresh token chain (id=%s): %w", chain.ID, err)
-		db.logger.Error("CreateOAuthRefreshTokenChain error", "error", err)
-		return chain, err
+		return chain, fmt.Errorf("CreateOAuthRefreshTokenChain: failed to insert OAuth refresh token chain (id=%s): %w", chain.ID, err)
 	}
 	return chain, nil
 }
@@ -2512,9 +2335,7 @@ func (db *Database) GetOAuthRefreshTokenChainByID(ctx context.Context, id uuid.U
 		if errors.Is(err, pgx.ErrNoRows) {
 			return chain, ErrOAuthRefreshTokenChainNotFound
 		}
-		err = fmt.Errorf("GetOAuthRefreshTokenChain: failed to scan OAuth refresh token chain (id=%s): %w", id, err)
-		db.logger.Error("GetOAuthRefreshTokenChain error", "error", err)
-		return chain, err
+		return chain, fmt.Errorf("GetOAuthRefreshTokenChain: failed to scan OAuth refresh token chain (id=%s): %w", id, err)
 	}
 	return chain, nil
 }
@@ -2539,9 +2360,7 @@ func (db *Database) CreateOAuthRefreshToken(ctx context.Context, params CreateOA
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_oauth_refresh_token (id, token, chain_id, expires_at, used_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		token.ID, token.Token, token.ChainID, token.ExpiresAt, token.UsedAt, token.CreatedAt, token.UpdatedAt); err != nil {
-		err = fmt.Errorf("CreateOAuthRefreshToken: failed to insert OAuth refresh token (id=%s): %w", token.ID, err)
-		db.logger.Error("CreateOAuthRefreshToken error", "error", err)
-		return token, err
+		return token, fmt.Errorf("CreateOAuthRefreshToken: failed to insert OAuth refresh token (id=%s): %w", token.ID, err)
 	}
 	return token, nil
 }
@@ -2571,7 +2390,6 @@ func (db *Database) GetOAuthRefreshToken(ctx context.Context, params GetOAuthRef
 		args = append(args, params.ID.Data)
 		argNum++
 	}
-
 	if params.Token.Some {
 		query.WriteString(fmt.Sprintf(" AND token = $%d", argNum))
 		args = append(args, params.Token.Data)
@@ -2584,9 +2402,7 @@ func (db *Database) GetOAuthRefreshToken(ctx context.Context, params GetOAuthRef
 		if errors.Is(err, pgx.ErrNoRows) {
 			return refreshToken, ErrOAuthRefreshTokenNotFound
 		}
-		err = fmt.Errorf("GetOAuthRefreshToken: failed to scan OAuth refresh token: %w", err)
-		db.logger.Error("GetOAuthRefreshToken error", "error", err)
-		return refreshToken, err
+		return refreshToken, fmt.Errorf("GetOAuthRefreshToken: failed to scan OAuth refresh token: %w", err)
 	}
 	return refreshToken, nil
 }
@@ -2606,13 +2422,12 @@ func (db *Database) UpdateOAuthRefreshToken(ctx context.Context, tokenID uuid.UU
 		args = append(args, params.UsedAt.Data)
 		argNum++
 	}
+
 	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
 	args = append(args, time.Now(), tokenID)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateOAuthRefreshToken: failed to update OAuth refresh token (id=%s): %w", tokenID, err)
-		db.logger.Error("UpdateOAuthRefreshToken error", "error", err)
-		return err
+		return fmt.Errorf("UpdateOAuthRefreshToken: failed to update OAuth refresh token (id=%s): %w", tokenID, err)
 	}
 	return nil
 }
@@ -2643,9 +2458,7 @@ func (db *Database) CreateSession(ctx context.Context, params CreateSessionParam
 
 	if _, err := db.Exec(ctx, `INSERT INTO tbl_session (id, user_id, token, user_agent, ip_address, data, expires_at, created_at, updated_at, revoked_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		session.ID, session.UserID, session.Token, session.UserAgent, session.IPAddress, session.Data, session.ExpiresAt, session.CreatedAt, session.UpdatedAt, session.RevokedAt); err != nil {
-		err = fmt.Errorf("CreateSession: failed to insert session (user_id=%s): %w", session.UserID, err)
-		db.logger.Error("CreateSession error", "error", err)
-		return session, err
+		return session, fmt.Errorf("CreateSession: failed to insert session (user_id=%s): %w", session.UserID, err)
 	}
 	return session, nil
 }
@@ -2676,7 +2489,6 @@ func (db *Database) GetSession(ctx context.Context, params GetSessionParams) (Se
 		args = append(args, params.ID.Data)
 		argNum++
 	}
-
 	if params.Token.Some {
 		query.WriteString(fmt.Sprintf(" AND token = $%d", argNum))
 		args = append(args, params.Token.Data)
@@ -2689,9 +2501,7 @@ func (db *Database) GetSession(ctx context.Context, params GetSessionParams) (Se
 		if errors.Is(err, pgx.ErrNoRows) {
 			return session, ErrSessionNotFound
 		}
-		err = fmt.Errorf("RetrieveSession: failed to scan session: %w", err)
-		db.logger.Error("RetrieveSession error", "error", err)
-		return session, err
+		return session, fmt.Errorf("RetrieveSession: failed to scan session: %w", err)
 	}
 	return session, nil
 }
@@ -2714,19 +2524,16 @@ func (db *Database) UpdateSessionByID(ctx context.Context, id uuid.UUID, params 
 		args = append(args, params.Token.Data)
 		argNum++
 	}
-
 	if params.UserID.Some {
 		query.WriteString(fmt.Sprintf("user_id = $%d, ", argNum))
 		args = append(args, params.UserID.Data)
 		argNum++
 	}
-
 	if params.Data.Some {
 		query.WriteString(fmt.Sprintf("data = $%d, ", argNum))
 		args = append(args, params.Data.Data)
 		argNum++
 	}
-
 	if params.RevokedAt.Some {
 		query.WriteString(fmt.Sprintf("revoked_at = $%d, ", argNum))
 		args = append(args, params.RevokedAt.Data)
@@ -2737,27 +2544,21 @@ func (db *Database) UpdateSessionByID(ctx context.Context, id uuid.UUID, params 
 	args = append(args, time.Now(), id)
 
 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-		err = fmt.Errorf("UpdateSession: failed to update session (id=%s): %w", id, err)
-		db.logger.Error("UpdateSession error", "error", err)
-		return err
+		return fmt.Errorf("UpdateSession: failed to update session (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteSessionByID(ctx context.Context, id uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_session WHERE id = $1`, id); err != nil {
-		err = fmt.Errorf("DeleteSession: failed to delete session (id=%s): %w", id, err)
-		db.logger.Error("DeleteSession error", "error", err)
-		return err
+		return fmt.Errorf("DeleteSessionByID: failed to delete session (id=%s): %w", id, err)
 	}
 	return nil
 }
 
 func (db *Database) DeleteUserSessions(ctx context.Context, userID uuid.UUID) error {
 	if _, err := db.Exec(ctx, `DELETE FROM tbl_session WHERE user_id = $1`, userID); err != nil {
-		err = fmt.Errorf("DeleteUserSessions: failed to delete sessions for user (user_id=%s): %w", userID, err)
-		db.logger.Error("DeleteUserSessions error", "error", err)
-		return err
+		return fmt.Errorf("DeleteUserSessions: failed to delete sessions for user (user_id=%s): %w", userID, err)
 	}
 	return nil
 }

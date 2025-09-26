@@ -10,6 +10,7 @@ CREATE TABLE tbl_user (
     is_email_verified BOOLEAN NOT NULL,
     is_bot BOOLEAN NOT NULL,
     stripe_customer_id TEXT NOT NULL,
+    stripe_subscription_id TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
@@ -233,15 +234,17 @@ CREATE TABLE tbl_notification (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
     type TEXT NOT NULL,        -- e.g., 'info', 'warning', 'error'
+    title TEXT NOT NULL,
     message TEXT NOT NULL,
-    read BOOLEAN NOT NULL DEFAULT FALSE,
+    is_read BOOLEAN NOT NULL,
+    action_url TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_notification_owner_id ON tbl_notification (owner_id);
 CREATE INDEX idx_notification_type ON tbl_notification (type);
-CREATE INDEX idx_notification_read ON tbl_notification (read);
+CREATE INDEX idx_notification_is_read ON tbl_notification (is_read);
 CREATE INDEX idx_notification_created_at ON tbl_notification (created_at);
 
 CREATE TABLE tbl_oauth_client (

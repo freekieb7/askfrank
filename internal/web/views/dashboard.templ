@@ -2,11 +2,11 @@ package views
 
 import "hp/internal/web/views/component"
 
-type HomePageProps struct {
+type DashboardPageProps struct {
 	component.AppLayoutProps
 }
 
-templ HomePage(props HomePageProps) {
+templ DashboardPage(props DashboardPageProps) {
 	@component.AppLayout(props.AppLayoutProps) {
 		<div class="content-container">
 			<!-- Page header -->

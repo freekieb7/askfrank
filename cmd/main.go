@@ -3,13 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"hp/internal/audit"
+	"hp/internal/auth"
 	"hp/internal/config"
 	"hp/internal/daemon"
 	"hp/internal/database"
 	"hp/internal/i18n"
+	"hp/internal/notifications"
 	"hp/internal/session"
 	"hp/internal/stripe"
+	"hp/internal/subscription"
 	"hp/internal/web"
+	"hp/internal/webhook"
 	"log/slog"
 	"net/http"
 	"os"
@@ -51,9 +56,6 @@ func run(ctx context.Context) error {
 	// }
 	// authorization := openfga.NewAuthorizationService(&fgaClient)
 
-	// Set up Stripe client
-	stripeClient := stripe.NewClient(cfg.Stripe.APIKey)
-
 	// Set up i18n translator
 	translator := i18n.NewTranslator(i18n.NL)
 	if err := translator.LoadTranslations(); err != nil {
@@ -62,7 +64,7 @@ func run(ctx context.Context) error {
 
 	// Set up Postgres connection
 	pg := database.NewPostgres()
-	db := database.NewDatabase(&pg, logger)
+	db := database.NewDatabase(&pg)
 	dsn := "host=" + cfg.Database.Host +
 		" port=" + strconv.Itoa(cfg.Database.Port) +
 		" user=" + cfg.Database.User +
@@ -76,6 +78,9 @@ func run(ctx context.Context) error {
 	}
 	defer db.Close()
 
+	// Set up Stripe client
+	stripeClient := stripe.NewClient(logger, cfg.Stripe.APIKey, &db)
+
 	// Set up session store
 	sessionStore := session.New(
 		&db,
@@ -87,7 +92,18 @@ func run(ctx context.Context) error {
 			Path:           "/",
 			Domain:         "",                                // Add this - leave empty for current domain or set explicitly
 			CookieMaxAge:   int(24 * time.Hour / time.Second), // Add explicit MaxAge
-		})
+		},
+	)
+
+	auditor := audit.NewAuditor(logger, &db)
+
+	webhookManager := webhook.NewManager(logger, &db)
+
+	notifier := notifications.NewNotifier(logger, &db)
+
+	authenticator := auth.NewAuthenticator(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
+
+	subscriptionManager := subscription.NewManager(logger, &stripeClient)
 
 	// Set up Fiber app
 	router := web.NewRouter()
@@ -96,7 +112,7 @@ func run(ctx context.Context) error {
 	// 	WriteTimeout: cfg.Server.WriteTimeout,
 	// })
 
-	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &db, &stripeClient)
+	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &db, &authenticator, &webhookManager, &subscriptionManager)
 	apiHandler := web.NewApiHandler(logger, &db, &sessionStore)
 
 	// Middleware
@@ -131,16 +147,21 @@ func run(ctx context.Context) error {
 	router.Static("/static", "./internal/web/static")
 	router.Group("", func(group *web.Router) {
 		// Public routes
-		group.GET("/login", pageHandler.ShowLoginPage)
-		group.POST("/login", pageHandler.Login)
-
-		group.GET("/register", pageHandler.ShowRegisterPage)
-		group.POST("/register", pageHandler.Register)
 		group.GET("/docs", pageHandler.ShowDocsPage)
+
+		group.Group("/login", func(loginGroup *web.Router) {
+			loginGroup.GET("", pageHandler.ShowLoginPage)
+			loginGroup.POST("", pageHandler.Login)
+		})
+
+		group.Group("/register", func(registerGroup *web.Router) {
+			registerGroup.GET("", pageHandler.ShowRegisterPage)
+			registerGroup.POST("", pageHandler.Register)
+		})
 
 		// Protected routes
 		group.Group("", func(group *web.Router) {
-			group.GET("/dashboard", pageHandler.ShowHomePage)
+			group.GET("/dashboard", pageHandler.ShowDashboardPage)
 			group.POST("/logout", pageHandler.Logout)
 
 			group.Group("/billing", func(billingGroup *web.Router) {
@@ -200,14 +221,16 @@ func run(ctx context.Context) error {
 
 		// Protected API routes (require session authentication)
 		apiGroup.Group("", func(protectedApiGroup *web.Router) {
-			// Webhook testing endpoint
-			protectedApiGroup.POST("/webhook/test", apiHandler.TriggerTestWebhookEvent)
-
 			// Notification endpoints
 			protectedApiGroup.POST("/notifications/:id/read", apiHandler.MarkNotificationAsRead)
 			protectedApiGroup.POST("/notifications/mark-all-read", apiHandler.MarkAllNotificationsAsRead)
 			protectedApiGroup.GET("/notifications", apiHandler.GetNotifications)
-			protectedApiGroup.POST("/notifications/test", apiHandler.CreateTestNotification)
+
+			// Calendar endpoints
+			protectedApiGroup.GET("/calendar/events", apiHandler.GetCalendarEvents)
+			protectedApiGroup.POST("/calendar/events", apiHandler.CreateCalendarEvent)
+			protectedApiGroup.PUT("/calendar/events/:id", apiHandler.UpdateCalendarEvent)
+			protectedApiGroup.DELETE("/calendar/events/:id", apiHandler.DeleteCalendarEvent)
 		}, web.AuthenticatedSessionMiddleware(&sessionStore))
 	})
 

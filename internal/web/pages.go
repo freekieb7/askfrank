@@ -4,17 +4,20 @@ import (
 	"context"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"hp/internal/auth"
 	"hp/internal/config"
 	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/openfga"
 	"hp/internal/session"
-	"hp/internal/stripe"
+	"hp/internal/subscription"
 	"hp/internal/util"
 	"hp/internal/web/translate"
 	"hp/internal/web/views"
 	"hp/internal/web/views/component"
+	"hp/internal/webhook"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,7 +28,6 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func init() {
@@ -33,16 +35,18 @@ func init() {
 }
 
 type PageHandler struct {
-	logger        *slog.Logger
-	translator    *i18n.Translator
-	sessionStore  *session.Store
-	db            *database.Database
-	authorization *openfga.AuthorizationService
-	stripe        *stripe.Client
+	logger              *slog.Logger
+	translator          *i18n.Translator
+	sessionStore        *session.Store
+	db                  *database.Database
+	authorization       *openfga.AuthorizationService
+	authenticator       *auth.Authenticator
+	webhookManager      *webhook.Manager
+	subscriptionManager *subscription.Manager
 }
 
-func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, stripe *stripe.Client) *PageHandler {
-	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, stripe: stripe}
+func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, authenticator *auth.Authenticator, webhookManager *webhook.Manager, subscriptionManager *subscription.Manager) *PageHandler {
+	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, authenticator: authenticator, webhookManager: webhookManager, subscriptionManager: subscriptionManager}
 }
 
 func (h *PageHandler) layoutProps(ctx context.Context, title string) component.LayoutProps {
@@ -66,9 +70,10 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
 	// Get recent notifications for the dropdown (limit to 10)
-	recentNotifications, err := h.db.GetUserNotifications(ctx, database.GetUserNotificationsParams{
-		UserID: userID,
-		Limit:  10,
+	recentNotifications, err := h.db.ListNotifications(ctx, database.ListNotificationsParams{
+		OwnerID:          util.Some(userID),
+		Limit:            util.Some(int32(10)),
+		OrderByCreatedAt: util.Some(database.OrderByDESC),
 	})
 	if err != nil {
 		h.logger.Error("Failed to get recent notifications", "error", err)
@@ -92,14 +97,10 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 			ID:        dbNotification.ID.String(),
 			Title:     dbNotification.Title,
 			Message:   dbNotification.Message,
-			Type:      string(dbNotification.Type),
-			IsRead:    dbNotification.Read,
+			Type:      dbNotification.Type,
+			IsRead:    dbNotification.IsRead,
+			ActionURL: dbNotification.ActionURL,
 			CreatedAt: dbNotification.CreatedAt.Format("2 Jan 2006 15:04"),
-			ActionURL: "",
-		}
-
-		if dbNotification.ActionURL.Some {
-			componentNotifications[i].ActionURL = dbNotification.ActionURL.Data
 		}
 	}
 
@@ -135,18 +136,11 @@ func (h *PageHandler) ShowDocsPage(w http.ResponseWriter, r *http.Request) error
 	}))
 }
 
-func (h *PageHandler) ShowHomePage(w http.ResponseWriter, r *http.Request) error {
-	// // Due to default muxing, simplest way to check if page exists
-	// if r.URL.Path != "/" {
-	// 	return JSONResponse(w, http.StatusNotFound, ApiResponse{
-	// 		Status:  APIResponseStatusError,
-	// 		Message: "Not Found",
-	// 	})
-	// }
+func (h *PageHandler) ShowDashboardPage(w http.ResponseWriter, r *http.Request) error {
 
 	ctx := r.Context()
-	return render(ctx, w, views.HomePage(views.HomePageProps{
-		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Home"), r),
+	return render(ctx, w, views.DashboardPage(views.DashboardPageProps{
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Dashboard"), r),
 	}))
 }
 
@@ -217,6 +211,18 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
+	// Fetch user by email
+	userID, err := h.authenticator.Login(ctx, auth.LoginParam{
+		Email:    loginReq.Email,
+		Password: loginReq.Password,
+	})
+	if err != nil {
+		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid email or password",
+		})
+	}
+
 	// Determine session duration based on "Remember Me" option
 	var sessionDuration time.Duration
 	if loginReq.RememberMe {
@@ -226,38 +232,13 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	}
 	sess.ExpiresAt = time.Now().Add(sessionDuration)
 
-	// Fetch user by email
-	user, err := h.db.GetUserByEmail(ctx, loginReq.Email)
-	if err != nil {
-		if err == database.ErrUserNotFound {
-			h.logger.Warn("Login attempt with non-existing user", "email", loginReq.Email)
-			return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-				Status:  APIResponseStatusError,
-				Message: "Invalid email or password",
-			})
-		}
-
-		h.logger.Error("Failed to get user by email", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to get user by email",
-		})
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(loginReq.Password)); err != nil {
-		return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Invalid email or password",
-		})
-	}
-
 	// Regenerate session ID to prevent fixation TODO look into this
 	// if err := sess.Regenerate(); err != nil {
 	// 	h.logger.Error("Failed to regenerate session ID", "error", err)
 	// 	// Continue, but log
 	// }
 	// Set user ID in session
-	sess.UserID = util.Some(user.ID)
+	sess.UserID = util.Some(userID)
 
 	// Redirect to the originally requested page or home
 	redirectTo := "/dashboard"
@@ -266,64 +247,6 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 		redirectTo = sess.Data["redirect_to"].(string)
 		// Clear the redirect_to after using it
 		delete(sess.Data, "redirect_to")
-	}
-
-	// eventData, err := json.Marshal(map[string]any{
-	// 	"ip_address": c.IP(),
-	// 	"timestamp":  time.Now().UTC().Format(time.RFC3339),
-	// 	"user_agent": c.Get("User-Agent"),
-	// })
-	// if err != nil {
-	// 	h.logger.Error("Failed to marshal event data", "error", err)
-	// 	return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-	// 		Status:  APIResponseStatusError,
-	// 		Message: "Failed to marshal event data",
-	// 	})
-	// }
-
-	// h.db.CreateAuditLogEvent(ctx, database.CreateAuditLogEventParams{
-	// 	OwnerID:   user.ID,
-	// 	EventType: "login",
-	// 	EventData: database.AuditLogEventChange{
-	// 		Key:      "login.v1",
-	// 		OldValue: util.None[[]byte](),
-	// 		NewValue: util.Some(eventData),
-	// 	},
-	// 	CreatedAt: time.Now(),
-	// })
-
-	payload, err := json.Marshal(map[string]any{
-		"event":      database.WebhookEventTypeUserLogin,
-		"user_id":    user.ID,
-		"email":      user.Email,
-		"ip_address": r.RemoteAddr,
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
-		"user_agent": r.UserAgent(),
-	})
-	if err != nil {
-		h.logger.Error("Failed to marshal event data", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to marshal event data",
-		})
-	}
-
-	if _, err := h.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
-		EventType: database.WebhookEventTypeUserLogin,
-		Payload:   json.RawMessage(payload),
-	}); err != nil {
-		h.logger.Error("Failed to create webhook event for user login", "error", err)
-		// Continue, but log
-	}
-
-	if _, err := h.db.CreateNotification(ctx, database.CreateNotificationParams{
-		OwnerID: user.ID,
-		Type:    database.NotificationTypeInfo,
-		Message: "You have successfully logged in.",
-		Read:    false,
-	}); err != nil {
-		h.logger.Error("Failed to create notification for user login", "error", err)
-		// Continue, but log
 	}
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
@@ -351,49 +274,12 @@ func (h *PageHandler) Logout(w http.ResponseWriter, r *http.Request) error {
 		}
 	}()
 
+	if err := h.authenticator.Logout(ctx, sess.UserID.Data); err != nil {
+		h.logger.Error("Failed to sign out user", "error", err)
+	}
+
 	if err := h.sessionStore.Destroy(ctx, w, sess); err != nil {
 		h.logger.Error("Failed to destroy session", "error", err)
-	}
-
-	// Create logout event
-	if _, err := h.db.CreateAuditLogEvent(ctx, database.CreateAuditLogEventParams{
-		OwnerID:   sess.UserID.Data,
-		EventType: "logout",
-		EventData: database.AuditLogEventChange{
-			Key:      "logout.v1",
-			OldValue: util.None[[]byte](),
-			NewValue: util.Some([]byte(`{"user_id":"` + sess.UserID.Data.String() + `"}`)),
-		},
-		CreatedAt: time.Now(),
-	}); err != nil {
-		h.logger.Error("Failed to create audit log event for logout", "error", err)
-		// Continue, but log
-	}
-
-	// Create webhook event
-	payload, err := json.Marshal(map[string]any{
-		"event_type": database.WebhookEventTypeUserLogout,
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
-		"data": map[string]any{
-			"user_id":    sess.UserID.Data.String(),
-			"ip_address": r.RemoteAddr,
-			"user_agent": r.UserAgent(),
-		},
-	})
-	if err != nil {
-		h.logger.Error("Failed to marshal event data", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to marshal event data",
-		})
-	}
-
-	if _, err := h.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
-		EventType: database.WebhookEventTypeUserLogout,
-		Payload:   json.RawMessage(payload),
-	}); err != nil {
-		h.logger.Error("Failed to create webhook event for logout", "error", err)
-		// Continue, but log
 	}
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
@@ -468,76 +354,35 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check if user already exists
-	_, err = h.db.GetUserByEmail(ctx, req.Email)
-	if err == nil {
-		// User already exists
-		return JSONResponse(w, http.StatusConflict, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "An account with this email already exists",
-		})
-	}
-	if err != database.ErrUserNotFound {
-		h.logger.Error("Failed to check if user exists", "error", err, "email", req.Email)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Something went wrong, please try again later",
-		})
-	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		h.logger.Error("Failed to hash password", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to hash password, please try again later",
-		})
-	}
-
-	customer, err := h.stripe.CreateCustomer(ctx, stripe.CreateCustomerParams{
-		Email: req.Email,
+	userID, err := h.authenticator.Register(ctx, auth.RegisterParam{
+		Name:     req.Name,
+		Email:    req.Email,
+		Password: req.Password,
 	})
 	if err != nil {
-		h.logger.Error("Failed to create Stripe customer", "error", err)
+		if errors.Is(err, auth.ErrEmailAlreadyInUse) {
+			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Email already in use",
+			})
+		}
+
+		h.logger.Error("Failed to register user", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
-			Message: "Failed to create Stripe customer, please try again later",
+			Message: "Failed to register user",
 		})
 	}
 
-	h.stripe.AddSubscription(ctx, stripe.AddSubscriptionParams{
-		CustomerID: customer.ID,
-		PriceID:    stripe.FreePlanPriceID,
-	})
-
-	user, err := h.db.CreateUser(ctx, database.CreateUserParams{
-		Name:             req.Name,
-		Email:            req.Email,
-		PasswordHash:     string(passwordHash),
-		StripeCustomerID: customer.ID,
-	})
-	if err != nil {
-		h.logger.Error("Failed to create user", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to create user, please try again later",
-		})
-	}
-
-	if _, err := h.db.CreateNotification(ctx, database.CreateNotificationParams{
-		OwnerID: user.ID,
-		Type:    database.NotificationTypeInfo,
-		Message: "Welcome to AskFrank! Your account has been created successfully.",
-		Read:    false,
-	}); err != nil {
-		h.logger.Error("Failed to create notification", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to create notification, please try again later",
-		})
-	}
+	// Regenerate session ID to prevent fixation TODO look into this
+	// if err := sess.Regenerate(); err != nil {
+	// 	h.logger.Error("Failed to regenerate session ID", "error", err)
+	// 	// Continue, but log
+	// }
+	sess.ExpiresAt = time.Now().Add(2 * time.Hour) // Default 2 hour session
 
 	// Set user ID in session
-	sess.UserID = util.Some(user.ID)
+	sess.UserID = util.Some(userID)
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
 		Status:  APIResponseStatusSuccess,
@@ -553,6 +398,60 @@ func (h *PageHandler) ShowBillingPage(w http.ResponseWriter, r *http.Request) er
 	return render(ctx, w, views.BillingPage(views.BillingPageProps{
 		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Billing"), r),
 	}))
+}
+
+type ChangeSubscriptionRequest struct {
+	NewPlan string `json:"new_plan"` // e.g., "free", "pro", "enterprise"
+}
+
+func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+
+	var req ChangeSubscriptionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode change subscription request", "error", err)
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid request",
+		})
+	}
+
+	if req.NewPlan == "" {
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "New plan is required",
+		})
+	}
+
+	var plan subscription.Plan
+	switch req.NewPlan {
+	case "free":
+		plan = subscription.PlanFree
+	case "pro":
+		plan = subscription.PlanPro
+	// case "enterprise":
+	// 	plan = subscription.PlanEnterprise
+	default:
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid plan selected",
+		})
+	}
+
+	if err := h.subscriptionManager.ChangeSubscription(ctx, userID, plan); err != nil {
+		h.logger.Error("Failed to change subscription", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to change subscription",
+		})
+	}
+
+	return JSONResponse(w, http.StatusOK, ApiResponse{
+		Status:  APIResponseStatusSuccess,
+		Message: "Subscription changed successfully",
+	})
 }
 
 // func (h *PageHandler) CreateCheckoutSession(w http.ResponseWriter, r *http.Request) error {
@@ -1501,43 +1400,39 @@ func (h *PageHandler) ShowCalendarPage(w http.ResponseWriter, r *http.Request) e
 		})
 	}
 
-	// Convert to view model
+	// Convert database events to view events
+	viewEvents := make([]views.CalendarEvent, len(events))
+	for i, event := range events {
+		viewEvents[i] = views.CalendarEvent{
+			ID:          event.ID.String(),
+			Title:       event.Title,
+			Description: event.Description,
+			StartTime:   event.StartTime,
+			EndTime:     event.EndTime,
+			Location:    event.Location.Unwrap(),
+			AllDay:      event.AllDay,
+			Status:      string(event.Status),
+		}
+	}
+
+	// Convert to view model for days (simplified now that JS handles most of the work)
 	viewDays := make([]views.CalendarDay, numDays)
 	for i := range viewDays {
 		date := startDate.AddDate(0, 0, i)
 		viewDays[i] = views.CalendarDay{
-			Date: date,
-			Events: []views.CalendarEvent{
-				{
-					ID:          "123",
-					Title:       "Test Event",
-					Description: "Something",
-					StartTime:   time.Time{},
-					EndTime:     time.Time{},
-					Location:    "",
-					AllDay:      false,
-				},
-			},
-		}
-
-		for _, event := range events {
-			if date.Compare(event.StartTime) == 0 {
-				viewDays[i].Events = append(viewDays[i].Events, views.CalendarEvent{
-					ID:          event.ID.String(),
-					Title:       event.Title,
-					Description: event.Description,
-					StartTime:   event.StartTime,
-					EndTime:     event.EndTime,
-					Location:    event.Location.Unwrap(),
-					AllDay:      event.AllDay,
-				})
-			}
+			Date:   date,
+			Events: []views.CalendarEvent{}, // Events will be handled by JavaScript
 		}
 	}
+
+	// Get current month for navigation
+	currentMonth := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
 
 	return render(ctx, w, views.CalendarPage(views.CalendarPageProps{
 		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Calendar"), r),
 		Days:           viewDays,
+		CurrentMonth:   currentMonth,
+		Events:         viewEvents,
 	}))
 }
 
@@ -1581,12 +1476,7 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 	return render(ctx, w, views.WebhooksPage(views.WebhooksPageProps{
 		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Webhooks"), r),
 		Subscriptions:  viewSubscriptions,
-		EventTypes: []string{
-			string(database.WebhookEventTypeFileCreated),
-			string(database.WebhookEventTypeFileDeleted),
-			string(database.WebhookEventTypeUserLogin),
-			string(database.WebhookEventTypeUserLogout),
-		},
+		EventTypes:     h.webhookManager.EventTypes(),
 	}))
 }
 
@@ -1617,61 +1507,42 @@ func (h *PageHandler) CreateWebhookSubscription(w http.ResponseWriter, r *http.R
 	}
 
 	// Validate event types
-	validEventTypes := map[string]database.WebhookEventType{
-		"file.created": database.WebhookEventTypeFileCreated,
-		"file.deleted": database.WebhookEventTypeFileDeleted,
-		"user.login":   database.WebhookEventTypeUserLogin,
-		"user.logout":  database.WebhookEventTypeUserLogout,
-	}
-
-	eventTypes := make([]database.WebhookEventType, 0, len(req.EventTypes))
-	for _, et := range req.EventTypes {
-		if validType, ok := validEventTypes[et]; ok {
-			eventTypes = append(eventTypes, validType)
-		} else {
+	eventTypes := make([]webhook.EventType, len(req.EventTypes))
+	for idx, etStr := range req.EventTypes {
+		vet, err := webhook.EventTypeFromString(etStr)
+		if err != nil {
 			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 				Status:  APIResponseStatusError,
-				Message: "Invalid event type: " + et,
+				Message: "Invalid event type: " + etStr,
 			})
 		}
+		eventTypes[idx] = vet
 	}
 
-	// Create the webhook subscription in the database
-	secret, err := util.RandomString(32)
-	if err != nil {
-		h.logger.Error("Failed to generate webhook secret", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to create webhook",
-		})
-	}
-	webhook, err := h.db.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{
+	subscriptionID, err := h.webhookManager.RegisterSubscription(ctx, webhook.RegisterSubscriptionParam{
 		OwnerID:     userID,
 		Name:        req.Name,
 		Description: req.Description,
 		URL:         req.URL,
 		EventTypes:  eventTypes,
-		IsActive:    true,
-		Secret:      secret,
 	})
 	if err != nil {
-		h.logger.Error("Failed to create webhook", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
-			Message: "Failed to create webhook",
+			Message: "Failed to create webhook subscription",
 		})
 	}
 
 	return JSONResponse(w, http.StatusCreated, ApiResponse{
 		Status: APIResponseStatusSuccess,
 		Data: map[string]any{
-			"id":          webhook.ID.String(),
-			"name":        webhook.Name,
-			"description": webhook.Description,
-			"url":         webhook.URL,
-			"event_types": webhook.EventTypes,
-			"is_active":   webhook.IsActive,
-			"created_at":  webhook.CreatedAt,
+			"id": subscriptionID.String(),
+			// "name":        webhook.Name,
+			// "description": webhook.Description,
+			// "url":         webhook.URL,
+			// "event_types": webhook.EventTypes,
+			// "is_active":   webhook.IsActive,
+			// "created_at":  webhook.CreatedAt,
 		},
 	})
 }

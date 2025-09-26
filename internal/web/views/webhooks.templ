@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"hp/internal/web/views/component"
+	"hp/internal/webhook"
 	"strings"
 	"time"
 )
@@ -22,7 +23,7 @@ type WebhookSubscription struct {
 type WebhooksPageProps struct {
 	component.AppLayoutProps
 	Subscriptions []WebhookSubscription
-	EventTypes    []string
+	EventTypes    []webhook.EventType
 }
 
 templ WebhooksPage(props WebhooksPageProps) {
