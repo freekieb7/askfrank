@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v82"
+	stripeCheckoutSession "github.com/stripe/stripe-go/v82/checkout/session"
 	stripeCustomer "github.com/stripe/stripe-go/v82/customer"
 	stripeSubscription "github.com/stripe/stripe-go/v82/subscription"
 )
@@ -50,25 +51,48 @@ func (c *Client) CreateCustomer(ctx context.Context, params CreateCustomerParams
 		Email: stripe.String(params.Email),
 	})
 	if err != nil {
-		return customer, err
+		return customer, fmt.Errorf("failed to create Stripe customer: %w", err)
 	}
 
 	customer.ID = result.ID
 	customer.Email = result.Email
 
-	if _, err := stripeSubscription.New(&stripe.SubscriptionParams{
-		Customer: stripe.String(customer.ID),
-		Items: []*stripe.SubscriptionItemsParams{
-			{
-				Price: stripe.String(string(PriceIDFreePlan)),
-			},
-		},
-	}); err != nil {
-		c.logger.Error("Failed to create Stripe subscription", "error", err)
-		return customer, fmt.Errorf("failed to create Stripe subscription: %w", err)
+	return customer, nil
+}
+func (c *Client) GetSubscriptionByCustomerID(ctx context.Context, customerID string) (*stripe.Subscription, error) {
+	stripe.Key = c.APIKey
+
+	params := &stripe.SubscriptionListParams{
+		Customer: stripe.String(customerID),
+	}
+	params.Limit = stripe.Int64(1)
+
+	i := stripeSubscription.List(params)
+	if i.Next() {
+		return i.Subscription(), nil
+	}
+	if err := i.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list subscriptions: %w", err)
 	}
 
-	return customer, nil
+	return nil, nil // No subscription found
+}
+
+func (c *Client) AddSubscriptionToCustomer(ctx context.Context, customerID string, priceID PriceID) (string, error) {
+	stripe.Key = c.APIKey
+
+	subscription, err := stripeSubscription.New(&stripe.SubscriptionParams{
+		Customer: stripe.String(customerID),
+		Items: []*stripe.SubscriptionItemsParams{
+			{
+				Price: stripe.String(string(priceID)),
+			},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to create Stripe subscription: %w", err)
+	}
+	return subscription.ID, nil
 }
 
 func (c *Client) SwitchSubscriptionPlan(ctx context.Context, userID uuid.UUID, newPriceID PriceID) error {
@@ -76,14 +100,13 @@ func (c *Client) SwitchSubscriptionPlan(ctx context.Context, userID uuid.UUID, n
 
 	user, err := c.db.GetUserByID(ctx, userID)
 	if err != nil {
-		c.logger.Error("Failed to get user by ID", "error", err, "userID", userID)
 		return fmt.Errorf("failed to get user by ID: %w", err)
 	}
 
 	// Retrieve the subscription to get the current items
 	subscription, err := stripeSubscription.Get(user.StripeSubscriptionID, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to retrieve Stripe subscription: %w", err)
 	}
 
 	if len(subscription.Items.Data) == 0 {
@@ -99,8 +122,37 @@ func (c *Client) SwitchSubscriptionPlan(ctx context.Context, userID uuid.UUID, n
 			},
 		},
 	}); err != nil {
-		c.logger.Error("Failed to update Stripe subscription", "error", err)
 		return fmt.Errorf("failed to update Stripe subscription: %w", err)
 	}
 	return nil
+}
+
+func (c *Client) CreateCheckoutSession(ctx context.Context, userID uuid.UUID, priceID PriceID, successURL, cancelURL string) (string, error) {
+	stripe.Key = c.APIKey
+
+	user, err := c.db.GetUserByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user by ID: %w", err)
+	}
+
+	params := &stripe.CheckoutSessionParams{
+		Customer:                 stripe.String(user.StripeCustomerID),
+		SuccessURL:               stripe.String(successURL),
+		CancelURL:                stripe.String(cancelURL),
+		Mode:                     stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		BillingAddressCollection: stripe.String(string(stripe.CheckoutSessionBillingAddressCollectionAuto)),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			{
+				Price:    stripe.String(string(priceID)),
+				Quantity: stripe.Int64(1),
+			},
+		},
+	}
+
+	session, err := stripeCheckoutSession.New(params)
+	if err != nil {
+		return "", fmt.Errorf("failed to create Stripe checkout session: %w", err)
+	}
+
+	return session.URL, nil
 }

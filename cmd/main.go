@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"hp/internal/account"
 	"hp/internal/audit"
-	"hp/internal/auth"
 	"hp/internal/config"
 	"hp/internal/daemon"
 	"hp/internal/database"
@@ -12,7 +12,6 @@ import (
 	"hp/internal/notifications"
 	"hp/internal/session"
 	"hp/internal/stripe"
-	"hp/internal/subscription"
 	"hp/internal/web"
 	"hp/internal/webhook"
 	"log/slog"
@@ -101,9 +100,9 @@ func run(ctx context.Context) error {
 
 	notifier := notifications.NewNotifier(logger, &db)
 
-	authenticator := auth.NewAuthenticator(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
+	authenticator := account.NewAuthenticator(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
 
-	subscriptionManager := subscription.NewManager(logger, &stripeClient)
+	accountManager := account.NewManager(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
 
 	// Set up Fiber app
 	router := web.NewRouter()
@@ -112,8 +111,8 @@ func run(ctx context.Context) error {
 	// 	WriteTimeout: cfg.Server.WriteTimeout,
 	// })
 
-	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &db, &authenticator, &webhookManager, &subscriptionManager)
-	apiHandler := web.NewApiHandler(logger, &db, &sessionStore)
+	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &db, &accountManager, &webhookManager, &authenticator)
+	apiHandler := web.NewApiHandler(logger, &db, &sessionStore, &accountManager)
 
 	// Middleware
 	// Enable gzip compression
@@ -123,25 +122,7 @@ func run(ctx context.Context) error {
 	// 	}))
 	// }
 
-	// app.Use(middleware.Logger())
-	// app.Use(middleware.Recover())
-	// app.Use(middleware.RequestID())
 	// app.Use(middleware.CORS())
-	// app.Use(middleware.Localization())
-
-	// csrfMiddleware := csrf.New(csrf.Config{
-	// 	KeyLookup:         "header:X-CSRF-Token",
-	// 	CookieName:        "hp-csrf_",
-	// 	CookieSameSite:    "Lax",
-	// 	CookieSecure:      cfg.Server.Environment == "production",
-	// 	CookieSessionOnly: true,
-	// 	CookieHTTPOnly:    true,
-	// 	Expiration:        1 * time.Hour,
-	// 	KeyGenerator:      utils.UUIDv4,
-	// 	Session:           sessionStore,
-	// 	SessionKey:        "fiber.csrf.token",
-	// 	ContextKey:        "csrf_token",
-	// })
 
 	// Routes
 	router.Static("/static", "./internal/web/static")
@@ -167,7 +148,7 @@ func run(ctx context.Context) error {
 			group.Group("/billing", func(billingGroup *web.Router) {
 				// billingGroup.Use(middleware.AuthenticatedSession(sessionStore))
 				billingGroup.GET("", pageHandler.ShowBillingPage)
-				// billingGroup.POST("/update", pageHandler.UpdateBilling)
+				billingGroup.POST("/change_subscription", pageHandler.ChangeSubscription)
 			})
 			group.Group("/drive", func(driveGroup *web.Router) {
 				driveGroup.GET("", pageHandler.ShowMyDrivePage)
@@ -219,6 +200,8 @@ func run(ctx context.Context) error {
 		// Public API routes
 		apiGroup.GET("/health", apiHandler.Healthy)
 
+		apiGroup.POST("/stripe/webhook", apiHandler.StripeWebhook)
+
 		// Protected API routes (require session authentication)
 		apiGroup.Group("", func(protectedApiGroup *web.Router) {
 			// Notification endpoints
@@ -233,32 +216,6 @@ func run(ctx context.Context) error {
 			protectedApiGroup.DELETE("/calendar/events/:id", apiHandler.DeleteCalendarEvent)
 		}, web.AuthenticatedSessionMiddleware(&sessionStore))
 	})
-
-	// // WebRTC signaling
-	// app.Use("/ws/rtc", func(c *fiber.Ctx) error {
-	// 	// Check if websocket request
-	// 	if websocket.IsWebSocketUpgrade(c) {
-	// 		// Get user from session to authenticate
-	// 		sess, err := sessionStore.Get(c)
-	// 		if err != nil {
-	// 			return c.Status(fiber.StatusUnauthorized).SendString("Unauthorized")
-	// 		}
-
-	// 		userID := sess.Get("user_id")
-	// 		if userID == nil {
-	// 			return c.Status(fiber.StatusUnauthorized).SendString("Unauthorized")
-	// 		}
-
-	// 		c.Locals("user_id", userID)
-	// 		return c.Next()
-	// 	}
-	// 	return c.Status(fiber.StatusUpgradeRequired).SendString("Upgrade required")
-	// })
-
-	// signalingServer := rtc.NewSignalingServer(logger)
-	// app.Get("/ws/rtc", websocket.New(func(c *websocket.Conn) {
-	// 	signalingServer.HandleConnection(c)
-	// }))
 
 	// // Static file serving with compression and caching
 	// app.Static("/static", "./internal/web/static", fiber.Static{
@@ -319,6 +276,7 @@ func run(ctx context.Context) error {
 	// Start the server
 	server := web.NewServer(logger, router)
 	go func() {
+		logger.Info("Starting HTTP server...", "addr", cfg.Server.Host+":"+cfg.Server.Port)
 		if err := server.ListenAndServe(cfg.Server.Host + ":" + cfg.Server.Port); err != nil {
 			panic(err)
 		}

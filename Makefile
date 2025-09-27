@@ -45,3 +45,6 @@ openfga-build:
 	go build -o bin/openfga ./cmd/openfga
 
 dev: docker-compose-up air
+
+ngrok:
+	ngrok http 3001

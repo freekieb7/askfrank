@@ -1,10 +1,13 @@
 package web
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"hp/internal/account"
 	"hp/internal/config"
 	"hp/internal/database"
 	"hp/internal/session"
@@ -19,7 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stripe/stripe-go/v82/webhook"
+	"github.com/stripe/stripe-go/v82"
 )
 
 var (
@@ -28,16 +31,18 @@ var (
 )
 
 type ApiHandler struct {
-	logger       *slog.Logger
-	db           *database.Database
-	sessionStore *session.Store
+	logger         *slog.Logger
+	db             *database.Database
+	sessionStore   *session.Store
+	accountManager *account.Manager
 }
 
-func NewApiHandler(logger *slog.Logger, db *database.Database, sessionStore *session.Store) *ApiHandler {
+func NewApiHandler(logger *slog.Logger, db *database.Database, sessionStore *session.Store, accountManager *account.Manager) *ApiHandler {
 	return &ApiHandler{
-		logger:       logger,
-		db:           db,
-		sessionStore: sessionStore,
+		logger:         logger,
+		db:             db,
+		sessionStore:   sessionStore,
+		accountManager: accountManager,
 	}
 }
 
@@ -514,54 +519,71 @@ func RedirectOAuthResponse(w http.ResponseWriter, redirectURI string, state stri
 }
 
 func (h *ApiHandler) StripeWebhook(w http.ResponseWriter, r *http.Request) error {
-	// Handle Stripe webhook events
-	// This is a placeholder for actual webhook handling logic
-	endpointSecret := "whsec_r0fySCr2f4JP6Sm2lXYK8HXJkRApaRhC"
+	ctx := r.Context()
+
+	// Read the request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		h.logger.Error("Failed to read webhook request body", "error", err)
-		w.WriteHeader(http.StatusBadRequest)
-		return json.NewEncoder(w).Encode(map[string]any{
-			"status":  "error",
-			"message": "Invalid request body",
+		h.logger.Error("Failed to read webhook body", "error", err)
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to read request body",
 		})
-	}
-	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), endpointSecret)
-	if err != nil {
-		h.logger.Error("Failed to construct webhook event", "error", err)
-		w.WriteHeader(http.StatusBadRequest)
-		return json.NewEncoder(w).Encode(map[string]any{
-			"status":  "error",
-			"message": "Invalid webhook payload",
-		})
-	}
-	// Process the event based on its type
-	switch event.Type {
-	case "customer.subscription.created":
-		// Handle successful customer subscription creation
-		h.logger.Info("Customer subscription created", "event", event)
-	case "customer.subscription.updated":
-		// Handle customer subscription updated
-		h.logger.Info("Customer subscription updated", "event", event)
-	case "customer.subscription.deleted":
-		// Handle customer subscription deletion
-		h.logger.Info("Customer subscription deleted", "event", event)
-	case "invoice.payment_succeeded":
-		// Handle successful invoice payment
-		h.logger.Info("Invoice payment succeeded", "event", event)
-	case "invoice.payment_failed":
-		// Handle failed invoice payment
-		h.logger.Info("Invoice payment failed", "event", event)
-	default:
-		h.logger.Info("Unhandled event type", "type", event.Type)
 	}
 
-	// Respond with 200 OK to acknowledge receipt of the event
-	w.WriteHeader(http.StatusOK)
+	// Verify the webhook signature (you'll need to add webhook secret to config)
+	// endpointSecret := "whsec_..." // Get this from Stripe dashboard
+	// event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), endpointSecret)
+	// if err != nil {
+	// 	h.logger.Error("Failed to verify webhook signature", "error", err)
+	// 	return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+	// 		Status:  APIResponseStatusError,
+	// 		Message: "Invalid signature",
+	// 	})
+	// }
+
+	// For now, parse without signature verification (add verification in production)
+	var event stripe.Event
+	if err := json.Unmarshal(body, &event); err != nil {
+		h.logger.Error("Failed to parse webhook event", "error", err)
+		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Invalid JSON",
+		})
+	}
+
+	h.logger.Info("Received Stripe webhook", "event_type", event.Type, "event_id", event.ID)
+
+	switch event.Type {
+	case "checkout.session.completed":
+		if err := h.handleCheckoutSessionCompleted(ctx, event); err != nil {
+			h.logger.Error("Failed to handle checkout session completed", "error", err)
+			return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Failed to process webhook",
+			})
+		}
+	default:
+		h.logger.Info("Unhandled webhook event type", "event_type", event.Type)
+	}
+
 	return JSONResponse(w, http.StatusOK, ApiResponse{
-		Status:  APIResponseStatusSuccess,
-		Message: "Webhook received successfully",
+		Status: APIResponseStatusSuccess,
 	})
+}
+
+func (h *ApiHandler) handleCheckoutSessionCompleted(ctx context.Context, event stripe.Event) error {
+	var session stripe.CheckoutSession
+	if err := json.Unmarshal(event.Data.Raw, &session); err != nil {
+		return fmt.Errorf("failed to unmarshal checkout session: %w", err)
+	}
+
+	// Update user's subscription in database
+	if err := h.accountManager.SyncUserSubscription(ctx, session.Subscription.ID); err != nil {
+		return fmt.Errorf("failed to update user subscription: %w", err)
+	}
+
+	return nil
 }
 
 func (h *ApiHandler) ListClients(w http.ResponseWriter, r *http.Request) error {

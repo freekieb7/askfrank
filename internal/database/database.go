@@ -39,6 +39,7 @@ type User struct {
 	IsBot                bool
 	StripeCustomerID     string
 	StripeSubscriptionID string
+	StripeProductPriceID string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -320,6 +321,7 @@ type CreateUserParams struct {
 	IsBot                bool
 	StripeCustomerID     string
 	StripeSubscriptionID string
+	StripeProductPriceID string
 }
 
 func (db *Database) CreateUser(ctx context.Context, params CreateUserParams) (User, error) {
@@ -332,75 +334,16 @@ func (db *Database) CreateUser(ctx context.Context, params CreateUserParams) (Us
 		IsBot:                params.IsBot,
 		StripeCustomerID:     params.StripeCustomerID,
 		StripeSubscriptionID: params.StripeSubscriptionID,
+		StripeProductPriceID: params.StripeProductPriceID,
 		CreatedAt:            time.Now(),
 		UpdatedAt:            time.Now(),
 	}
 
-	if _, err := db.Exec(ctx, `INSERT INTO tbl_user (id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, stripe_subscription_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		user.ID, user.Name, user.Email, user.PasswordHash, user.IsEmailVerified, user.IsBot, user.StripeCustomerID, user.StripeSubscriptionID, user.CreatedAt, user.UpdatedAt); err != nil {
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_user (id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, stripe_subscription_id, stripe_product_price_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		user.ID, user.Name, user.Email, user.PasswordHash, user.IsEmailVerified, user.IsBot, user.StripeCustomerID, user.StripeSubscriptionID, user.StripeProductPriceID, user.CreatedAt, user.UpdatedAt); err != nil {
 		return user, fmt.Errorf("CreateUser: failed to insert user (email=%s): %w", user.Email, err)
 	}
 	return user, nil
-}
-
-type ListUsersParams struct {
-	Email           util.Optional[string]
-	Name            util.Optional[string]
-	IsBot           util.Optional[bool]
-	IsEmailVerified util.Optional[bool]
-}
-
-func (db *Database) ListUsers(ctx context.Context, params ListUsersParams) ([]User, error) {
-	var users []User
-
-	var query strings.Builder
-	query.WriteString(`SELECT id, name, email, password_hash, is_email_verified, is_bot, stripe_id, created_at, updated_at FROM tbl_user`)
-	var args []any
-	argNum := 1
-
-	if params.Email.Some {
-		query.WriteString(fmt.Sprintf(" WHERE email = $%d", argNum))
-		args = append(args, params.Email.Data)
-		argNum++
-	}
-
-	if params.Name.Some {
-		query.WriteString(fmt.Sprintf(" AND name = $%d", argNum))
-		args = append(args, params.Name.Data)
-		argNum++
-	}
-
-	if params.IsBot.Some {
-		query.WriteString(fmt.Sprintf(" AND is_bot = $%d", argNum))
-		args = append(args, params.IsBot.Data)
-		argNum++
-	}
-
-	if params.IsEmailVerified.Some {
-		query.WriteString(fmt.Sprintf(" AND is_email_verified = $%d", argNum))
-		args = append(args, params.IsEmailVerified.Data)
-		argNum++
-	}
-
-	rows, err := db.Query(ctx, query.String(), args...)
-	if err != nil {
-		return nil, fmt.Errorf("ListUsers: failed to execute query: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var user User
-		if err := rows.Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.IsBot, &user.StripeCustomerID, &user.CreatedAt, &user.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("ListUsers: failed to scan user: %w", err)
-		}
-		users = append(users, user)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("ListUsers: rows error: %w", err)
-	}
-
-	return users, nil
 }
 
 func (db *Database) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -411,16 +354,26 @@ func (db *Database) GetUserByEmail(ctx context.Context, email string) (User, err
 	return db.GetUser(ctx, GetUserParams{Email: util.Some(email)})
 }
 
+func (db *Database) GetUserByStripeCustomerID(ctx context.Context, stripeCustomerID string) (User, error) {
+	return db.GetUser(ctx, GetUserParams{StripeCustomerID: util.Some(stripeCustomerID)})
+}
+
+func (db *Database) GetUserByStripeSubscriptionID(ctx context.Context, stripeSubscriptionID string) (User, error) {
+	return db.GetUser(ctx, GetUserParams{StripeSubscriptionID: util.Some(stripeSubscriptionID)})
+}
+
 type GetUserParams struct {
-	ID    util.Optional[uuid.UUID]
-	Email util.Optional[string]
+	ID                   util.Optional[uuid.UUID]
+	Email                util.Optional[string]
+	StripeCustomerID     util.Optional[string]
+	StripeSubscriptionID util.Optional[string]
 }
 
 func (db *Database) GetUser(ctx context.Context, params GetUserParams) (User, error) {
 	var user User
 
 	var query strings.Builder
-	query.WriteString(`SELECT id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, stripe_subscription_id, created_at, updated_at FROM tbl_user WHERE 1=1`)
+	query.WriteString(`SELECT id, name, email, password_hash, is_email_verified, is_bot, stripe_customer_id, stripe_subscription_id, stripe_product_price_id, created_at, updated_at FROM tbl_user WHERE 1=1`)
 	var args []any
 	argNum := 1
 
@@ -429,15 +382,24 @@ func (db *Database) GetUser(ctx context.Context, params GetUserParams) (User, er
 		args = append(args, params.ID.Data)
 		argNum++
 	}
-
 	if params.Email.Some {
 		query.WriteString(fmt.Sprintf(" AND email = $%d", argNum))
 		args = append(args, params.Email.Data)
 		argNum++
 	}
+	if params.StripeCustomerID.Some {
+		query.WriteString(fmt.Sprintf(" AND stripe_customer_id = $%d", argNum))
+		args = append(args, params.StripeCustomerID.Data)
+		argNum++
+	}
+	if params.StripeSubscriptionID.Some {
+		query.WriteString(fmt.Sprintf(" AND stripe_subscription_id = $%d", argNum))
+		args = append(args, params.StripeSubscriptionID.Data)
+		argNum++
+	}
 
 	err := db.QueryRow(ctx, query.String(), args...).Scan(
-		&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.IsBot, &user.StripeCustomerID, &user.StripeSubscriptionID, &user.CreatedAt, &user.UpdatedAt)
+		&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.IsEmailVerified, &user.IsBot, &user.StripeCustomerID, &user.StripeSubscriptionID, &user.StripeProductPriceID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return user, ErrUserNotFound
@@ -455,6 +417,7 @@ type UpdateUserParams struct {
 	IsBot                util.Optional[bool]
 	StripeCustomerID     util.Optional[string]
 	StripeSubscriptionID util.Optional[string]
+	StripeProductPriceID util.Optional[string]
 	DeletedAt            util.Optional[time.Time]
 }
 
@@ -503,6 +466,12 @@ func (db *Database) UpdateUserByID(ctx context.Context, userID uuid.UUID, params
 	if params.StripeSubscriptionID.Some {
 		query.WriteString(fmt.Sprintf("stripe_subscription_id = $%d, ", argNum))
 		args = append(args, params.StripeSubscriptionID)
+		argNum++
+	}
+
+	if params.StripeProductPriceID.Some {
+		query.WriteString(fmt.Sprintf("stripe_product_price_id = $%d, ", argNum))
+		args = append(args, params.StripeProductPriceID)
 		argNum++
 	}
 

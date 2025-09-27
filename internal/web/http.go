@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
@@ -111,12 +112,18 @@ func (r *Router) Group(path string, grouper GroupFunc, middlewares ...Middleware
 type Server struct {
 	logger *slog.Logger
 	Router Router
+	server http.Server
 }
 
 func NewServer(logger *slog.Logger, router Router) Server {
 	return Server{
 		logger: logger,
 		Router: router,
+		server: http.Server{
+			ReadTimeout:  10 * time.Second, // max time to read request (headers + body)
+			WriteTimeout: 10 * time.Second, // max time to write response
+			IdleTimeout:  60 * time.Second, // keep-alive connections
+		},
 	}
 }
 
@@ -148,6 +155,8 @@ func (s *Server) ListenAndServe(addr string) error {
 		})
 	}
 
-	s.logger.Info("server starting", "addr", addr)
-	return http.ListenAndServe(addr, mux)
+	s.server.Addr = addr
+	s.server.Handler = mux
+
+	return s.server.ListenAndServe()
 }

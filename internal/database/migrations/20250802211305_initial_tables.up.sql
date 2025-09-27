@@ -11,12 +11,15 @@ CREATE TABLE tbl_user (
     is_bot BOOLEAN NOT NULL,
     stripe_customer_id TEXT NOT NULL,
     stripe_subscription_id TEXT NOT NULL,
+    stripe_product_price_id TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_user_email ON tbl_user (email);
-CREATE INDEX idx_user_stripe_customer_id ON tbl_user (stripe_customer_id);
+CREATE UNIQUE INDEX idx_user_stripe_customer_id ON tbl_user (stripe_customer_id);
+CREATE UNIQUE INDEX idx_user_stripe_subscription_id ON tbl_user (stripe_subscription_id);
+CREATE INDEX idx_user_stripe_product_price_id ON tbl_user (stripe_product_price_id);
 CREATE INDEX idx_user_created_at ON tbl_user (created_at);
 
 CREATE TABLE tbl_session (

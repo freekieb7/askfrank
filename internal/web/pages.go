@@ -6,13 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hp/internal/auth"
+	"hp/internal/account"
 	"hp/internal/config"
 	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/openfga"
 	"hp/internal/session"
-	"hp/internal/subscription"
 	"hp/internal/util"
 	"hp/internal/web/translate"
 	"hp/internal/web/views"
@@ -35,18 +34,18 @@ func init() {
 }
 
 type PageHandler struct {
-	logger              *slog.Logger
-	translator          *i18n.Translator
-	sessionStore        *session.Store
-	db                  *database.Database
-	authorization       *openfga.AuthorizationService
-	authenticator       *auth.Authenticator
-	webhookManager      *webhook.Manager
-	subscriptionManager *subscription.Manager
+	logger         *slog.Logger
+	translator     *i18n.Translator
+	sessionStore   *session.Store
+	db             *database.Database
+	authorization  *openfga.AuthorizationService
+	accountManager *account.Manager
+	authenticator  *account.Authenticator
+	webhookManager *webhook.Manager
 }
 
-func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, authenticator *auth.Authenticator, webhookManager *webhook.Manager, subscriptionManager *subscription.Manager) *PageHandler {
-	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, authenticator: authenticator, webhookManager: webhookManager, subscriptionManager: subscriptionManager}
+func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, accountManager *account.Manager, webhookManager *webhook.Manager, authenticator *account.Authenticator) *PageHandler {
+	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, accountManager: accountManager, webhookManager: webhookManager, authenticator: authenticator}
 }
 
 func (h *PageHandler) layoutProps(ctx context.Context, title string) component.LayoutProps {
@@ -104,6 +103,11 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 		}
 	}
 
+	user, err := h.accountManager.GetUserByID(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to get user by ID", "error", err)
+	}
+
 	return component.AppLayoutProps{
 		LayoutProps: layoutProps,
 		MenuItems: []component.MenuItem{
@@ -125,6 +129,12 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 		HasUnreadNotification: len(unreadNotifications) > 0,
 		UnreadCount:           len(unreadNotifications),
 		RecentNotifications:   componentNotifications,
+		UserInfo: component.UserInfo{
+			ID:               user.ID.String(),
+			Name:             user.Name,
+			Email:            user.Email,
+			SubscriptionPlan: user.SubscriptionPlan,
+		},
 	}
 }
 
@@ -137,7 +147,6 @@ func (h *PageHandler) ShowDocsPage(w http.ResponseWriter, r *http.Request) error
 }
 
 func (h *PageHandler) ShowDashboardPage(w http.ResponseWriter, r *http.Request) error {
-
 	ctx := r.Context()
 	return render(ctx, w, views.DashboardPage(views.DashboardPageProps{
 		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Dashboard"), r),
@@ -212,7 +221,7 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Fetch user by email
-	userID, err := h.authenticator.Login(ctx, auth.LoginParam{
+	userID, err := h.authenticator.Login(ctx, account.LoginParam{
 		Email:    loginReq.Email,
 		Password: loginReq.Password,
 	})
@@ -354,13 +363,13 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check if user already exists
-	userID, err := h.authenticator.Register(ctx, auth.RegisterParam{
+	userID, err := h.accountManager.Register(ctx, account.RegisterParam{
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: req.Password,
 	})
 	if err != nil {
-		if errors.Is(err, auth.ErrEmailAlreadyInUse) {
+		if errors.Is(err, account.ErrEmailAlreadyInUse) {
 			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 				Status:  APIResponseStatusError,
 				Message: "Email already in use",
@@ -395,8 +404,21 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 
 func (h *PageHandler) ShowBillingPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+
+	var successMsg, errorMsg string
+	session := r.URL.Query().Get("session")
+	switch session {
+	case "success":
+		// Handle successful checkout session
+		successMsg = "Your subscription has been updated successfully."
+	case "cancel":
+		errorMsg = "Your subscription update was canceled."
+	}
+
 	return render(ctx, w, views.BillingPage(views.BillingPageProps{
 		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Billing"), r),
+		SuccessMsg:     successMsg,
+		ErrorMsg:       errorMsg,
 	}))
 }
 
@@ -425,12 +447,12 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	var plan subscription.Plan
+	var plan account.SubscriptionPlan
 	switch req.NewPlan {
 	case "free":
-		plan = subscription.PlanFree
+		plan = account.SubscriptionPlanFree
 	case "pro":
-		plan = subscription.PlanPro
+		plan = account.SubscriptionPlanPro
 	// case "enterprise":
 	// 	plan = subscription.PlanEnterprise
 	default:
@@ -440,74 +462,52 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	if err := h.subscriptionManager.ChangeSubscription(ctx, userID, plan); err != nil {
-		h.logger.Error("Failed to change subscription", "error", err)
+	if plan == account.SubscriptionPlanFree {
+		// Downgrading to free plan - change immediately
+		if err := h.accountManager.ChangeSubscription(ctx, account.ChangeSubscriptionParam{
+			UserID:  userID,
+			NewPlan: plan,
+		}); err != nil {
+			h.logger.Error("Failed to change subscription", "error", err, "user_id", userID, "new_plan", plan)
+			return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+				Status:  APIResponseStatusError,
+				Message: "Failed to change subscription",
+			})
+		}
+
+		return JSONResponse(w, http.StatusOK, ApiResponse{
+			Status:  APIResponseStatusSuccess,
+			Message: "Subscription changed successfully to free plan.",
+			Data: map[string]any{
+				"new_plan": req.NewPlan,
+			},
+		})
+	}
+
+	// Upgrading to paid plan - create checkout session
+	checkoutURL, err := h.accountManager.CreateCheckoutSession(ctx, account.CreateCheckoutSessionParams{
+		UserID:     userID,
+		Plan:       plan,
+		SuccessURL: "http://" + r.Host + "/billing?session=success",
+		CancelURL:  "http://" + r.Host + "/billing?session=cancel",
+	})
+	if err != nil {
+		h.logger.Info(r.URL.Scheme + "://" + r.Host + "/billing?session=success")
+		h.logger.Error("Failed to create checkout session", "error", err, "user_id", userID, "new_plan", plan)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
-			Message: "Failed to change subscription",
+			Message: "Failed to create checkout session",
 		})
 	}
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
 		Status:  APIResponseStatusSuccess,
-		Message: "Subscription changed successfully",
+		Message: "Redirecting to checkout...",
+		Data: map[string]any{
+			"redirect_to": checkoutURL,
+		},
 	})
 }
-
-// func (h *PageHandler) CreateCheckoutSession(w http.ResponseWriter, r *http.Request) error {
-// 	params := &stripe.CheckoutSessionParams{
-
-// 	}
-// }
-
-// func (h *PageHandler) UpdateBilling(w http.ResponseWriter, r *http.Request) error {
-// 	stripe.Key = "sk_test_51Rm9NXRpsw6KPSOTjxYsYKz1oMczIt9tbWJqYpS58mwkDyCcU6T5pDuMCOu5J1tisAzoxrUuXwjacjwaWxV1liad00S5SBnCid"
-
-// 	domain := "https://webhook.site/9c023c39-c641-4d41-97c9-850555964554" // Replace with your actual domain
-
-// 	priceTable := map[string]string{
-// 		"free":       "",
-// 		"pro":        "price_1Rrg4RRpsw6KPSOT3xe54iWO",
-// 		"enterprise": "price_1Rrg54Rpsw6KPSOTW3K8Ur3L",
-// 	}
-
-// 	priceID := c.FormValue("price")
-// 	price, exists := priceTable[priceID]
-// 	if !exists {
-// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-// 			Status:  APIResponseStatusError,
-// 			Message: "Invalid price selected",
-// 		})
-// 	}
-
-// 	checkoutParams := &stripe.CheckoutSessionParams{
-// 		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-// 		LineItems: []*stripe.CheckoutSessionLineItemParams{
-// 			{
-// 				Price:    stripe.String(price),
-// 				Quantity: stripe.Int64(1),
-// 			},
-// 		},
-// 		SuccessURL: stripe.String(domain + "/success.html?session_id={CHECKOUT_SESSION_ID}"),
-// 		CancelURL:  stripe.String(domain + "/cancel.html"),
-// 	}
-
-// 	s, err := stripeSession.New(checkoutParams)
-// 	if err != nil {
-// 		log.Printf("session.New: %v", err)
-// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-// 			Status:  APIResponseStatusError,
-// 			Message: "Failed to create checkout session",
-// 		})
-// 	}
-
-// 	return JSONResponse(w, http.StatusOK, ApiResponse{
-// 		Status: APIResponseStatusSuccess,
-// 		Data: map[string]any{
-// 			"redirect": s.URL,
-// 		},
-// 	})
-// }
 
 func (h *PageHandler) ShowMyDrivePage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

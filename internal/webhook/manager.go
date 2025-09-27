@@ -23,11 +23,12 @@ func NewManager(logger *slog.Logger, db *database.Database) Manager {
 type EventType string
 
 const (
-	EventTypeFileCreated  EventType = "file.created"
-	EventTypeFileDeleted  EventType = "file.deleted"
-	EventTypeUserLogin    EventType = "user.login"
-	EventTypeUserLogout   EventType = "user.logout"
-	EventTypeUserRegister EventType = "user.register"
+	EventTypeFileCreated         EventType = "file.created"
+	EventTypeFileDeleted         EventType = "file.deleted"
+	EventTypeUserLogin           EventType = "user.login"
+	EventTypeUserLogout          EventType = "user.logout"
+	EventTypeUserRegister        EventType = "user.register"
+	EventTypeSubscriptionChanged EventType = "subscription.changed"
 )
 
 func EventTypeFromString(s string) (EventType, error) {

@@ -9,9 +9,12 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import "hp/internal/web/views/component"
+import "hp/internal/account"
 
 type BillingPageProps struct {
 	component.AppLayoutProps
+	SuccessMsg string
+	ErrorMsg   string
 }
 
 func BillingPage(props BillingPageProps) templ.Component {
@@ -47,7 +50,107 @@ func BillingPage(props BillingPageProps) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"py-6\"><div class=\"content-container\"><!-- Header --><div class=\"text-center mb-8\"><h1 class=\"page-title\">Choose Your Plan</h1><p class=\"page-subtitle max-w-xl mx-auto\">Select the perfect subscription tier for your healthcare practice.</p></div><!-- Pricing Cards --><div class=\"grid-compact grid-cols-1 md:grid-cols-3 mb-8\"><!-- Free Tier --><div class=\"card relative\"><div class=\"text-center\"><h3 class=\"text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1\">Free</h3><div class=\"mb-3\"><span class=\"text-3xl font-bold text-gray-900 dark:text-gray-100\">$0</span> <span class=\"text-gray-500 dark:text-gray-400\">/month</span></div><p class=\"text-gray-600 dark:text-gray-400 text-sm mb-4\">Perfect for getting started</p></div><ul class=\"space-y-2 mb-6\"><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Up to 50 patients</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Basic scheduling</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Simple records</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Email support</span></li><li class=\"flex items-center text-sm text-gray-400 dark:text-gray-500\"><i class=\"fas fa-times w-4 h-4 mr-2\"></i> <span>Advanced analytics</span></li></ul><form id=\"upgrade-free-form\"><input type=\"hidden\" name=\"price\" value=\"free\"> <button id=\"upgrade-free-button\" type=\"submit\" class=\"btn-secondary w-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200\">Current Plan</button></form></div><!-- Pro Tier --><div class=\"card-highlighted relative transform scale-105\"><div class=\"absolute -top-2 left-1/2 transform -translate-x-1/2\"><span class=\"badge-primary\">Most Popular</span></div><div class=\"text-center\"><h3 class=\"text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1\">Pro</h3><div class=\"mb-3\"><span class=\"text-3xl font-bold text-primary-600\">$29</span> <span class=\"text-gray-500 dark:text-gray-400\">/month</span></div><p class=\"text-gray-600 dark:text-gray-400 text-sm mb-4\">Ideal for growing practices</p></div><ul class=\"space-y-2 mb-6\"><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Up to 500 patients</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Advanced scheduling</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Complete records</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Priority support</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Advanced analytics</span></li></ul><form id=\"upgrade-pro-form\"><input type=\"hidden\" name=\"price\" value=\"pro\"> <button id=\"upgrade-pay-as-you-go-button\" type=\"submit\" class=\"btn-secondary w-full\">Upgrade to Pay As You Go</button></form></div></div><!-- Payment Information Section --><div class=\"card mb-6\"><h2 class=\"card-title\">Payment Information</h2><div class=\"grid-compact grid-cols-1 lg:grid-cols-2\"><!-- Current Subscription --><div><h3 class=\"text-base font-medium text-gray-900 dark:text-gray-100 mb-3\">Current Subscription</h3><div class=\"bg-gray-50 dark:bg-gray-800 rounded-lg p-3\"><div class=\"flex items-center justify-between mb-1\"><span class=\"font-medium text-gray-900 dark:text-gray-100 text-sm\">Free Plan</span> <span class=\"badge-success\">Active</span></div><div class=\"text-xs text-gray-600 dark:text-gray-400\"><p>Started: January 15, 2025</p><p>Next billing: No upcoming charges</p></div></div></div><!-- Payment Method --><div><h3 class=\"text-base font-medium text-gray-900 dark:text-gray-100 mb-3\">Payment Method</h3><div class=\"bg-gray-50 dark:bg-gray-800 rounded-lg p-3\"><div class=\"flex items-center justify-between mb-1\"><div class=\"flex items-center\"><i class=\"fas fa-credit-card text-gray-400 mr-2\"></i> <span class=\"text-gray-600 dark:text-gray-400 text-sm\">No payment method on file</span></div></div><button class=\"link-primary text-xs font-medium\">Add Payment Method</button></div></div></div></div><!-- Billing History --><div class=\"card\"><h2 class=\"card-title\">Billing History</h2><div class=\"text-center py-6\"><i class=\"fas fa-receipt text-gray-300 dark:text-gray-600 text-3xl mb-3\"></i><p class=\"text-gray-500 dark:text-gray-400 text-sm mb-1\">No billing history available</p><p class=\"text-xs text-gray-400 dark:text-gray-500\">Your invoices and payment history will appear here</p></div></div></div></div><script>\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\tconst upgradeFreeForm = document.getElementById('upgrade-free-form');\n\t\t\t\tconst upgradeProForm = document.getElementById('upgrade-pro-form');\n\n\t\t\t\tupgradeProForm.addEventListener('submit', async function(event) {\n\t\t\t\t\tevent.preventDefault();\n\n\t\t\t\t\tconst submitButton = document.getElementById('upgrade-pro-button');\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');\n\t\t\t\t\tconst formData = new FormData(this);\n\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch('/billing/create-portal-session', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tthrow new Error('Failed to create billing portal session');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tconst json = await response.json();\n\n\t\t\t\t\t\tconst redirectTo = json.data.redirect_to;\n\t\t\t\t\t\tconst message = json.data.message;\n\t\t\t\t\t\tif (!redirectTo) {\n\t\t\t\t\t\t\tthrow new Error('No redirect URL provided');\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (!message) {\n\t\t\t\t\t\t\tthrow new Error('No message provided');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tsuccessDiv.classList.remove('hidden');\n\t\t\t\t\t\tsuccessText.textContent = message;\n\t\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\t\twindow.location.href = json.redirect;\n\t\t\t\t\t\t}, 1000); // Redirect after 1 second\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\terrorDiv.classList.remove('hidden');\n\t\t\t\t\t\terrorText.textContent = 'Failed to create billing portal session. Please try again.';\n\t\t\t\t\t\tconsole.error('Error creating portal session:', error);\n\t\t\t\t\t} finally {\n\t\t\t\t\t\tsubmitButton.disabled = false; // Re-enable submit button\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t});\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"py-6\"><div class=\"content-container\"><!-- Header --><div class=\"text-center mb-8\"><h1 class=\"page-title\">Choose Your Plan</h1><p class=\"page-subtitle max-w-xl mx-auto\">Select the perfect subscription tier for your healthcare practice.</p></div><!-- Error message display -->")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var3 = []any{"alert-error mb-6 " + hidden(props.ErrorMsg == "")}
+			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var3...)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div id=\"error-message\" class=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var4 string
+			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var3).String())
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 1, Col: 0}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\"><div class=\"flex\"><div class=\"shrink-0\"><svg class=\"icon-lg text-red-400 dark:text-red-300\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" fill=\"currentColor\" aria-hidden=\"true\"><path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z\" clip-rule=\"evenodd\"></path></svg></div><div class=\"ml-3\"><h3 class=\"text-sm font-medium text-red-800 dark:text-red-200\" id=\"error-text\"><!-- Error message will be inserted here -->")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var5 string
+			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(props.ErrorMsg)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 34, Col: 24}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</h3></div></div></div><!-- Success message display -->")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var6 = []any{"alert-success mb-6 " + hidden(props.SuccessMsg == "")}
+			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var6...)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div id=\"success-message\" class=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var7 string
+			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var6).String())
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 1, Col: 0}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\"><div class=\"flex\"><div class=\"shrink-0\"><svg class=\"icon-lg text-green-400 dark:text-green-300\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" fill=\"currentColor\" aria-hidden=\"true\"><path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z\" clip-rule=\"evenodd\"></path></svg></div><div class=\"ml-3\"><h3 class=\"text-sm font-medium text-green-800 dark:text-green-200\" id=\"success-text\"><!-- Success message will be inserted here -->")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var8 string
+			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(props.SuccessMsg)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 50, Col: 26}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</h3></div></div></div><!-- Pricing Cards --><div class=\"grid-compact grid-cols-1 md:grid-cols-3 mb-8\"><!-- Free Tier --><div class=\"card relative\"><div class=\"text-center\"><h3 class=\"text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1\">Free</h3><div class=\"mb-3\"><span class=\"text-3xl font-bold text-gray-900 dark:text-gray-100\">$0</span> <span class=\"text-gray-500 dark:text-gray-400\">/month</span></div><p class=\"text-gray-600 dark:text-gray-400 text-sm mb-4\">Perfect for getting started</p></div><ul class=\"space-y-2 mb-6\"><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Up to 50 patients</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Basic scheduling</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Simple records</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Email support</span></li><li class=\"flex items-center text-sm text-gray-400 dark:text-gray-500\"><i class=\"fas fa-times w-4 h-4 mr-2\"></i> <span>Advanced analytics</span></li></ul><form id=\"upgrade-free-form\"><input type=\"hidden\" name=\"plan\" value=\"free\"> <button id=\"upgrade-free-button\" type=\"submit\" class=\"btn-secondary w-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if props.AppLayoutProps.UserInfo.SubscriptionPlan == account.SubscriptionPlanFree {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "Current Plan")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "Downgrade to Free")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</button></form></div><!-- Pro Tier --><div class=\"card-highlighted relative transform scale-105\"><div class=\"absolute -top-2 left-1/2 transform -translate-x-1/2\"><span class=\"badge-primary\">Most Popular</span></div><div class=\"text-center\"><h3 class=\"text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1\">Pro</h3><div class=\"mb-3\"><span class=\"text-3xl font-bold text-primary-600\">$29</span> <span class=\"text-gray-500 dark:text-gray-400\">/month</span></div><p class=\"text-gray-600 dark:text-gray-400 text-sm mb-4\">Ideal for growing practices</p></div><ul class=\"space-y-2 mb-6\"><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Up to 500 patients</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Advanced scheduling</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Complete records</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Priority support</span></li><li class=\"flex items-center text-sm\"><i class=\"fas fa-check text-medical-600 w-4 h-4 mr-2\"></i> <span class=\"text-gray-700 dark:text-gray-300\">Advanced analytics</span></li></ul><form id=\"upgrade-pro-form\"><input type=\"hidden\" name=\"plan\" value=\"pro\"> <button id=\"upgrade-pro-button\" type=\"submit\" class=\"btn-secondary w-full\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if props.AppLayoutProps.UserInfo.SubscriptionPlan == account.SubscriptionPlanPro {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "Current Plan")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "Upgrade to Pro")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</button></form></div></div><!-- Payment Information Section --><div class=\"card mb-6\"><h2 class=\"card-title\">Payment Information</h2><div class=\"grid-compact grid-cols-1 lg:grid-cols-2\"><!-- Current Subscription --><div><h3 class=\"text-base font-medium text-gray-900 dark:text-gray-100 mb-3\">Current Subscription</h3><div class=\"bg-gray-50 dark:bg-gray-800 rounded-lg p-3\"><div class=\"flex items-center justify-between mb-1\"><span class=\"font-medium text-gray-900 dark:text-gray-100 text-sm\">Free Plan</span> <span class=\"badge-success\">Active</span></div><div class=\"text-xs text-gray-600 dark:text-gray-400\"><p>Started: January 15, 2025</p><p>Next billing: No upcoming charges</p></div></div></div><!-- Payment Method --><div><h3 class=\"text-base font-medium text-gray-900 dark:text-gray-100 mb-3\">Payment Method</h3><div class=\"bg-gray-50 dark:bg-gray-800 rounded-lg p-3\"><div class=\"flex items-center justify-between mb-1\"><div class=\"flex items-center\"><i class=\"fas fa-credit-card text-gray-400 mr-2\"></i> <span class=\"text-gray-600 dark:text-gray-400 text-sm\">No payment method on file</span></div></div><button class=\"link-primary text-xs font-medium\">Add Payment Method</button></div></div></div></div><!-- Billing History --><div class=\"card\"><h2 class=\"card-title\">Billing History</h2><div class=\"text-center py-6\"><i class=\"fas fa-receipt text-gray-300 dark:text-gray-600 text-3xl mb-3\"></i><p class=\"text-gray-500 dark:text-gray-400 text-sm mb-1\">No billing history available</p><p class=\"text-xs text-gray-400 dark:text-gray-500\">Your invoices and payment history will appear here</p></div></div></div></div><script>\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\tconst upgradeFreeForm = document.getElementById('upgrade-free-form');\n\t\t\t\tconst upgradeFreeButton = document.getElementById('upgrade-free-button');\n\t\t\t\tconst upgradeProForm = document.getElementById('upgrade-pro-form');\n\t\t\t\tconst upgradeProButton = document.getElementById('upgrade-pro-button');\n\n\t\t\t\tconst errorDiv = document.getElementById('error-message');\n\t\t\t\tconst successDiv = document.getElementById('success-message');\n\t\t\t\tconst errorText = document.getElementById('error-text');\n\t\t\t\tconst successText = document.getElementById('success-text');\n\n\t\t\t\tupgradeProForm.addEventListener('submit', async function(event) {\n\t\t\t\t\tevent.preventDefault();\n\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');\n\t\t\t\t\tconst formData = new FormData(this);\n\n\t\t\t\t\tlet body = {\n\t\t\t\t\t\t\"new_plan\": formData.get('plan')\n\t\t\t\t\t}\n\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch('/billing/change_subscription', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken,\n\t\t\t\t\t\t\t\t'Content-Type': 'application/json'\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\tbody: JSON.stringify(body)\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tthrow new Error('Failed to create billing portal session');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tconst json = await response.json();\n\n\t\t\t\t\t\tconst redirectTo = json.data.redirect_to;\n\t\t\t\t\t\tconst message = json.message;\n\t\t\t\t\t\tif (!redirectTo) {\n\t\t\t\t\t\t\tthrow new Error('No redirect URL provided');\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (!message) {\n\t\t\t\t\t\t\tthrow new Error('No message provided');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tsuccessDiv.classList.remove('hidden');\n\t\t\t\t\t\tsuccessText.textContent = message;\n\t\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\t\twindow.location.href = redirectTo;\n\t\t\t\t\t\t}, 100);\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\terrorDiv.classList.remove('hidden');\n\t\t\t\t\t\terrorText.textContent = 'Failed to create billing portal session. Please try again.';\n\t\t\t\t\t\tconsole.error('Error creating portal session:', error);\n\t\t\t\t\t} finally {\n\t\t\t\t\t\tupgradeProButton.disabled = false; // Re-enable submit button\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t});\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -59,6 +162,13 @@ func BillingPage(props BillingPageProps) templ.Component {
 		}
 		return nil
 	})
+}
+
+func hidden(y bool) string {
+	if y {
+		return "hidden"
+	}
+	return ""
 }
 
 var _ = templruntime.GeneratedTemplate

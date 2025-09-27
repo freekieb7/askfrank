@@ -28,6 +28,7 @@ const (
 	AuditLogEventTypeWebhookSubscriptionDelete AuditLogEventType = "webhook_subscription.delete"
 	AuditLogEventTypeWebhookEventCreate        AuditLogEventType = "webhook_event.create"
 	AuditLogEventTypeWebhookDeliveryAttempt    AuditLogEventType = "webhook_delivery.attempt"
+	AuditLogEventTypeSubscriptionChanged       AuditLogEventType = "subscription.changed"
 )
 
 type Auditor struct {

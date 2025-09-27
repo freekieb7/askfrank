@@ -8,7 +8,10 @@ package component
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "strconv"
+import (
+	"hp/internal/account"
+	"strconv"
+)
 
 type MenuItem struct {
 	Name     string
@@ -18,48 +21,11 @@ type MenuItem struct {
 	Active   bool
 }
 
-func openClassName(open bool) string {
-	if open {
-		return "open"
-	}
-	return ""
-}
-
-func activeClassName(active bool) string {
-	if active {
-		return "nav-link-active"
-	}
-	return ""
-}
-
-func getNotificationIcon(notificationType string) string {
-	switch notificationType {
-	case "info":
-		return "fas fa-info-circle"
-	case "success":
-		return "fas fa-check-circle"
-	case "warning":
-		return "fas fa-exclamation-triangle"
-	case "error":
-		return "fas fa-times-circle"
-	default:
-		return "fas fa-bell"
-	}
-}
-
-func getNotificationIconClass(notificationType string) string {
-	switch notificationType {
-	case "info":
-		return " bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300"
-	case "success":
-		return " bg-green-100 dark:bg-green-800 text-green-600 dark:text-green-300"
-	case "warning":
-		return " bg-yellow-100 dark:bg-yellow-800 text-yellow-600 dark:text-yellow-300"
-	case "error":
-		return " bg-red-100 dark:bg-red-800 text-red-600 dark:text-red-300"
-	default:
-		return " bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-	}
+type UserInfo struct {
+	ID               string
+	Name             string
+	Email            string
+	SubscriptionPlan account.SubscriptionPlan
 }
 
 type Notification struct {
@@ -78,6 +44,7 @@ type AppLayoutProps struct {
 	HasUnreadNotification bool
 	UnreadCount           int
 	RecentNotifications   []Notification
+	UserInfo              UserInfo
 }
 
 func AppLayout(props AppLayoutProps) templ.Component {
@@ -126,7 +93,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var3 string
 					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(openClassName(item.Active))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 97, Col: 76}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 64, Col: 76}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(` ` + templ_7745c5c3_Var3))
 					if templ_7745c5c3_Err != nil {
@@ -183,7 +150,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 101, Col: 28}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 68, Col: 28}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -206,7 +173,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var10 templ.SafeURL
 						templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(subItem.URL)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 109, Col: 32}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 76, Col: 32}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 						if templ_7745c5c3_Err != nil {
@@ -254,7 +221,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var14 string
 						templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(subItem.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 111, Col: 32}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 78, Col: 32}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 						if templ_7745c5c3_Err != nil {
@@ -282,7 +249,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var16 templ.SafeURL
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(item.URL)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 117, Col: 26}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 84, Col: 26}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
@@ -330,7 +297,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var20 string
 					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 119, Col: 26}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 86, Col: 26}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 					if templ_7745c5c3_Err != nil {
@@ -399,7 +366,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var25 string
 					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 153, Col: 28}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 120, Col: 28}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 					if templ_7745c5c3_Err != nil {
@@ -422,7 +389,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var27 templ.SafeURL
 						templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinURLErrs(subItem.URL)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 161, Col: 32}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 128, Col: 32}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 						if templ_7745c5c3_Err != nil {
@@ -470,7 +437,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 						var templ_7745c5c3_Var31 string
 						templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(subItem.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 163, Col: 26}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 130, Col: 26}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 						if templ_7745c5c3_Err != nil {
@@ -498,7 +465,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var33 templ.SafeURL
 					templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinURLErrs(item.URL)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 169, Col: 26}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 136, Col: 26}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 					if templ_7745c5c3_Err != nil {
@@ -546,7 +513,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var37 string
 					templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 171, Col: 20}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 138, Col: 20}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 					if templ_7745c5c3_Err != nil {
@@ -576,7 +543,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var38 string
 					templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(props.UnreadCount))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 201, Col: 45}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 168, Col: 45}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 					if templ_7745c5c3_Err != nil {
@@ -634,7 +601,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var41 string
 					templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(notification.ID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 234, Col: 50}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 201, Col: 50}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 					if templ_7745c5c3_Err != nil {
@@ -647,7 +614,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var42 string
 					templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(notification.ActionURL)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 235, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 202, Col: 52}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 					if templ_7745c5c3_Err != nil {
@@ -704,7 +671,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var47 string
 					templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(notification.Title)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 243, Col: 108}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 210, Col: 108}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 					if templ_7745c5c3_Err != nil {
@@ -717,7 +684,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var48 string
 					templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(notification.Message)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 244, Col: 105}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 211, Col: 105}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 					if templ_7745c5c3_Err != nil {
@@ -730,7 +697,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					var templ_7745c5c3_Var49 string
 					templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(notification.CreatedAt)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 245, Col: 89}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 212, Col: 89}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 					if templ_7745c5c3_Err != nil {
@@ -762,7 +729,20 @@ func AppLayout(props AppLayoutProps) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "</div></div><!-- Profile dropdown --><div class=\"relative\"><button type=\"button\" class=\"flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700\" id=\"profile-menu-button\"><img class=\"h-7 w-7 rounded-full bg-gray-50\" src=\"https://ui-avatars.com/api/?name=Dr+Smith&background=05668D&color=fff\" alt=\"Profile\"> <span class=\"hidden sm:flex sm:items-center\"><span class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">Dr. Smith</span> <i class=\"fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400 dark:text-gray-500\"></i></span></button><!-- Dropdown menu --><div class=\"dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1.5 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-700/50 hidden\" id=\"profile-dropdown\"><div class=\"border-t border-gray-100 dark:border-gray-700 my-1\"><button type=\"button\" id=\"logout-button\" class=\"block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Sign out</button></div></div></div></div></div><!-- Page content --><main class=\"flex-1 py-4 overflow-y-auto\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "</div></div><!-- Profile dropdown --><div class=\"relative\"><button type=\"button\" class=\"flex items-center gap-x-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700\" id=\"profile-menu-button\"><img class=\"h-7 w-7 rounded-full bg-gray-50\" src=\"https://ui-avatars.com/api/?name=Dr+Smith&background=05668D&color=fff\" alt=\"Profile\"> <span class=\"hidden sm:flex sm:items-center\"><span class=\"text-sm font-medium text-gray-700 dark:text-gray-300\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var50 string
+			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(props.UserInfo.Name)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/component/app_layout.templ`, Line: 237, Col: 97}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</span> <i class=\"fas fa-chevron-down ml-1.5 w-3 h-3 text-gray-400 dark:text-gray-500\"></i></span></button><!-- Dropdown menu --><div class=\"dropdown absolute right-0 z-10 mt-2 w-44 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1.5 shadow-lg ring-1 ring-gray-900/5 dark:ring-gray-700/50 hidden\" id=\"profile-dropdown\"><div class=\"border-t border-gray-100 dark:border-gray-700 my-1\"><button type=\"button\" id=\"logout-button\" class=\"block w-full text-left px-3 py-2 text-sm leading-6 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md mx-1\"><i class=\"fas fa-sign-out-alt w-4 h-4 mr-2 text-gray-400 dark:text-gray-500\"></i> Sign out</button></div></div></div></div></div><!-- Page content --><main class=\"flex-1 py-4 overflow-y-auto\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -770,7 +750,7 @@ func AppLayout(props AppLayoutProps) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</main></div></div><script>\n\t\t\t// Initialize theme toggle appearance when DOM is loaded\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\tconst logoutButton = document.getElementById('logout-button');\n\t\t\t\tconst profileButton = document.getElementById('profile-menu-button');\n\t\t\t\tconst profileDropdown = document.getElementById('profile-dropdown');\n\t\t\t\tconst mobileMenuButton = document.getElementById('mobile-menu-button');\n\t\t\t\tconst mobileOverlay = document.getElementById('mobile-sidebar-overlay');\n\t\t\t\tconst closeSidebar = document.getElementById('close-sidebar');\n\n\t\t\t\t// Logout functionality\n\t\t\t\tlogoutButton.addEventListener('click', async function() {\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch('/logout', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tthrow new Error('Logout request failed');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tconst json = await response.json();\n\t\t\t\t\t\tif (!json.data.redirect_to) {\n\t\t\t\t\t\t\tthrow new Error('No redirect URL provided');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\twindow.location.href = json.data.redirect_to;\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\tconsole.error('Error during logout:', error);\n\t\t\t\t\t\talert('An error occurred during logout. Please try again.');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Profile dropdown functionality\n\t\t\t\tprofileButton.addEventListener('click', function(e) {\n\t\t\t\t\te.stopPropagation();\n\t\t\t\t\tprofileDropdown.classList.toggle('hidden');\n\t\t\t\t\tif (!profileDropdown.classList.contains('hidden')) {\n\t\t\t\t\t\tsetTimeout(() => profileDropdown.classList.add('show'), 10);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Close dropdown when clicking outside\n\t\t\t\tdocument.addEventListener('click', function() {\n\t\t\t\t\tprofileDropdown.classList.add('hidden');\n\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t});\n\n\t\t\t\t// Mobile menu functionality\n\t\t\t\tmobileMenuButton.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.remove('hidden');\n\t\t\t\t});\n\n\t\t\t\tcloseSidebar.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t});\n\n\t\t\t\t// Close mobile menu when clicking overlay\n\t\t\t\tmobileOverlay.addEventListener('click', function(e) {\n\t\t\t\t\tif (e.target === mobileOverlay || e.target.classList.contains('bg-opacity-75')) {\n\t\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Notifications functionality\n\t\t\t\tconst notificationsButton = document.getElementById('notifications-button');\n\t\t\t\tconst notificationsDropdown = document.getElementById('notifications-dropdown');\n\t\t\t\tconst markAllReadButton = document.getElementById('mark-all-read');\n\t\t\t\t\n\t\t\t\t// Toggle dropdown\n\t\t\t\tif (notificationsButton) {\n\t\t\t\t\tnotificationsButton.addEventListener('click', function(e) {\n\t\t\t\t\t\te.stopPropagation();\n\t\t\t\t\t\tnotificationsDropdown.classList.toggle('hidden');\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t// Close dropdown when clicking outside\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tconst notificationsContainer = document.getElementById('notifications-container');\n\t\t\t\t\tif (notificationsContainer && !notificationsContainer.contains(e.target)) {\n\t\t\t\t\t\tnotificationsDropdown.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\t// Handle notification clicks\n\t\t\t\tdocument.querySelectorAll('.notification-item').forEach(function(item) {\n\t\t\t\t\titem.addEventListener('click', function() {\n\t\t\t\t\t\tconst notificationId = this.getAttribute('data-notification-id');\n\t\t\t\t\t\tconst actionUrl = this.getAttribute('data-action-url');\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Mark as read\n\t\t\t\t\t\tmarkNotificationAsRead(notificationId);\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Navigate if action URL exists\n\t\t\t\t\t\tif (actionUrl && actionUrl !== '') {\n\t\t\t\t\t\t\twindow.location.href = actionUrl;\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\t// Mark all notifications as read\n\t\t\t\tif (markAllReadButton) {\n\t\t\t\t\tmarkAllReadButton.addEventListener('click', function(e) {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tmarkAllNotificationsAsRead();\n\t\t\t\t\t});\n\t\t\t\t}\n\n\t\t\t\tfunction markNotificationAsRead(notificationId) {\n\t\t\t\t\tfetch('/api/notifications/' + notificationId + '/read', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t}\n\t\t\t\t\t}).then(function(response) {\n\t\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\t\t// Remove unread styling\n\t\t\t\t\t\t\tconst notificationElement = document.querySelector('[data-notification-id=\"' + notificationId + '\"]');\n\t\t\t\t\t\t\tif (notificationElement) {\n\t\t\t\t\t\t\t\tnotificationElement.classList.remove('bg-blue-50', 'dark:bg-blue-900/20', 'border-l-2', 'border-blue-500');\n\t\t\t\t\t\t\t\t// Remove unread indicator\n\t\t\t\t\t\t\t\tconst unreadIndicator = notificationElement.querySelector('.w-2.h-2.bg-blue-500');\n\t\t\t\t\t\t\t\tif (unreadIndicator) {\n\t\t\t\t\t\t\t\t\tunreadIndicator.remove();\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tupdateNotificationCount();\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tfunction markAllNotificationsAsRead() {\n\t\t\t\t\tfetch('/api/notifications/mark-all-read', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t}\n\t\t\t\t\t}).then(function(response) {\n\t\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\t\t// Refresh the page to update the notification UI\n\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tfunction updateNotificationCount() {\n\t\t\t\t\t// This could be enhanced to update the count dynamically\n\t\t\t\t\t// For now, we'll rely on page refreshes for simplicity\n\t\t\t\t}\n\t\t\t});\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</main></div></div><script>\n\t\t\t// Initialize theme toggle appearance when DOM is loaded\n\t\t\tdocument.addEventListener('DOMContentLoaded', function() {\n\t\t\t\tconst logoutButton = document.getElementById('logout-button');\n\t\t\t\tconst profileButton = document.getElementById('profile-menu-button');\n\t\t\t\tconst profileDropdown = document.getElementById('profile-dropdown');\n\t\t\t\tconst mobileMenuButton = document.getElementById('mobile-menu-button');\n\t\t\t\tconst mobileOverlay = document.getElementById('mobile-sidebar-overlay');\n\t\t\t\tconst closeSidebar = document.getElementById('close-sidebar');\n\n\t\t\t\t// Logout functionality\n\t\t\t\tlogoutButton.addEventListener('click', async function() {\n\t\t\t\t\tconst csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')\n\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst response = await fetch('/logout', {\n\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t\t'X-CSRF-Token': csrfToken\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tif (!response.ok) {\n\t\t\t\t\t\t\tthrow new Error('Logout request failed');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\tconst json = await response.json();\n\t\t\t\t\t\tif (!json.data.redirect_to) {\n\t\t\t\t\t\t\tthrow new Error('No redirect URL provided');\n\t\t\t\t\t\t}\n\n\t\t\t\t\t\twindow.location.href = json.data.redirect_to;\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\tconsole.error('Error during logout:', error);\n\t\t\t\t\t\talert('An error occurred during logout. Please try again.');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Profile dropdown functionality\n\t\t\t\tprofileButton.addEventListener('click', function(e) {\n\t\t\t\t\te.stopPropagation();\n\t\t\t\t\tprofileDropdown.classList.toggle('hidden');\n\t\t\t\t\tif (!profileDropdown.classList.contains('hidden')) {\n\t\t\t\t\t\tsetTimeout(() => profileDropdown.classList.add('show'), 10);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Close dropdown when clicking outside\n\t\t\t\tdocument.addEventListener('click', function() {\n\t\t\t\t\tprofileDropdown.classList.add('hidden');\n\t\t\t\t\tprofileDropdown.classList.remove('show');\n\t\t\t\t});\n\n\t\t\t\t// Mobile menu functionality\n\t\t\t\tmobileMenuButton.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.remove('hidden');\n\t\t\t\t});\n\n\t\t\t\tcloseSidebar.addEventListener('click', function() {\n\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t});\n\n\t\t\t\t// Close mobile menu when clicking overlay\n\t\t\t\tmobileOverlay.addEventListener('click', function(e) {\n\t\t\t\t\tif (e.target === mobileOverlay || e.target.classList.contains('bg-opacity-75')) {\n\t\t\t\t\t\tmobileOverlay.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t});\n\n\t\t\t\t// Notifications functionality\n\t\t\t\tconst notificationsButton = document.getElementById('notifications-button');\n\t\t\t\tconst notificationsDropdown = document.getElementById('notifications-dropdown');\n\t\t\t\tconst markAllReadButton = document.getElementById('mark-all-read');\n\t\t\t\t\n\t\t\t\t// Toggle dropdown\n\t\t\t\tif (notificationsButton) {\n\t\t\t\t\tnotificationsButton.addEventListener('click', function(e) {\n\t\t\t\t\t\te.stopPropagation();\n\t\t\t\t\t\tnotificationsDropdown.classList.toggle('hidden');\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t// Close dropdown when clicking outside\n\t\t\t\tdocument.addEventListener('click', function(e) {\n\t\t\t\t\tconst notificationsContainer = document.getElementById('notifications-container');\n\t\t\t\t\tif (notificationsContainer && !notificationsContainer.contains(e.target)) {\n\t\t\t\t\t\tnotificationsDropdown.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\t// Handle notification clicks\n\t\t\t\tdocument.querySelectorAll('.notification-item').forEach(function(item) {\n\t\t\t\t\titem.addEventListener('click', function() {\n\t\t\t\t\t\tconst notificationId = this.getAttribute('data-notification-id');\n\t\t\t\t\t\tconst actionUrl = this.getAttribute('data-action-url');\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Mark as read\n\t\t\t\t\t\tmarkNotificationAsRead(notificationId);\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Navigate if action URL exists\n\t\t\t\t\t\tif (actionUrl && actionUrl !== '') {\n\t\t\t\t\t\t\twindow.location.href = actionUrl;\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\t// Mark all notifications as read\n\t\t\t\tif (markAllReadButton) {\n\t\t\t\t\tmarkAllReadButton.addEventListener('click', function(e) {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tmarkAllNotificationsAsRead();\n\t\t\t\t\t});\n\t\t\t\t}\n\n\t\t\t\tfunction markNotificationAsRead(notificationId) {\n\t\t\t\t\tfetch('/api/notifications/' + notificationId + '/read', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t}\n\t\t\t\t\t}).then(function(response) {\n\t\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\t\t// Remove unread styling\n\t\t\t\t\t\t\tconst notificationElement = document.querySelector('[data-notification-id=\"' + notificationId + '\"]');\n\t\t\t\t\t\t\tif (notificationElement) {\n\t\t\t\t\t\t\t\tnotificationElement.classList.remove('bg-blue-50', 'dark:bg-blue-900/20', 'border-l-2', 'border-blue-500');\n\t\t\t\t\t\t\t\t// Remove unread indicator\n\t\t\t\t\t\t\t\tconst unreadIndicator = notificationElement.querySelector('.w-2.h-2.bg-blue-500');\n\t\t\t\t\t\t\t\tif (unreadIndicator) {\n\t\t\t\t\t\t\t\t\tunreadIndicator.remove();\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tupdateNotificationCount();\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tfunction markAllNotificationsAsRead() {\n\t\t\t\t\tfetch('/api/notifications/mark-all-read', {\n\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\theaders: {\n\t\t\t\t\t\t\t'Content-Type': 'application/json',\n\t\t\t\t\t\t}\n\t\t\t\t\t}).then(function(response) {\n\t\t\t\t\t\tif (response.ok) {\n\t\t\t\t\t\t\t// Refresh the page to update the notification UI\n\t\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tfunction updateNotificationCount() {\n\t\t\t\t\t// This could be enhanced to update the count dynamically\n\t\t\t\t\t// For now, we'll rely on page refreshes for simplicity\n\t\t\t\t}\n\t\t\t});\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -782,6 +762,50 @@ func AppLayout(props AppLayoutProps) templ.Component {
 		}
 		return nil
 	})
+}
+
+func openClassName(open bool) string {
+	if open {
+		return "open"
+	}
+	return ""
+}
+
+func activeClassName(active bool) string {
+	if active {
+		return "nav-link-active"
+	}
+	return ""
+}
+
+func getNotificationIcon(notificationType string) string {
+	switch notificationType {
+	case "info":
+		return "fas fa-info-circle"
+	case "success":
+		return "fas fa-check-circle"
+	case "warning":
+		return "fas fa-exclamation-triangle"
+	case "error":
+		return "fas fa-times-circle"
+	default:
+		return "fas fa-bell"
+	}
+}
+
+func getNotificationIconClass(notificationType string) string {
+	switch notificationType {
+	case "info":
+		return " bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300"
+	case "success":
+		return " bg-green-100 dark:bg-green-800 text-green-600 dark:text-green-300"
+	case "warning":
+		return " bg-yellow-100 dark:bg-yellow-800 text-yellow-600 dark:text-yellow-300"
+	case "error":
+		return " bg-red-100 dark:bg-red-800 text-red-600 dark:text-red-300"
+	default:
+		return " bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+	}
 }
 
 var _ = templruntime.GeneratedTemplate
