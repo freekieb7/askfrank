@@ -1,9 +1,6 @@
 package component
 
-import (
-	"hp/internal/account"
-	"strconv"
-)
+import "strconv"
 
 type MenuItem struct {
 	Name     string
@@ -14,10 +11,9 @@ type MenuItem struct {
 }
 
 type UserInfo struct {
-	ID               string
-	Name             string
-	Email            string
-	SubscriptionPlan account.SubscriptionPlan
+	ID    string
+	Name  string
+	Email string
 }
 
 type Notification struct {

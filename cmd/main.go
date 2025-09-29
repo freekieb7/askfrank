@@ -10,6 +10,7 @@ import (
 	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/notifications"
+	"hp/internal/rtc"
 	"hp/internal/session"
 	"hp/internal/stripe"
 	"hp/internal/web"
@@ -104,6 +105,9 @@ func run(ctx context.Context) error {
 
 	accountManager := account.NewManager(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
 
+	// Set up signaling server for WebRTC
+	signalingServer := rtc.NewSignalingServer(logger)
+
 	// Set up Fiber app
 	router := web.NewRouter()
 	// app := fiber.New(fiber.Config{
@@ -112,7 +116,9 @@ func run(ctx context.Context) error {
 	// })
 
 	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &db, &accountManager, &webhookManager, &authenticator)
-	apiHandler := web.NewApiHandler(logger, &db, &sessionStore, &accountManager)
+	// apiHandler := web.NewApiHandler(logger, &db, &sessionStore, &accountManager)
+	meetingHandler := web.NewMeetingHandler(logger, signalingServer, &sessionStore)
+	chatHandler := web.NewChatHandler(logger)
 
 	// Middleware
 	// Enable gzip compression
@@ -156,7 +162,7 @@ func run(ctx context.Context) error {
 				driveGroup.POST("/upload_file", pageHandler.UploadFile)
 				driveGroup.GET("/shared", pageHandler.ShowSharedFilePage)
 				// driveGroup.GET("/recent", pageHandler.ShowRecentFilePage)
-				driveGroup.GET("/folder/:folder_id", pageHandler.ShowFolderPage)
+				driveGroup.GET("/folder/{folder_id}", pageHandler.ShowFolderPage)
 			})
 
 			// Calendar routes
@@ -173,49 +179,62 @@ func run(ctx context.Context) error {
 				devGroup.Group("/clients", func(clientGroup *web.Router) {
 					clientGroup.GET("", pageHandler.ShowOAuthClientsPage)
 					clientGroup.POST("", pageHandler.CreateOAuthClient)
-					clientGroup.GET("/:id", pageHandler.GetOAuthClient)
-					clientGroup.POST("/:id/delete", pageHandler.DeleteOAuthClient)
+					clientGroup.Group("/{client_id}", func(clientIDGroup *web.Router) {
+						clientIDGroup.GET("", pageHandler.GetOAuthClient)
+						clientIDGroup.POST("/delete", pageHandler.DeleteOAuthClient)
+					})
 				})
 
 				devGroup.Group("/webhooks", func(webhookGroup *web.Router) {
 					webhookGroup.GET("", pageHandler.ShowWebhooksPage)
 					webhookGroup.POST("", pageHandler.CreateWebhookSubscription)
 					// webhookGroup.GET("/:id", pageHandler.GetWebhook)
-					webhookGroup.POST("/:id/delete", pageHandler.DeleteWebhook)
+					webhookGroup.POST("/{webhook_id}/delete", pageHandler.DeleteWebhook)
 				})
 
 				devGroup.GET("/logs", pageHandler.ShowAuditLogsPage)
+			})
 
+			group.Group("/chat", func(chatGroup *web.Router) {
+				chatGroup.GET("", pageHandler.ShowChatPage)
 			})
 
 			// Add UI routes for video chat
-			group.GET("/meetings/:id", pageHandler.ShowMeetingPage)
-			group.GET("/meetings", pageHandler.ShowCreateMeetingPage)
+			group.Group("/meetings", func(meetingsGroup *web.Router) {
+				meetingsGroup.GET("", pageHandler.ShowMeetingsPage)
+				meetingsGroup.GET("/{meeting_id}", pageHandler.ShowMeetingPage)
+			})
 		}, web.AuthenticatedSessionMiddleware(&sessionStore))
 
 	}, web.SessionMiddleware(&sessionStore), web.LocalizationMiddleware(), web.CSRFMiddleware(logger, &sessionStore))
 
+	// WebSocket routes (need authentication but not CSRF protection)
+	router.Group("/ws", func(wsGroup *web.Router) {
+		wsGroup.GET("/rtc", meetingHandler.HandleRTCConnection)
+		wsGroup.GET("/chat", chatHandler.HandleChatWebSocket)
+	}, web.SessionMiddleware(&sessionStore), web.AuthenticatedSessionMiddleware(&sessionStore))
+
 	// API routes (for testing and integration)
-	router.Group("/api", func(apiGroup *web.Router) {
-		// Public API routes
-		apiGroup.GET("/health", apiHandler.Healthy)
+	// router.Group("/api", func(apiGroup *web.Router) {
+	// 	// Public API routes
+	// 	apiGroup.GET("/health", apiHandler.Healthy)
 
-		apiGroup.POST("/stripe/webhook", apiHandler.StripeWebhook)
+	// 	apiGroup.POST("/stripe/webhook", apiHandler.StripeWebhook)
 
-		// Protected API routes (require session authentication)
-		apiGroup.Group("", func(protectedApiGroup *web.Router) {
-			// Notification endpoints
-			protectedApiGroup.POST("/notifications/:id/read", apiHandler.MarkNotificationAsRead)
-			protectedApiGroup.POST("/notifications/mark-all-read", apiHandler.MarkAllNotificationsAsRead)
-			protectedApiGroup.GET("/notifications", apiHandler.GetNotifications)
+	// 	// Protected API routes (require session authentication)
+	// 	apiGroup.Group("", func(protectedApiGroup *web.Router) {
+	// 		// Notification endpoints
+	// 		protectedApiGroup.POST("/notifications/:id/read", apiHandler.MarkNotificationAsRead)
+	// 		protectedApiGroup.POST("/notifications/mark-all-read", apiHandler.MarkAllNotificationsAsRead)
+	// 		protectedApiGroup.GET("/notifications", apiHandler.GetNotifications)
 
-			// Calendar endpoints
-			protectedApiGroup.GET("/calendar/events", apiHandler.GetCalendarEvents)
-			protectedApiGroup.POST("/calendar/events", apiHandler.CreateCalendarEvent)
-			protectedApiGroup.PUT("/calendar/events/:id", apiHandler.UpdateCalendarEvent)
-			protectedApiGroup.DELETE("/calendar/events/:id", apiHandler.DeleteCalendarEvent)
-		}, web.AuthenticatedSessionMiddleware(&sessionStore))
-	})
+	// 		// Calendar endpoints
+	// 		protectedApiGroup.GET("/calendar/events", apiHandler.GetCalendarEvents)
+	// 		protectedApiGroup.POST("/calendar/events", apiHandler.CreateCalendarEvent)
+	// 		protectedApiGroup.PUT("/calendar/events/:id", apiHandler.UpdateCalendarEvent)
+	// 		protectedApiGroup.DELETE("/calendar/events/:id", apiHandler.DeleteCalendarEvent)
+	// 	}, web.AuthenticatedSessionMiddleware(&sessionStore))
+	// })
 
 	// // Static file serving with compression and caching
 	// app.Static("/static", "./internal/web/static", fiber.Static{

@@ -13,8 +13,7 @@ type OAuthClient struct {
 	IsPublic      bool
 	Secret        string
 	AllowedScopes []string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ModifiedAt    time.Time
 }
 
 type OAuthClientsPageProps struct {
@@ -59,7 +58,7 @@ templ OAuthClientsPage(props OAuthClientsPageProps) {
 										<th>Client ID</th>
 										<th>Type</th>
 										<th>Redirect URIs</th>
-										<th>Created</th>
+										<th>Modified at</th>
 										<th class="text-right">Actions</th>
 									</tr>
 								</thead>
@@ -101,7 +100,7 @@ templ OAuthClientsPage(props OAuthClientsPageProps) {
 												</div>
 											</td>
 											<td class="text-sm text-muted">
-												{ client.CreatedAt.Format("Jan 02, 2006") }
+												{ client.ModifiedAt.Format("Jan 02, 2006") }
 											</td>
 											<td class="text-right text-sm font-medium">
 												<button

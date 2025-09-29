@@ -81,11 +81,11 @@ func (m *Manager) RegisterEvent(ctx context.Context, params RegisterEventParam) 
 }
 
 type RegisterSubscriptionParam struct {
-	OwnerID     uuid.UUID
-	Name        string
-	Description string
-	URL         string
-	EventTypes  []EventType
+	OwnerOrganisationID uuid.UUID
+	Name                string
+	Description         string
+	URL                 string
+	EventTypes          []EventType
 }
 
 func (m *Manager) RegisterSubscription(ctx context.Context, params RegisterSubscriptionParam) (uuid.UUID, error) {
@@ -103,13 +103,13 @@ func (m *Manager) RegisterSubscription(ctx context.Context, params RegisterSubsc
 	}
 
 	subscription, err := m.db.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{
-		OwnerID:     params.OwnerID,
-		Name:        params.Name,
-		Description: params.Description,
-		URL:         params.URL,
-		Secret:      randomSecret,
-		EventTypes:  eventTypeStrs,
-		IsActive:    true,
+		OwnerOrganisationID: params.OwnerOrganisationID,
+		Name:                params.Name,
+		Description:         params.Description,
+		URL:                 params.URL,
+		Secret:              randomSecret,
+		EventTypes:          eventTypeStrs,
+		IsActive:            true,
 	})
 	if err != nil {
 		return subscriptionID, fmt.Errorf("failed to create webhook subscription: %w", err)

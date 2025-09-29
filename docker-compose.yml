@@ -4,7 +4,7 @@ networks:
 
 services:
   postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: postgres
     networks:
       - openfga
@@ -18,3 +18,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+  # coturn:
+  #   image: coturn/coturn:latest
+  #   container_name: coturn
+  #   ports:
+  #     - "3478:3478"
+  #     - "3478:3478/udp"
+  #     - "49160-49200:49160-49200/udp"
+  #   networks:
+  #     - host
+  #   volumes:
+  #     - ./turnserver.conf:/etc/coturn/turnserver.conf

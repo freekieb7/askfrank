@@ -22,7 +22,7 @@ type Breadcrumb struct {
 type File struct {
 	ID          string
 	Name        string
-	Size        int64
+	Size        uint64
 	MimeType    string
 	IsFolder    bool
 	IsViewable  bool
@@ -58,12 +58,12 @@ func getFileIcon(mimeType string, isFolder bool) string {
 	}
 }
 
-func formatFileSize(bytes int64) string {
+func formatFileSize(bytes uint64) string {
 	const unit = 1024
 	if bytes < unit {
 		return fmt.Sprintf("%d B", bytes)
 	}
-	div, exp := int64(unit), 0
+	div, exp := uint64(unit), 0
 	for n := bytes / unit; n >= unit; n /= unit {
 		div *= unit
 		exp++

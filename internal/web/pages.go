@@ -6,12 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hp/internal/account"
+	"hp/internal/auth"
 	"hp/internal/config"
 	"hp/internal/database"
+	"hp/internal/drive"
 	"hp/internal/i18n"
+	"hp/internal/notifications"
+	"hp/internal/oauth"
 	"hp/internal/openfga"
+	"hp/internal/organisation"
 	"hp/internal/session"
+	"hp/internal/user"
 	"hp/internal/util"
 	"hp/internal/web/translate"
 	"hp/internal/web/views"
@@ -34,18 +39,22 @@ func init() {
 }
 
 type PageHandler struct {
-	logger         *slog.Logger
-	translator     *i18n.Translator
-	sessionStore   *session.Store
-	db             *database.Database
-	authorization  *openfga.AuthorizationService
-	accountManager *account.Manager
-	authenticator  *account.Authenticator
-	webhookManager *webhook.Manager
+	logger              *slog.Logger
+	translator          *i18n.Translator
+	sessionStore        *session.Store
+	db                  *database.Database
+	authorization       *openfga.AuthorizationService
+	userManager         *user.Manager
+	authenticator       *auth.Authenticator
+	webhookManager      *webhook.Manager
+	notificationManager *notifications.Manager
+	organisationManager *organisation.Manager
+	driveManager        *drive.Manager
+	oauthManager        *oauth.Manager
 }
 
-func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, accountManager *account.Manager, webhookManager *webhook.Manager, authenticator *account.Authenticator) *PageHandler {
-	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, accountManager: accountManager, webhookManager: webhookManager, authenticator: authenticator}
+func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, userManager *user.Manager, webhookManager *webhook.Manager, authenticator *auth.Authenticator, notificationManager *notifications.Manager, organisationManager *organisation.Manager, driveManager *drive.Manager, oauthManager *oauth.Manager) *PageHandler {
+	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, userManager: userManager, webhookManager: webhookManager, authenticator: authenticator, notificationManager: notificationManager, organisationManager: organisationManager, driveManager: driveManager, oauthManager: oauthManager}
 }
 
 func (h *PageHandler) layoutProps(ctx context.Context, title string) component.LayoutProps {
@@ -69,41 +78,27 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
 	// Get recent notifications for the dropdown (limit to 10)
-	recentNotifications, err := h.db.ListNotifications(ctx, database.ListNotificationsParams{
-		OwnerID:          util.Some(userID),
-		Limit:            util.Some(int32(10)),
-		OrderByCreatedAt: util.Some(database.OrderByDESC),
-	})
+	unreadNotifications, err := h.notificationManager.Unread(ctx, userID)
 	if err != nil {
 		h.logger.Error("Failed to get recent notifications", "error", err)
-		recentNotifications = []database.Notification{}
+		unreadNotifications = []notifications.Notification{}
 	}
 
-	// Count unread notifications
-	unreadNotifications, err := h.db.ListNotifications(ctx, database.ListNotificationsParams{
-		OwnerID: util.Some(userID),
-		Read:    util.Some(false),
-	})
-	if err != nil {
-		h.logger.Error("Failed to get unread notifications count", "error", err)
-		unreadNotifications = []database.Notification{}
-	}
+	componentNotifications := make([]component.Notification, len(unreadNotifications))
 
-	// Convert notifications to component format
-	componentNotifications := make([]component.Notification, len(recentNotifications))
-	for i, dbNotification := range recentNotifications {
+	for i, notification := range unreadNotifications {
 		componentNotifications[i] = component.Notification{
-			ID:        dbNotification.ID.String(),
-			Title:     dbNotification.Title,
-			Message:   dbNotification.Message,
-			Type:      dbNotification.Type,
-			IsRead:    dbNotification.IsRead,
-			ActionURL: dbNotification.ActionURL,
-			CreatedAt: dbNotification.CreatedAt.Format("2 Jan 2006 15:04"),
+			ID:        notification.ID.String(),
+			Title:     notification.Title,
+			Message:   notification.Message,
+			Type:      string(notification.Type),
+			IsRead:    notification.IsRead,
+			ActionURL: "",
+			CreatedAt: notification.CreatedAt.Format("2 Jan 2006 15:04"),
 		}
 	}
 
-	user, err := h.accountManager.GetUserByID(ctx, userID)
+	user, err := h.userManager.GetUser(ctx, userID)
 	if err != nil {
 		h.logger.Error("Failed to get user by ID", "error", err)
 	}
@@ -118,6 +113,7 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 				{Name: "Shared with Me", URL: "/drive/shared", Icon: "fas fa-folder-open", Active: strings.HasPrefix(r.URL.Path, "/drive/shared")},
 			}},
 			{Name: "Meetings", URL: "/meetings", Icon: "fas fa-video", Active: strings.HasPrefix(r.URL.Path, "/meetings")},
+			{Name: "Chat", URL: "/chat", Icon: "fas fa-comments", Active: strings.HasPrefix(r.URL.Path, "/chat")},
 			{Name: "Billing", URL: "/billing", Icon: "fas fa-credit-card", Active: strings.HasPrefix(r.URL.Path, "/billing")},
 			{Name: "Developers", URL: "/developers", Icon: "fas fa-code", Active: strings.HasPrefix(r.URL.Path, "/developers"), SubItems: []component.MenuItem{
 				// {Name: "API Documentation", URL: "/developers", Icon: "fas fa-book", Active: c.Path() == "/developers"},
@@ -130,10 +126,9 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 		UnreadCount:           len(unreadNotifications),
 		RecentNotifications:   componentNotifications,
 		UserInfo: component.UserInfo{
-			ID:               user.ID.String(),
-			Name:             user.Name,
-			Email:            user.Email,
-			SubscriptionPlan: user.SubscriptionPlan,
+			ID:    user.ID.String(),
+			Name:  user.Name,
+			Email: user.Email,
 		},
 	}
 }
@@ -173,7 +168,7 @@ func (h *PageHandler) ShowLoginPage(w http.ResponseWriter, r *http.Request) erro
 	// Store the return_to query parameter in session for post-login redirection
 	redirectToRaw := r.URL.Query().Get("return_to")
 	if redirectToRaw != "" {
-		sess.Data["redirect_to"] = redirectToRaw
+		sess.Data.RedirectTo = redirectToRaw
 	}
 
 	return render(ctx, w, views.LoginPage(views.LoginPageProps{
@@ -221,7 +216,7 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Fetch user by email
-	userID, err := h.authenticator.Login(ctx, account.LoginParam{
+	userID, err := h.authenticator.Login(ctx, auth.LoginParam{
 		Email:    loginReq.Email,
 		Password: loginReq.Password,
 	})
@@ -252,10 +247,10 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	// Redirect to the originally requested page or home
 	redirectTo := "/dashboard"
 
-	if sess.Data["redirect_to"] != nil {
-		redirectTo = sess.Data["redirect_to"].(string)
+	if sess.Data.RedirectTo != "" {
+		redirectTo = sess.Data.RedirectTo
 		// Clear the redirect_to after using it
-		delete(sess.Data, "redirect_to")
+		sess.Data.RedirectTo = ""
 	}
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
@@ -314,7 +309,7 @@ type RegisterRequest struct {
 	TermsAccepted bool   `json:"terms_accepted"`
 }
 
-func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
+func (h *PageHandler) RegisterStandaloneUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	sess, err := h.sessionStore.Get(ctx, r)
@@ -363,13 +358,13 @@ func (h *PageHandler) Register(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check if user already exists
-	userID, err := h.accountManager.Register(ctx, account.RegisterParam{
+	userID, err := h.authenticator.Register(ctx, auth.RegisterParam{
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: req.Password,
 	})
 	if err != nil {
-		if errors.Is(err, account.ErrEmailAlreadyInUse) {
+		if errors.Is(err, auth.ErrEmailAlreadyInUse) {
 			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 				Status:  APIResponseStatusError,
 				Message: "Email already in use",
@@ -429,14 +424,38 @@ type ChangeSubscriptionRequest struct {
 func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
-
 	var req ChangeSubscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.Error("Failed to decode change subscription request", "error", err)
 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Invalid request",
+		})
+	}
+
+	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+	user, err := h.userManager.GetUser(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to get user from session", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
+		})
+	}
+
+	if !user.OrganisationID.Some {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "User has no subscription",
+		})
+	}
+
+	org, err := h.organisationManager.GetOrganisation(ctx, user.OrganisationID.Data)
+	if err != nil {
+		h.logger.Error("Failed to get organisation", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
 		})
 	}
 
@@ -447,12 +466,12 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	var plan account.SubscriptionPlan
+	var plan organisation.SubscriptionPlan
 	switch req.NewPlan {
 	case "free":
-		plan = account.SubscriptionPlanFree
+		plan = organisation.SubscriptionPlanFree
 	case "pro":
-		plan = account.SubscriptionPlanPro
+		plan = organisation.SubscriptionPlanPro
 	// case "enterprise":
 	// 	plan = subscription.PlanEnterprise
 	default:
@@ -462,11 +481,11 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	if plan == account.SubscriptionPlanFree {
+	if plan == organisation.SubscriptionPlanFree {
 		// Downgrading to free plan - change immediately
-		if err := h.accountManager.ChangeSubscription(ctx, account.ChangeSubscriptionParam{
-			UserID:  userID,
-			NewPlan: plan,
+		if err := h.organisationManager.ChangeSubscription(ctx, organisation.ChangeSubscriptionParam{
+			OrganisationID: org.ID,
+			NewPlan:        plan,
 		}); err != nil {
 			h.logger.Error("Failed to change subscription", "error", err, "user_id", userID, "new_plan", plan)
 			return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
@@ -485,11 +504,11 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Upgrading to paid plan - create checkout session
-	checkoutURL, err := h.accountManager.CreateCheckoutSession(ctx, account.CreateCheckoutSessionParams{
-		UserID:     userID,
-		Plan:       plan,
-		SuccessURL: "http://" + r.Host + "/billing?session=success",
-		CancelURL:  "http://" + r.Host + "/billing?session=cancel",
+	checkoutURL, err := h.organisationManager.CreateCheckoutSession(ctx, organisation.CreateCheckoutSessionParams{
+		OrganisationID: org.ID,
+		Plan:           plan,
+		SuccessURL:     "http://" + r.Host + "/billing?session=success",
+		CancelURL:      "http://" + r.Host + "/billing?session=cancel",
 	})
 	if err != nil {
 		h.logger.Info(r.URL.Scheme + "://" + r.Host + "/billing?session=success")
@@ -514,9 +533,18 @@ func (h *PageHandler) ShowMyDrivePage(w http.ResponseWriter, r *http.Request) er
 
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	files, err := h.db.ListFiles(ctx, database.ListFilesParams{
-		OwnerID:  util.Some(userID),
-		ParentID: util.Some(util.None[uuid.UUID]()), // Root folder
+	driveID, err := h.driveManager.UserDriveID(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to get user drive ID", "error", err, "user_id", userID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to get user drive",
+		})
+	}
+
+	files, err := h.driveManager.List(ctx, drive.ListParams{
+		DriveID:  driveID,
+		FolderID: util.None[uuid.UUID](),
 	})
 	if err != nil {
 		h.logger.Error("Failed to get files for folder", "error", err)
@@ -619,15 +647,20 @@ func (h *PageHandler) CreateFolder(w http.ResponseWriter, r *http.Request) error
 		parentID = util.Some(parentIDRaw)
 	}
 
+	driveID, err := h.driveManager.UserDriveID(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to get user drive ID", "error", err, "user_id", userID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to get user drive",
+		})
+	}
+
 	// Create folder in database
-	folder, err := h.db.CreateFile(ctx, database.CreateFileParams{
-		OwnerID:   userID,
-		Name:      requestBody.Name,
-		ParentID:  parentID,
-		MimeType:  "application/askfrank.folder",
-		Path:      util.None[string](),
-		S3Key:     util.None[string](),
-		SizeBytes: 0,
+	folder, err := h.driveManager.CreateFolder(ctx, drive.CreateFolderParams{
+		DriveID:  driveID,
+		ParentID: parentID,
+		Name:     requestBody.Name,
 	})
 	if err != nil {
 		h.logger.Error("Failed to create folder", "error", err)
@@ -775,15 +808,22 @@ func (h *PageHandler) UploadFile(w http.ResponseWriter, r *http.Request) error {
 			mimeType = "application/octet-stream"
 		}
 
+		driveID, err := h.driveManager.UserDriveID(ctx, userID)
+		if err != nil {
+			slog.Error("Failed to get user drive ID", "error", err, "user_id", userID)
+			// Try to delete the saved file
+			os.Remove(filePath)
+			continue
+		}
+
 		// Create file record in database
 		file, err := h.db.CreateFile(ctx, database.CreateFileParams{
-			OwnerID:   userID,
+			DriveID:   driveID,
 			ParentID:  folderID,
 			Name:      fileHeader.Filename,
 			MimeType:  mimeType,
-			S3Key:     util.None[string](),
-			Path:      util.Some(filePath),
-			SizeBytes: fileHeader.Size,
+			Path:      filePath,
+			SizeBytes: uint64(fileHeader.Size),
 		})
 		if err != nil {
 			slog.Error("Failed to create file record", "error", err, "filename", fileHeader.Filename)
@@ -824,219 +864,234 @@ func (h *PageHandler) UploadFile(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-type ShareFileRequest struct {
-	FileID string `json:"file_id"`
-	Email  string `json:"email"`
-}
+// type ShareFileRequest struct {
+// 	FileID string `json:"file_id"`
+// 	Email  string `json:"email"`
+// }
 
-func (h *PageHandler) ShareFile(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+// func (h *PageHandler) ShareFile(w http.ResponseWriter, r *http.Request) error {
+// 	ctx := r.Context()
+// 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	var req ShareFileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Invalid request body",
-		})
-	}
+// 	var req ShareFileRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Invalid request body",
+// 		})
+// 	}
 
-	// Validation
-	if req.FileID == "" || req.Email == "" {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "File ID and email are required",
-		})
-	}
+// 	// Validation
+// 	if req.FileID == "" || req.Email == "" {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "File ID and email are required",
+// 		})
+// 	}
 
-	fileID, err := uuid.Parse(req.FileID)
-	if err != nil {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Invalid file ID",
-		})
-	}
+// 	fileID, err := uuid.Parse(req.FileID)
+// 	if err != nil {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Invalid file ID",
+// 		})
+// 	}
 
-	// Get the user to share with
-	shareWithUser, err := h.db.GetUserByEmail(ctx, req.Email)
-	if err != nil {
-		if err == database.ErrUserNotFound {
-			return JSONResponse(w, http.StatusNotFound, ApiResponse{
-				Status:  APIResponseStatusError,
-				Message: "User to share with not found",
-			})
-		}
+// 	// Get the user to share with
+// 	shareWithUser, err := h.db.GetUserByEmail(ctx, req.Email)
+// 	if err != nil {
+// 		if err == database.ErrUserNotFound {
+// 			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+// 				Status:  APIResponseStatusError,
+// 				Message: "User to share with not found",
+// 			})
+// 		}
 
-		h.logger.Error("Failed to get user by email", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Something went wrong, please try again later",
-		})
-	}
+// 		h.logger.Error("Failed to get user by email", "error", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Something went wrong, please try again later",
+// 		})
+// 	}
 
-	// Check if the file exists and belongs to the current user
-	file, err := h.db.GetFileByID(ctx, fileID)
-	if err != nil {
-		if err == database.ErrFileNotFound {
-			return JSONResponse(w, http.StatusNotFound, ApiResponse{
-				Status:  APIResponseStatusError,
-				Message: "File not found",
-			})
-		}
+// 	// Check if the file exists and belongs to the current user
+// 	file, err := h.db.GetFile(ctx, )
+// 	if err != nil {
+// 		if err == database.ErrFileNotFound {
+// 			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+// 				Status:  APIResponseStatusError,
+// 				Message: "File not found",
+// 			})
+// 		}
 
-		h.logger.Error("Failed to get file by ID", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Something went wrong, please try again later",
-		})
-	}
+// 		h.logger.Error("Failed to get file by ID", "error", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Something went wrong, please try again later",
+// 		})
+// 	}
 
-	if file.OwnerID != userID {
-		return JSONResponse(w, http.StatusForbidden, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "You do not have permission to share this file",
-		})
-	}
+// 	if file.OwnerID != userID {
+// 		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "You do not have permission to share this file",
+// 		})
+// 	}
 
-	if file.OwnerID != userID {
-		return JSONResponse(w, http.StatusForbidden, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "You do not have permission to share this file",
-		})
-	}
+// 	if file.OwnerID != userID {
+// 		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "You do not have permission to share this file",
+// 		})
+// 	}
 
-	// Add permission in OpenFGA
-	if err := h.authorization.AddFileReader(ctx, shareWithUser.ID, file.ID); err != nil {
-		h.logger.Error("Failed to add file reader permission", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to share file",
-		})
-	}
+// 	// Add permission in OpenFGA
+// 	if err := h.authorization.AddFileReader(ctx, shareWithUser.ID, file.ID); err != nil {
+// 		h.logger.Error("Failed to add file reader permission", "error", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to share file",
+// 		})
+// 	}
 
-	return JSONResponse(w, http.StatusOK, ApiResponse{
-		Status:  APIResponseStatusSuccess,
-		Message: "File shared successfully",
-	})
-}
+// 	return JSONResponse(w, http.StatusOK, ApiResponse{
+// 		Status:  APIResponseStatusSuccess,
+// 		Message: "File shared successfully",
+// 	})
+// }
 
-type DownloadFileRequest struct {
-	FileID string `json:"file_id"`
-}
+// type DownloadFileRequest struct {
+// 	FileID string `json:"file_id"`
+// }
 
-func (h *PageHandler) DownloadFile(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+// func (h *PageHandler) DownloadFile(w http.ResponseWriter, r *http.Request) error {
+// 	ctx := r.Context()
+// 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	var req DownloadFileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Invalid request body",
-		})
-	}
+// 	var req DownloadFileRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Invalid request body",
+// 		})
+// 	}
 
-	fileID, err := uuid.Parse(req.FileID)
-	if err != nil {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Invalid file ID",
-		})
-	}
+// 	fileID, err := uuid.Parse(req.FileID)
+// 	if err != nil {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Invalid file ID",
+// 		})
+// 	}
 
-	// Check if the user has permission to access the file
-	hasAccess, err := h.authorization.CanReadFile(ctx, userID, fileID)
-	if err != nil {
-		h.logger.Error("Failed to check file access", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to check file access",
-		})
-	}
-	if !hasAccess {
-		return JSONResponse(w, http.StatusForbidden, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "You do not have permission to access this file",
-		})
-	}
+// 	// Check if the user has permission to access the file
+// 	hasAccess, err := h.authorization.CanReadFile(ctx, userID, fileID)
+// 	if err != nil {
+// 		h.logger.Error("Failed to check file access", "error", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to check file access",
+// 		})
+// 	}
+// 	if !hasAccess {
+// 		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "You do not have permission to access this file",
+// 		})
+// 	}
 
-	file, err := h.db.GetFileByID(ctx, fileID)
-	if err != nil {
-		if err == database.ErrFileNotFound {
-			return JSONResponse(w, http.StatusNotFound, ApiResponse{
-				Status:  APIResponseStatusError,
-				Message: "File not found",
-			})
-		}
+// 	file, err := h.db.GetFileByID(ctx, fileID)
+// 	if err != nil {
+// 		if err == database.ErrFileNotFound {
+// 			return JSONResponse(w, http.StatusNotFound, ApiResponse{
+// 				Status:  APIResponseStatusError,
+// 				Message: "File not found",
+// 			})
+// 		}
 
-		h.logger.Error("Failed to get file by ID", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Something went wrong, please try again later",
-		})
-	}
+// 		h.logger.Error("Failed to get file by ID", "error", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Something went wrong, please try again later",
+// 		})
+// 	}
 
-	if !file.Path.Some {
-		return JSONResponse(w, http.StatusNotFound, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "File not found on server",
-		})
-	}
+// 	if file.Path == "" {
+// 		return JSONResponse(w, http.StatusNotFound, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "File not found on server",
+// 		})
+// 	}
 
-	// Serve the file for download
-	return Download(w, r, file.Path.Unwrap(), file.Name)
-}
+// 	// Serve the file for download
+// 	return Download(w, r, file.Path, file.Name)
+// }
 
-func (h *PageHandler) ShowSharedFilePage(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+// func (h *PageHandler) ShowSharedFilePage(w http.ResponseWriter, r *http.Request) error {
+// 	ctx := r.Context()
+// 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	sharedFiles, err := h.db.ListSharedFiles(ctx, database.ListSharedFilesParams{
-		UserID: util.Some(userID),
-	})
-	if err != nil {
-		h.logger.Error("Failed to get files for folder", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to load files for folder",
-		})
-	}
+// 	sharedFiles, err := h.db.ListSharedFiles(ctx, database.ListSharedFilesParams{
+// 		UserID: util.Some(userID),
+// 	})
+// 	if err != nil {
+// 		h.logger.Error("Failed to get files for folder", "error", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to load files for folder",
+// 		})
+// 	}
 
-	viewFiles := make([]views.File, 0, len(sharedFiles))
-	for _, file := range sharedFiles {
-		viewFiles = append(viewFiles, views.File{
-			ID:       file.ID.String(),
-			Name:     file.Name,
-			Size:     file.SizeBytes,
-			MimeType: file.MimeType,
-			IsFolder: file.MimeType == "application/askfrank.folder",
-		})
-	}
+// 	viewFiles := make([]views.File, 0, len(sharedFiles))
+// 	for _, file := range sharedFiles {
+// 		viewFiles = append(viewFiles, views.File{
+// 			ID:       file.ID.String(),
+// 			Name:     file.Name,
+// 			Size:     file.SizeBytes,
+// 			MimeType: file.MimeType,
+// 			IsFolder: file.MimeType == "application/askfrank.folder",
+// 		})
+// 	}
 
-	// Build breadcrumbs
-	breadcrumbs := make([]views.Breadcrumb, 0)
-	breadcrumbs = append(breadcrumbs, views.Breadcrumb{
-		Name: "Shared with me",
-		URL:  "/drive/shared",
-	})
+// 	// Build breadcrumbs
+// 	breadcrumbs := make([]views.Breadcrumb, 0)
+// 	breadcrumbs = append(breadcrumbs, views.Breadcrumb{
+// 		Name: "Shared with me",
+// 		URL:  "/drive/shared",
+// 	})
 
-	currentFolderID := ""
-	return render(ctx, w, views.DrivePage(views.DrivePageProps{
-		AppLayoutProps:  h.appLayoutProps(ctx, h.layoutProps(ctx, "Shared with me"), r),
-		Files:           viewFiles,
-		Breadcrumbs:     breadcrumbs,
-		CurrentFolderID: currentFolderID,
-	}))
-}
+// 	currentFolderID := ""
+// 	return render(ctx, w, views.DrivePage(views.DrivePageProps{
+// 		AppLayoutProps:  h.appLayoutProps(ctx, h.layoutProps(ctx, "Shared with me"), r),
+// 		Files:           viewFiles,
+// 		Breadcrumbs:     breadcrumbs,
+// 		CurrentFolderID: currentFolderID,
+// 	}))
+// }
 
 func (h *PageHandler) ShowOAuthClientsPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
+	user, err := h.userManager.GetUser(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to get user from session", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
+		})
+	}
+
+	if !user.OrganisationID.Some {
+		// User has no organisation - they cannot create OAuth clients
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You must belong to an organisation to manage OAuth clients",
+		})
+	}
+
 	// Get the list of OAuth clients for this user
-	clients, err := h.db.ListOAuthClients(ctx, database.ListOAuthClientsParams{
-		OwnerID: util.Some(userID),
-	})
+	clients, err := h.oauthManager.ListClients(ctx, userID)
 	if err != nil {
 		h.logger.Error("Failed to list OAuth clients", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
@@ -1052,7 +1107,7 @@ func (h *PageHandler) ShowOAuthClientsPage(w http.ResponseWriter, r *http.Reques
 			ID:           client.ID.String(),
 			Name:         client.Name,
 			Description:  "", // Add a default empty description
-			CreatedAt:    client.CreatedAt,
+			ModifiedAt:   client.ModifiedAt,
 			RedirectURIs: client.RedirectURIs,
 		})
 	}
@@ -1171,7 +1226,7 @@ func (h *PageHandler) CreateOAuthClient(w http.ResponseWriter, r *http.Request) 
 func (h *PageHandler) GetOAuthClient(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	// userID := c.Locals("user_id").(uuid.UUID)
-	clientIDStr := r.PathValue("id")
+	clientIDStr := r.PathValue("client_id")
 
 	clientID, err := uuid.Parse(clientIDStr)
 	if err != nil {
@@ -1216,7 +1271,7 @@ func (h *PageHandler) GetOAuthClient(w http.ResponseWriter, r *http.Request) err
 func (h *PageHandler) DeleteOAuthClient(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	// userID := c.Locals("user_id").(uuid.UUID)
-	clientIDStr := r.PathValue("id")
+	clientIDStr := r.PathValue("client_id")
 
 	clientID, err := uuid.Parse(clientIDStr)
 	if err != nil {
@@ -1357,19 +1412,19 @@ func (h *PageHandler) ShowFolderPage(w http.ResponseWriter, r *http.Request) err
 	}))
 }
 
-func (h *PageHandler) ShowCreateMeetingPage(w http.ResponseWriter, r *http.Request) error {
+func (h *PageHandler) ShowMeetingsPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	return render(ctx, w, views.CreateMeetingPage(views.CreateMeetingPageProps{
-		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Create Meeting"), r),
+	return render(ctx, w, views.MeetingsPage(views.MeetingsPageProps{
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Meetings"), r),
 	}))
 }
 
 func (h *PageHandler) ShowMeetingPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	meetingID := r.PathValue("id")
+	meetingID := r.PathValue("meeting_id")
 	if meetingID == "" {
-		return Redirect(w, r, "/meeting", http.StatusSeeOther)
+		return Redirect(w, r, "/meetings", http.StatusSeeOther)
 	}
 
 	return render(ctx, w, views.MeetingPage(views.MeetingPageProps{
@@ -1552,7 +1607,7 @@ func (h *PageHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) erro
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
 	// Get webhook ID from URL path
-	webhookID := r.PathValue("id")
+	webhookID := r.PathValue("webhook_id")
 	if webhookID == "" {
 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 			Status:  APIResponseStatusError,
@@ -1655,6 +1710,13 @@ func (h *PageHandler) ShowAuditLogsPage(w http.ResponseWriter, r *http.Request) 
 	return render(ctx, w, views.AuditLogsPage(views.AuditLogsPageProps{
 		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Audit Logs"), r),
 		Events:         viewEvents,
+	}))
+}
+
+func (h *PageHandler) ShowChatPage(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	return render(ctx, w, views.ChatPage(views.ChatPageProps{
+		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Chat"), r),
 	}))
 }
 

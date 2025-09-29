@@ -21,8 +21,7 @@ type OAuthClient struct {
 	IsPublic      bool
 	Secret        string
 	AllowedScopes []string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ModifiedAt    time.Time
 }
 
 type OAuthClientsPageProps struct {
@@ -73,7 +72,7 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"table-container\"><table class=\"table\"><thead><tr><th>Name</th><th>Client ID</th><th>Type</th><th>Redirect URIs</th><th>Created</th><th class=\"text-right\">Actions</th></tr></thead> <tbody>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"table-container\"><table class=\"table\"><thead><tr><th>Name</th><th>Client ID</th><th>Type</th><th>Redirect URIs</th><th>Modified at</th><th class=\"text-right\">Actions</th></tr></thead> <tbody>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -85,7 +84,7 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 					var templ_7745c5c3_Var3 string
 					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(client.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 70, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 69, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 					if templ_7745c5c3_Err != nil {
@@ -103,7 +102,7 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 						var templ_7745c5c3_Var4 string
 						templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(client.Description)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 72, Col: 65}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 71, Col: 65}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 						if templ_7745c5c3_Err != nil {
@@ -121,7 +120,7 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(client.ID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 76, Col: 55}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 75, Col: 55}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 					if templ_7745c5c3_Err != nil {
@@ -155,7 +154,7 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 							var templ_7745c5c3_Var6 string
 							templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(uri)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 93, Col: 51}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 92, Col: 51}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 							if templ_7745c5c3_Err != nil {
@@ -173,7 +172,7 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 							var templ_7745c5c3_Var7 string
 							templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(len(client.RedirectURIs) - 2)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 95, Col: 51}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 94, Col: 51}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 							if templ_7745c5c3_Err != nil {
@@ -191,7 +190,7 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 							var templ_7745c5c3_Var8 string
 							templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(uri)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 98, Col: 51}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 97, Col: 51}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 							if templ_7745c5c3_Err != nil {
@@ -208,9 +207,9 @@ func OAuthClientsPage(props OAuthClientsPageProps) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var9 string
-					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(client.CreatedAt.Format("Jan 02, 2006"))
+					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(client.ModifiedAt.Format("Jan 02, 2006"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 104, Col: 53}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/oauth_clients.templ`, Line: 103, Col: 54}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {

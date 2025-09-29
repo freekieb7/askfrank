@@ -17,23 +17,23 @@ air:
 	go tool air -c .air.toml
 
 # Run both Tailwind and Air in parallel
-dev: docker-compose-up
+dev: up
 	@echo "Starting Tailwind and Air..."
 	$(MAKE) tailwind & \
 	$(MAKE) air & \
 	wait
 
-docker-compose-up:
+up:
 	@echo "Starting Docker containers..."
 	docker compose up -d --remove-orphans
 	@echo "Docker containers started."
 
-docker-compose-down:
+down:
 	@echo "Stopping Docker containers..."
 	docker compose down
 	@echo "Docker containers stopped."
 
-docker-compose-restart: docker-compose-down docker-compose-up
+restart: down up
 
 # Migration commands
 migrate-build:

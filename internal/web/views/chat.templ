@@ -1,0 +1,337 @@
+package views
+
+import "hp/internal/web/views/component"
+
+type ChatPageProps struct {
+	component.AppLayoutProps
+	SuccessMsg string
+	ErrorMsg   string
+}
+
+templ ChatPage(props ChatPageProps) {
+	@component.AppLayout(props.AppLayoutProps) {
+		<div class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+			<!-- Chat Header -->
+			<div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+				<div class="flex items-center justify-between">
+					<div class="flex items-center space-x-3">
+						<div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+							<i class="fas fa-comments text-white"></i>
+						</div>
+						<div>
+							<h1 class="text-xl font-semibold text-gray-900 dark:text-white">Team Chat</h1>
+							<p class="text-sm text-gray-500 dark:text-gray-400">
+								<span id="connectionStatus" class="inline-flex items-center">
+									<span class="w-2 h-2 bg-gray-400 rounded-full mr-1"></span>
+									Connecting...
+								</span>
+							</p>
+						</div>
+					</div>
+					<div class="flex items-center space-x-2">
+						<span id="userCount" class="text-sm text-gray-500 dark:text-gray-400">0 users online</span>
+						<button id="settingsBtn" class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+							<i class="fas fa-cog"></i>
+						</button>
+					</div>
+				</div>
+			</div>
+			<!-- Chat Messages Container -->
+			<div class="flex-1 flex">
+				<!-- Main Chat Area -->
+				<div class="flex-1 flex flex-col">
+					<!-- Messages Area -->
+					<div id="chatBox" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
+						<!-- Welcome message -->
+						<div class="flex justify-center">
+							<div class="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-4 py-2 rounded-full text-sm">
+								Welcome to the chat! Start a conversation.
+							</div>
+						</div>
+					</div>
+					<!-- Typing Indicator -->
+					<div id="typingIndicator" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hidden">
+						<div class="flex items-center space-x-2">
+							<div class="flex space-x-1">
+								<div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce"></div>
+								<div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s;"></div>
+								<div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s;"></div>
+							</div>
+							<span>Someone is typing...</span>
+						</div>
+					</div>
+					<!-- Message Input Area -->
+					<div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+						<div class="flex items-end space-x-3">
+							<!-- User Avatar -->
+							<div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+								if len(props.UserInfo.Name) > 0 {
+									{ string(props.UserInfo.Name[0]) }
+								} else {
+									U
+								}
+							</div>
+							<!-- Message Input -->
+							<div class="flex-1 relative">
+								<textarea
+									id="messageInput"
+									rows="1"
+									class="w-full resize-none border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 pr-12 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+									placeholder="Type a message... (Press Enter to send, Shift+Enter for new line)"
+									style="min-height: 44px; max-height: 120px;"
+								></textarea>
+								<!-- Emoji Button -->
+								<button id="emojiBtn" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+									<i class="fas fa-smile"></i>
+								</button>
+							</div>
+							<!-- Send Button -->
+							<button id="sendBtn" class="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-3 rounded-lg transition-colors duration-200 flex-shrink-0">
+								<i class="fas fa-paper-plane"></i>
+							</button>
+						</div>
+					</div>
+				</div>
+				<!-- Online Users Sidebar -->
+				<div class="w-64 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 hidden lg:block">
+					<div class="p-4 border-b border-gray-200 dark:border-gray-700">
+						<h3 class="font-medium text-gray-900 dark:text-white">Online Users</h3>
+					</div>
+					<div id="usersList" class="p-4 space-y-2">
+						<!-- Online users will be populated here -->
+						<div class="flex items-center space-x-3 p-2">
+							<div class="relative">
+								<div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+									if len(props.UserInfo.Name) > 0 {
+										{ string(props.UserInfo.Name[0]) }
+									} else {
+										U
+									}
+								</div>
+								<div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
+							</div>
+							<div class="flex-1">
+								<div class="text-sm font-medium text-gray-900 dark:text-white">{ props.UserInfo.Name } (You)</div>
+								<div class="text-xs text-gray-500 dark:text-gray-400">Online</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<script>
+			// Configuration
+			const currentUser = {
+				name: "{ props.UserInfo.Name }",
+				id: 'user_' + Math.random().toString(36).substr(2, 9)
+			};
+			
+			// WebSocket connection
+			const ws = new WebSocket("ws://" + window.location.host + "/ws/chat");
+			
+			// DOM elements
+			const chatBox = document.getElementById("chatBox");
+			const messageInput = document.getElementById("messageInput");
+			const sendBtn = document.getElementById("sendBtn");
+			const connectionStatus = document.getElementById("connectionStatus");
+			const userCount = document.getElementById("userCount");
+			const typingIndicator = document.getElementById("typingIndicator");
+			const usersList = document.getElementById("usersList");
+			
+			// State
+			let isTyping = false;
+			let typingTimeout = null;
+			let onlineUsers = new Set([currentUser.id]);
+			
+			// Auto-resize textarea
+			messageInput.addEventListener('input', function() {
+				this.style.height = 'auto';
+				this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+				
+				// Handle typing indicator
+				if (this.value.length > 0 && !isTyping) {
+					isTyping = true;
+					// Send typing start (if implemented on backend)
+				}
+				
+				clearTimeout(typingTimeout);
+				typingTimeout = setTimeout(() => {
+					isTyping = false;
+					// Send typing stop (if implemented on backend)
+				}, 1000);
+			});
+			
+			// Send message on Enter (not Shift+Enter)
+			messageInput.addEventListener('keydown', function(e) {
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					sendMessage();
+				}
+			});
+			
+			// Send button click
+			sendBtn.addEventListener('click', sendMessage);
+			
+			// WebSocket event handlers
+			ws.onopen = () => {
+				console.log('Connected to chat');
+				updateConnectionStatus('connected', 'Connected');
+				sendBtn.disabled = false;
+			};
+			
+			ws.onclose = () => {
+				console.log('Disconnected from chat');
+				updateConnectionStatus('disconnected', 'Disconnected');
+				sendBtn.disabled = true;
+			};
+			
+			ws.onerror = (error) => {
+				console.error('WebSocket error:', error);
+				updateConnectionStatus('error', 'Connection Error');
+				sendBtn.disabled = true;
+			};
+			
+			ws.onmessage = (event) => {
+				try {
+					const data = JSON.parse(event.data);
+					handleMessage(data);
+				} catch (e) {
+					// Handle plain text messages (backward compatibility)
+					addMessage({
+						type: 'message',
+						user: 'Anonymous',
+						content: event.data,
+						timestamp: new Date().toISOString()
+					});
+				}
+			};
+			
+			// Message handling
+			function sendMessage() {
+				const content = messageInput.value.trim();
+				if (!content || ws.readyState !== WebSocket.OPEN) return;
+				
+				const message = {
+					type: 'message',
+					user: currentUser.name,
+					userId: currentUser.id,
+					content: content,
+					timestamp: new Date().toISOString()
+				};
+				
+				ws.send(JSON.stringify(message));
+				messageInput.value = '';
+				messageInput.style.height = 'auto';
+			}
+			
+			function handleMessage(data) {
+				switch (data.type) {
+					case 'message':
+						addMessage(data);
+						break;
+					case 'user_joined':
+						handleUserJoined(data);
+						break;
+					case 'user_left':
+						handleUserLeft(data);
+						break;
+					case 'typing_start':
+						showTypingIndicator(data.user);
+						break;
+					case 'typing_stop':
+						hideTypingIndicator();
+						break;
+				}
+			}
+			
+			function addMessage(data) {
+				const messageDiv = document.createElement('div');
+				const isOwnMessage = data.userId === currentUser.id;
+				const timestamp = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+				
+				messageDiv.className = `flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`;
+				messageDiv.innerHTML = `
+					<div class="max-w-xs lg:max-w-md ${isOwnMessage ? 'order-1' : 'order-2'}">
+						<div class="${isOwnMessage ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white'} rounded-lg px-4 py-2 shadow-sm">
+							${isOwnMessage ? '' : '<div class="text-xs font-medium mb-1 text-gray-600 dark:text-gray-300">' + data.user + '</div>'}
+							<div class="text-sm whitespace-pre-wrap">${escapeHtml(data.content)}</div>
+							<div class="text-xs mt-1 opacity-70">${timestamp}</div>
+						</div>
+					</div>
+					${isOwnMessage ? '' : '<div class="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-sm font-medium text-gray-700 dark:text-gray-300 order-1 mr-3">' + data.user[0].toUpperCase() + '</div>'}
+				`;
+				
+				chatBox.appendChild(messageDiv);
+				chatBox.scrollTop = chatBox.scrollHeight;
+			}
+			
+			function updateConnectionStatus(status, text) {
+				const statusDot = connectionStatus.querySelector('.w-2.h-2');
+				connectionStatus.querySelector('span:last-child').textContent = text;
+				
+				statusDot.className = statusDot.className.replace(/bg-\w+-\d+/, '');
+				switch (status) {
+					case 'connected':
+						statusDot.classList.add('bg-green-500');
+						break;
+					case 'connecting':
+						statusDot.classList.add('bg-yellow-500');
+						break;
+					case 'disconnected':
+						statusDot.classList.add('bg-gray-400');
+						break;
+					case 'error':
+						statusDot.classList.add('bg-red-500');
+						break;
+				}
+			}
+			
+			function showTypingIndicator(user) {
+				typingIndicator.querySelector('span:last-child').textContent = `${user} is typing...`;
+				typingIndicator.classList.remove('hidden');
+			}
+			
+			function hideTypingIndicator() {
+				typingIndicator.classList.add('hidden');
+			}
+			
+			function handleUserJoined(data) {
+				onlineUsers.add(data.userId);
+				updateUserCount();
+				addSystemMessage(`${data.user} joined the chat`);
+			}
+			
+			function handleUserLeft(data) {
+				onlineUsers.delete(data.userId);
+				updateUserCount();
+				addSystemMessage(`${data.user} left the chat`);
+			}
+			
+			function updateUserCount() {
+				userCount.textContent = `${onlineUsers.size} user${onlineUsers.size !== 1 ? 's' : ''} online`;
+			}
+			
+			function addSystemMessage(text) {
+				const messageDiv = document.createElement('div');
+				messageDiv.className = 'flex justify-center';
+				messageDiv.innerHTML = `
+					<div class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-full text-sm">
+						${text}
+					</div>
+				`;
+				chatBox.appendChild(messageDiv);
+				chatBox.scrollTop = chatBox.scrollHeight;
+			}
+			
+			function escapeHtml(text) {
+				const div = document.createElement('div');
+				div.textContent = text;
+				return div.innerHTML;
+			}
+			
+			// Initialize
+			updateUserCount();
+			messageInput.focus();
+		</script>
+	}
+}

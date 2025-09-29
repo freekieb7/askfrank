@@ -72,8 +72,8 @@ func NewConfig() Config {
 			MaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
 		},
 		Stripe: StripeConfig{
-			APIKey:        getEnv("STRIPE_API_KEY", "sk_test_51S7Lsl00bAgI7KzUm7hXRKN0PJ3IRI6CIqEg2SXNaLpUW7p8wW1FGU0rz7I3RtnL0ntbEc27i3gTzHTolOyH2ahG00EaiIRpir"),
-			WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", "whsec_7Qyy8Z0Sdhsxz5Bpx3tcK0hNCk03G79U"),
+			APIKey:        getEnv("STRIPE_API_KEY", ""),
+			WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 	}
 }

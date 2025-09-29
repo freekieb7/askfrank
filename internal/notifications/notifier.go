@@ -2,20 +2,32 @@ package notifications
 
 import (
 	"context"
-	"fmt"
 	"hp/internal/database"
+	"hp/internal/util"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-type Notifier struct {
+type Manager struct {
 	logger *slog.Logger
 	db     *database.Database
 }
 
-func NewNotifier(logger *slog.Logger, db *database.Database) Notifier {
-	return Notifier{logger: logger, db: db}
+func NewManager(logger *slog.Logger, db *database.Database) Manager {
+	return Manager{logger: logger, db: db}
+}
+
+type Notification struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Title     string
+	Message   string
+	Type      NotificationType
+	IsRead    bool
+	ActionURL string
+	CreatedAt time.Time
 }
 
 type NotificationType string
@@ -33,15 +45,43 @@ type NotifyParam struct {
 	Type    NotificationType
 }
 
-func (n *Notifier) Notify(ctx context.Context, params NotifyParam) error {
-	if _, err := n.db.CreateNotification(ctx, database.CreateNotificationParams{
-		OwnerID: params.OwnerID,
-		Title:   params.Title,
-		Message: params.Message,
-		Type:    string(params.Type),
-		IsRead:  false,
-	}); err != nil {
-		return fmt.Errorf("failed to create notification: %w", err)
-	}
+func (m *Manager) Notify(ctx context.Context, params NotifyParam) error {
+	// if _, err := n.db.CreateNotification(ctx, database.CreateNotificationParams{
+	// 	OwnerID: params.OwnerID,
+	// 	Title:   params.Title,
+	// 	Message: params.Message,
+	// 	Type:    string(params.Type),
+	// 	IsRead:  false,
+	// }); err != nil {
+	// 	return fmt.Errorf("failed to create notification: %w", err)
+	// }
 	return nil
+}
+
+func (m *Manager) Unread(ctx context.Context, userID uuid.UUID) ([]Notification, error) {
+	notifications, err := m.db.ListNotifications(ctx, database.ListNotificationsParams{
+		OwnerUserID:      util.Some(userID),
+		Limit:            util.Some(uint16(10)),
+		OrderByCreatedAt: util.Some(database.OrderByDESC),
+		Read:             util.Some(false),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]Notification, len(notifications))
+	for i, notif := range notifications {
+		result[i] = Notification{
+			ID:        notif.ID,
+			UserID:    notif.OwnerUserID,
+			Title:     notif.Title,
+			Message:   notif.Message,
+			Type:      NotificationType(notif.Type),
+			IsRead:    notif.IsRead,
+			ActionURL: notif.ActionURL,
+			CreatedAt: notif.CreatedAt,
+		}
+	}
+
+	return result, nil
 }

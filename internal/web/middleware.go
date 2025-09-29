@@ -164,7 +164,7 @@ func CSRFMiddleware(logger *slog.Logger, sessionStore *session.Store) Middleware
 				}
 
 				// Store the new CSRF token in the session
-				sess.Data["csrf_token"] = csrfToken
+				sess.Data.CsrfToken = csrfToken
 				if err := sessionStore.Save(r.Context(), w, sess); err != nil {
 					return fmt.Errorf("failed to save session: %w", err)
 				}
@@ -180,8 +180,7 @@ func CSRFMiddleware(logger *slog.Logger, sessionStore *session.Store) Middleware
 					return fmt.Errorf("failed to get session: %w", err)
 				}
 
-				sessCSRFToken, ok := sess.Data["csrf_token"].(string)
-				if !ok || sessCSRFToken == "" {
+				if sess.Data.CsrfToken == "" {
 					return fmt.Errorf("CSRF token not found in session")
 				}
 
@@ -190,8 +189,8 @@ func CSRFMiddleware(logger *slog.Logger, sessionStore *session.Store) Middleware
 					return fmt.Errorf("missing CSRF token")
 				}
 
-				if sessCSRFToken != csrfToken {
-					logger.Warn("CSRF token mismatch", "session_token", sessCSRFToken, "request_token", csrfToken)
+				if sess.Data.CsrfToken != csrfToken {
+					logger.Warn("CSRF token mismatch", "session_token", sess.Data.CsrfToken, "request_token", csrfToken)
 					return JSONResponse(w, http.StatusForbidden, ApiResponse{
 						Status:  APIResponseStatusError,
 						Message: "Invalid request please try again",

@@ -95,26 +95,26 @@ func (c *Client) AddSubscriptionToCustomer(ctx context.Context, customerID strin
 	return subscription.ID, nil
 }
 
-func (c *Client) SwitchSubscriptionPlan(ctx context.Context, userID uuid.UUID, newPriceID PriceID) error {
+func (c *Client) SwitchSubscriptionPlan(ctx context.Context, organisationID uuid.UUID, newPriceID PriceID) error {
 	stripe.Key = c.APIKey
 
-	user, err := c.db.GetUserByID(ctx, userID)
+	organisation, err := c.db.GetOrganisationByID(ctx, organisationID)
 	if err != nil {
-		return fmt.Errorf("failed to get user by ID: %w", err)
+		return fmt.Errorf("failed to get organisation by ID: %w", err)
 	}
 
 	// Retrieve the subscription to get the current items
-	subscription, err := stripeSubscription.Get(user.StripeSubscriptionID, nil)
+	subscription, err := stripeSubscription.Get(organisation.StripeSubscriptionID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve Stripe subscription: %w", err)
 	}
 
 	if len(subscription.Items.Data) == 0 {
-		return fmt.Errorf("no subscription items found for subscription ID: %s", user.StripeSubscriptionID)
+		return fmt.Errorf("no subscription items found for subscription ID: %s", organisation.StripeSubscriptionID)
 	}
 
 	// Update the first item with the new price ID
-	if _, err = stripeSubscription.Update(user.StripeSubscriptionID, &stripe.SubscriptionParams{
+	if _, err = stripeSubscription.Update(organisation.StripeSubscriptionID, &stripe.SubscriptionParams{
 		Items: []*stripe.SubscriptionItemsParams{
 			{
 				ID:    stripe.String(subscription.Items.Data[0].ID),
@@ -127,16 +127,16 @@ func (c *Client) SwitchSubscriptionPlan(ctx context.Context, userID uuid.UUID, n
 	return nil
 }
 
-func (c *Client) CreateCheckoutSession(ctx context.Context, userID uuid.UUID, priceID PriceID, successURL, cancelURL string) (string, error) {
+func (c *Client) CreateCheckoutSession(ctx context.Context, organisationID uuid.UUID, priceID PriceID, successURL, cancelURL string) (string, error) {
 	stripe.Key = c.APIKey
 
-	user, err := c.db.GetUserByID(ctx, userID)
+	organisation, err := c.db.GetOrganisationByID(ctx, organisationID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get user by ID: %w", err)
+		return "", fmt.Errorf("failed to get organisation by ID: %w", err)
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		Customer:                 stripe.String(user.StripeCustomerID),
+		Customer:                 stripe.String(organisation.StripeCustomerID),
 		SuccessURL:               stripe.String(successURL),
 		CancelURL:                stripe.String(cancelURL),
 		Mode:                     stripe.String(string(stripe.CheckoutSessionModeSubscription)),

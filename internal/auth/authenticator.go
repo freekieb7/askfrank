@@ -1,4 +1,4 @@
-package account
+package auth
 
 import (
 	"context"
@@ -7,8 +7,10 @@ import (
 	"hp/internal/database"
 	"hp/internal/notifications"
 	"hp/internal/stripe"
+	"hp/internal/util"
 	"hp/internal/webhook"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -22,16 +24,16 @@ var (
 )
 
 type Authenticator struct {
-	logger         *slog.Logger
-	db             *database.Database
-	auditor        *audit.Auditor
-	webhookManager *webhook.Manager
-	notifier       *notifications.Notifier
-	stripeClient   *stripe.Client
+	logger              *slog.Logger
+	db                  *database.Database
+	auditor             *audit.Auditor
+	webhookManager      *webhook.Manager
+	notificationManager *notifications.Manager
+	stripeClient        *stripe.Client
 }
 
-func NewAuthenticator(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notifier *notifications.Notifier, stripe *stripe.Client) Authenticator {
-	return Authenticator{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notifier: notifier, stripeClient: stripe}
+func NewAuthenticator(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notificationManager *notifications.Manager, stripe *stripe.Client) Authenticator {
+	return Authenticator{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notificationManager: notificationManager, stripeClient: stripe}
 }
 
 type LoginParam struct {
@@ -85,7 +87,7 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 	}
 
 	// Notification
-	if err = a.notifier.Notify(ctx, notifications.NotifyParam{
+	if err = a.notificationManager.Notify(ctx, notifications.NotifyParam{
 		OwnerID: user.ID,
 		Title:   "Login Successful",
 		Message: "You have successfully logged in to your account.",
@@ -122,7 +124,7 @@ func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {
 	}
 
 	// Notification
-	if err := a.notifier.Notify(ctx, notifications.NotifyParam{
+	if err := a.notificationManager.Notify(ctx, notifications.NotifyParam{
 		OwnerID: userID,
 		Title:   "Logout Successful",
 		Message: "You have successfully logged out of your account.",
@@ -132,4 +134,81 @@ func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {
 	}
 
 	return nil
+}
+
+type RegisterParam struct {
+	OrganisationID util.Optional[uuid.UUID]
+	Name           string
+	Email          string
+	Password       string
+}
+
+func (a *Authenticator) Register(ctx context.Context, params RegisterParam) (uuid.UUID, error) {
+	var userID uuid.UUID
+
+	// Check if user already exists
+	_, err := a.db.GetUserByEmail(ctx, params.Email)
+	if err == nil {
+		// User already exists
+		return userID, ErrEmailAlreadyInUse
+	}
+	if err != database.ErrUserNotFound {
+		return userID, fmt.Errorf("failed to check if user exists: %w", err)
+	}
+
+	// Create user in database
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(params.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return userID, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user, err := a.db.CreateUser(ctx, database.CreateUserParams{
+		OrganisationID:  params.OrganisationID,
+		Name:            params.Name,
+		Email:           params.Email,
+		PasswordHash:    string(passwordHash),
+		IsEmailVerified: false,
+		IsBot:           false,
+	})
+	if err != nil {
+		return userID, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Successful registration
+	userID = user.ID
+
+	// Audit log
+	if err := a.auditor.LogEvent(ctx, audit.LogEventParam{
+		OwnerID: user.ID,
+		Type:    audit.AuditLogEventTypeUserRegister,
+		Data: map[string]any{
+			"user_id": user.ID,
+		},
+	}); err != nil {
+		return userID, fmt.Errorf("failed to log audit event: %w", err)
+	}
+
+	// Webhook event
+	if err := a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParam{
+		OwnerID: user.ID,
+		Type:    webhook.EventTypeUserRegister,
+		Data: map[string]any{
+			"user_id":   user.ID,
+			"timestamp": user.CreatedAt.Format(time.RFC3339),
+		},
+	}); err != nil {
+		return userID, fmt.Errorf("failed to create webhook event: %w", err)
+	}
+
+	// Notification
+	if err := a.notificationManager.Notify(ctx, notifications.NotifyParam{
+		OwnerID: user.ID,
+		Title:   "Signup Successful",
+		Message: "Welcome! Your account has been created successfully.",
+		Type:    notifications.NotificationTypeInfo,
+	}); err != nil {
+		return userID, fmt.Errorf("failed to create notification: %w", err)
+	}
+
+	return userID, nil
 }

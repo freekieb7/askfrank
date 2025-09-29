@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hp/internal/config"
@@ -40,36 +41,62 @@ var (
 	ErrSessionNotFound = fmt.Errorf("session not found")
 )
 
-func (s *Store) Get(ctx context.Context, r *http.Request) (database.Session, error) {
+type Session struct {
+	ID        uuid.UUID                `json:"id"`
+	Token     string                   `json:"token"`
+	UserID    util.Optional[uuid.UUID] `json:"user_id"`
+	UserAgent string                   `json:"user_agent"`
+	IPAddress string                   `json:"ip_address"`
+	Data      SessionData              `json:"data"`
+	ExpiresAt time.Time                `json:"expires_at"`
+}
+
+type SessionData struct {
+	CsrfToken  string `json:"csrf_token"`
+	RedirectTo string `json:"redirect_to"`
+}
+
+func (s *Store) Get(ctx context.Context, r *http.Request) (Session, error) {
+	var session Session
+
 	sessionID, ok := ctx.Value(config.SessionContextKey).(string)
 	if !ok {
-		return database.Session{}, fmt.Errorf("session id not found in context")
+		return session, fmt.Errorf("session id not found in context")
 	}
 
 	sess, err := s.Database.GetSessionByToken(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, database.ErrSessionNotFound) {
-			return database.Session{
+			return Session{
 				ID:        uuid.Nil,
 				Token:     sessionID,
 				UserID:    util.Optional[uuid.UUID]{},
 				UserAgent: r.UserAgent(),
 				IPAddress: r.RemoteAddr,
-				Data:      map[string]any{},
+				Data:      SessionData{},
 				ExpiresAt: time.Now().Add(s.Config.ExpiresIn),
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-				RevokedAt: util.None[time.Time](),
 			}, nil
 		}
 
-		return sess, fmt.Errorf("failed to get session by token: %w", err)
+		return session, fmt.Errorf("failed to get session by token: %w", err)
 	}
 
-	return sess, nil
+	session = Session{
+		ID:        sess.ID,
+		Token:     sess.Token,
+		UserID:    sess.UserID,
+		UserAgent: sess.UserAgent,
+		IPAddress: sess.IPAddress,
+		ExpiresAt: sess.ExpiresAt,
+	}
+	if err := json.Unmarshal(sess.Data, &session.Data); err != nil {
+		return session, fmt.Errorf("failed to unmarshal session data: %w", err)
+	}
+
+	return session, nil
 }
 
-func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess database.Session) error {
+func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess Session) error {
 	// Create new session
 	if sess.ID == uuid.Nil {
 		if _, err := s.Database.CreateSession(ctx, database.CreateSessionParams{
@@ -77,9 +104,9 @@ func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess database.S
 			UserID:    sess.UserID,
 			UserAgent: sess.UserAgent,
 			IPAddress: sess.IPAddress,
-			Data:      sess.Data,
+			Data:      json.RawMessage{},
 			ExpiresAt: sess.ExpiresAt,
-			RevokedAt: sess.RevokedAt,
+			RevokedAt: util.None[time.Time](),
 		}); err != nil {
 			return fmt.Errorf("failed to create session: %w", err)
 		}
@@ -87,16 +114,20 @@ func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess database.S
 	}
 
 	// Update existing session
+	data, err := json.Marshal(sess.Data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session data: %w", err)
+	}
 	if err := s.Database.UpdateSessionByID(ctx, sess.ID, database.UpdateSessionParams{
 		UserID: sess.UserID,
-		Data:   util.Some(sess.Data),
+		Data:   util.Some(data),
 	}); err != nil {
 		return fmt.Errorf("failed to update session: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) Destroy(ctx context.Context, w http.ResponseWriter, sess database.Session) error {
+func (s *Store) Destroy(ctx context.Context, w http.ResponseWriter, sess Session) error {
 	// Delete session from database
 	if err := s.Database.DeleteSessionByID(ctx, sess.ID); err != nil {
 		err = fmt.Errorf("failed to delete session: %w", err)

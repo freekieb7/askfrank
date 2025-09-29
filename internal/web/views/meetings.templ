@@ -2,11 +2,11 @@ package views
 
 import "hp/internal/web/views/component"
 
-type CreateMeetingPageProps struct {
+type MeetingsPageProps struct {
 	component.AppLayoutProps
 }
 
-templ CreateMeetingPage(props CreateMeetingPageProps) {
+templ MeetingsPage(props MeetingsPageProps) {
 	@component.AppLayout(props.AppLayoutProps) {
 		<div class="main-content">
 			<div class="p-6">
@@ -82,7 +82,7 @@ templ CreateMeetingPage(props CreateMeetingPageProps) {
                     return;
                 }
                 
-                window.location.href = `/meeting/${meetingId}`;
+                window.location.href = `/meetings/${meetingId}`;
             }
         </script>
 	}

@@ -9,904 +9,504 @@ type MeetingPageProps struct {
 
 templ MeetingPage(props MeetingPageProps) {
 	@component.AppLayout(props.AppLayoutProps) {
-		<div class="main-content h-screen flex flex-col">
-			<!-- Permissions overlay -->
-			<div id="permissionsOverlay" class="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center flex-col p-4">
-				<div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 text-center">
-					<h3 class="text-xl font-medium text-gray-900 dark:text-white mb-4">Camera & Microphone Access</h3>
-					<p class="text-gray-600 dark:text-gray-400 mb-6">This meeting requires access to your camera and microphone. Please allow access when prompted by your browser.</p>
-					<div class="mb-6 flex justify-center">
-						<div class="flex items-center space-x-8">
-							<div class="flex flex-col items-center">
-								<div id="cameraPermStatus" class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-2">
-									<i class="fas fa-video text-gray-500 dark:text-gray-400 text-xl"></i>
-								</div>
-								<span class="text-sm text-gray-600 dark:text-gray-400">Camera</span>
-							</div>
-							<div class="flex flex-col items-center">
-								<div id="micPermStatus" class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-2">
-									<i class="fas fa-microphone text-gray-500 dark:text-gray-400 text-xl"></i>
-								</div>
-								<span class="text-sm text-gray-600 dark:text-gray-400">Microphone</span>
-							</div>
-						</div>
-					</div>
-					<p id="permissionMessage" class="text-gray-600 dark:text-gray-400 mb-6">Click the button below to request access.</p>
-					<button
-						id="requestPermissionsBtn"
-						type="button"
-						class="px-4 py-2 bg-ocean text-white rounded-md hover:bg-ocean-700 focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-					>
-						Request Access
-					</button>
-				</div>
-			</div>
-			<div class="bg-gray-900 text-white p-3 flex justify-between items-center">
+		<div id="meeting" class="h-screen flex flex-col bg-gray-900 text-white" data-meeting-id={ props.MeetingID }>
+			<!-- Header with 					ws.send(JSON.stringify({
+						type: 'ice-candidate',
+						to: participantId,
+						from: userId,
+						roomId: meetingId,
+						roomID: meetingId,
+						payload: JSON.stringify(event.candidate)
+					})); info and					ws.send(JSON.stringify({
+						type: 'offer',
+						to: participantId,
+						from: userId,
+						roomId: meetingId,
+						roomID: meetingId,
+						payload: JSON.stringify(offer)
+					}));ipants -->
+			<div class="bg-gray-800 p-4 flex justify-between items-center border-b border-gray-700">
 				<div class="flex items-center">
 					<h1 class="text-xl font-bold">Meeting: { props.MeetingID }</h1>
-					<span id="participantCount" class="ml-3 text-sm bg-gray-700 px-2 py-1 rounded-full">1 participant</span>
+					<span id="connectionStatus" class="ml-3 px-2 py-1 rounded text-sm bg-yellow-600">Connecting...</span>
 				</div>
-				<div class="flex items-center space-x-2">
-					<button id="inviteBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm">
-						<i class="fas fa-user-plus mr-1"></i> Invite
-					</button>
-					<button id="toggleChatBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm">
-						<i class="fas fa-comment mr-1"></i> Chat
+				<div class="flex items-center space-x-4">
+					<div class="flex items-center">
+						<span class="text-sm text-gray-300 mr-2">Participants:</span>
+						<span id="participantCount" class="bg-blue-600 px-2 py-1 rounded text-sm">0</span>
+					</div>
+					<button id="copyLinkBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm">
+						Share Link
 					</button>
 				</div>
 			</div>
+			<!-- Main content area with video grid and participant list -->
 			<div class="flex-1 flex">
-				<!-- Main video container -->
-				<div id="videoContainer" class="flex-1 p-4 bg-black flex flex-wrap content-start gap-4 overflow-auto">
-					<!-- Local video will be added here -->
-					<div id="localVideoContainer" class="relative">
-						<video id="localVideo" autoplay muted playsinline class="rounded-lg shadow-lg bg-gray-800 w-64 h-48 object-cover"></video>
-						<div class="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 text-xs rounded">You</div>
+				<!-- Video grid -->
+				<div class="flex-1 p-4">
+					<div id="videoGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full">
+						<!-- Local video -->
+						<div class="relative bg-gray-800 rounded-lg overflow-hidden">
+							<video id="localVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
+							<div class="absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
+								You (Local)
+							</div>
+						</div>
+						<!-- Remote videos will be added here dynamically -->
 					</div>
-					<!-- Remote videos will be added here dynamically -->
 				</div>
-				<!-- Chat sidebar (hidden by default) -->
-				<div id="chatSidebar" class="w-80 bg-gray-800 text-white hidden flex flex-col">
-					<div class="p-3 border-b border-gray-700 flex justify-between items-center">
-						<h2 class="font-bold">Chat</h2>
-						<button id="closeChatBtn" class="text-gray-400 hover:text-white">
-							<i class="fas fa-times"></i>
-						</button>
+				<!-- Participant sidebar -->
+				<div class="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
+					<div class="p-4 border-b border-gray-700">
+						<h3 class="font-semibold text-lg">Participants</h3>
 					</div>
-					<div id="chatMessages" class="flex-1 p-3 overflow-y-auto space-y-3">
-						<!-- Chat messages will appear here -->
-					</div>
-					<div class="p-3 border-t border-gray-700">
-						<form id="chatForm" class="flex">
-							<input
-								type="text"
-								id="chatInput"
-								class="flex-1 bg-gray-700 border border-gray-600 rounded-l px-3 py-2 text-white"
-								placeholder="Type a message..."
-							/>
-							<button type="submit" class="bg-ocean hover:bg-ocean-700 px-3 py-2 rounded-r">
-								<i class="fas fa-paper-plane"></i>
-							</button>
-						</form>
+					<div class="flex-1 overflow-y-auto">
+						<div id="participantList" class="p-4 space-y-2">
+							<!-- Participant items will be added here -->
+						</div>
 					</div>
 				</div>
 			</div>
-			<!-- Controls bar -->
-			<div class="bg-gray-900 text-white p-4 flex justify-center space-x-4">
+			<!-- Controls -->
+			<div class="bg-gray-800 p-4 flex justify-center space-x-4 border-t border-gray-700">
 				<button id="toggleMicBtn" class="bg-gray-700 hover:bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center">
-					<i class="fas fa-microphone"></i>
+					<i class="fas fa-microphone text-white"></i>
 				</button>
 				<button id="toggleVideoBtn" class="bg-gray-700 hover:bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center">
-					<i class="fas fa-video"></i>
-				</button>
-				<button id="toggleScreenShareBtn" class="bg-gray-700 hover:bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center">
-					<i class="fas fa-desktop"></i>
+					<i class="fas fa-video text-white"></i>
 				</button>
 				<button id="leaveBtn" class="bg-red-600 hover:bg-red-700 w-12 h-12 rounded-full flex items-center justify-center">
-					<i class="fas fa-phone-slash"></i>
+					<i class="fas fa-phone-slash text-white"></i>
 				</button>
-			</div>
-		</div>
-		<!-- Modal templates -->
-		<div id="inviteModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-			<div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-				<h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Invite to Meeting</h3>
-				<p class="text-gray-600 dark:text-gray-400 mb-2">Share this link with others to join the meeting:</p>
-				<div class="flex mb-4">
-					<input
-						type="text"
-						id="meetingLink"
-						class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-l-md shadow-sm focus:outline-none dark:bg-gray-700 dark:text-white"
-						readonly
-					/>
-					<button
-						id="copyLinkBtn"
-						class="px-4 py-2 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-r-md hover:bg-gray-200 dark:hover:bg-gray-500 focus:outline-none"
-					>
-						<i class="fas fa-copy"></i>
-					</button>
-				</div>
-				<div class="flex justify-end">
-					<button
-						type="button"
-						class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
-						onclick="document.getElementById('inviteModal').classList.add('hidden')"
-					>
-						Close
-					</button>
-				</div>
 			</div>
 		</div>
 		<script>
-            // Meeting ID and user info
-            const meetingId = "{meetingID}";
-            let localStream = null;
-            let screenStream = null;
-            let isAudioMuted = false;
-            let isVideoOff = false;
-            let isScreenSharing = false;
-            
-            // WebRTC variables
-            const peerConnections = {};
-            let signalingConnection = null;
-            
-            // STUN/TURN servers for ICE
-            const iceServers = {
-                iceServers: [
-                    { urls: "stun:stun.l.google.com:19302" },
-                    { urls: "stun:stun1.l.google.com:19302" },
-                ]
-            };
-            
-            // Get DOM elements
-            const localVideo = document.getElementById('localVideo');
-            const videoContainer = document.getElementById('videoContainer');
-            const chatSidebar = document.getElementById('chatSidebar');
-            const chatMessages = document.getElementById('chatMessages');
-            const chatForm = document.getElementById('chatForm');
-            const chatInput = document.getElementById('chatInput');
-            const participantCount = document.getElementById('participantCount');
-            
-            // Control buttons
-            const toggleMicBtn = document.getElementById('toggleMicBtn');
-            const toggleVideoBtn = document.getElementById('toggleVideoBtn');
-            const toggleScreenShareBtn = document.getElementById('toggleScreenShareBtn');
-            const toggleChatBtn = document.getElementById('toggleChatBtn');
-            const leaveBtn = document.getElementById('leaveBtn');
-            const inviteBtn = document.getElementById('inviteBtn');
-            const closeChatBtn = document.getElementById('closeChatBtn');
-            const copyLinkBtn = document.getElementById('copyLinkBtn');
-            const requestPermissionsBtn = document.getElementById('requestPermissionsBtn');
-            const permissionsOverlay = document.getElementById('permissionsOverlay');
-            const cameraPermStatus = document.getElementById('cameraPermStatus');
-            const micPermStatus = document.getElementById('micPermStatus');
-            const permissionMessage = document.getElementById('permissionMessage');
-            
-            // Permission status
-            let cameraPermGranted = false;
-            let micPermGranted = false;
-            
-            // Check if permissions are already granted
-            async function checkPermissions() {
-                // First check if the browser supports the permissions API
-                if (navigator.permissions && navigator.permissions.query) {
-                    try {
-                        // Check camera permission
-                        const cameraPermission = await navigator.permissions.query({ name: 'camera' });
-                        console.log(`Camera permission status: ${cameraPermission.state}`);
-                        
-                        if (cameraPermission.state === 'granted') {
-                            updateCameraPermissionUI(true);
-                        } else if (cameraPermission.state === 'denied') {
-                            updateCameraPermissionUI(false);
-                        }
-                        
-                        // Some browsers support querying microphone permission
-                        try {
-                            const micPermission = await navigator.permissions.query({ name: 'microphone' });
-                            console.log(`Microphone permission status: ${micPermission.state}`);
-                            
-                            if (micPermission.state === 'granted') {
-                                updateMicPermissionUI(true);
-                            } else if (micPermission.state === 'denied') {
-                                updateMicPermissionUI(false);
-                            }
-                        } catch (e) {
-                            console.log('Microphone permission query not supported, will check during access');
-                        }
-                        
-                        // Add permission change listeners
-                        cameraPermission.addEventListener('change', (e) => {
-                            console.log(`Camera permission changed to: ${e.target.state}`);
-                            updateCameraPermissionUI(e.target.state === 'granted');
-                        });
-                        
-                        // If permissions are already granted, try to access media
-                        if (cameraPermission.state === 'granted') {
-                            console.log("Camera permission already granted, attempting to access media");
-                            // We'll still wait for the button click to avoid unexpected camera activation
-                        }
-                    } catch (error) {
-                        console.log('Permission query not fully supported, will check when requesting media', error);
-                    }
-                } else {
-                    console.log('Permissions API not supported, will check when requesting media');
-                    // Will have to check by attempting to get the stream
-                }
-            }
-            
-            // Update UI based on camera permission state
-            function updateCameraPermissionUI(granted) {
-                cameraPermGranted = granted;
-                
-                if (granted) {
-                    cameraPermStatus.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'bg-red-100', 'dark:bg-red-900');
-                    cameraPermStatus.classList.add('bg-green-100', 'dark:bg-green-900');
-                    cameraPermStatus.innerHTML = '<i class="fas fa-video text-green-600 dark:text-green-400 text-xl"></i>';
-                } else {
-                    cameraPermStatus.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'bg-green-100', 'dark:bg-green-900');
-                    cameraPermStatus.classList.add('bg-red-100', 'dark:bg-red-900');
-                    cameraPermStatus.innerHTML = '<i class="fas fa-video-slash text-red-600 dark:text-red-400 text-xl"></i>';
-                }
-                
-                updatePermissionMessage();
-            }
-            
-            // Update UI based on mic permission state
-            function updateMicPermissionUI(granted) {
-                micPermGranted = granted;
-                
-                if (granted) {
-                    micPermStatus.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'bg-red-100', 'dark:bg-red-900');
-                    micPermStatus.classList.add('bg-green-100', 'dark:bg-green-900');
-                    micPermStatus.innerHTML = '<i class="fas fa-microphone text-green-600 dark:text-green-400 text-xl"></i>';
-                } else {
-                    micPermStatus.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'bg-green-100', 'dark:bg-green-900');
-                    micPermStatus.classList.add('bg-red-100', 'dark:bg-red-900');
-                    micPermStatus.innerHTML = '<i class="fas fa-microphone-slash text-red-600 dark:text-red-400 text-xl"></i>';
-                }
-                
-                updatePermissionMessage();
-            }
-            
-            // Update the overall permission message
-            function updatePermissionMessage() {
-                if (cameraPermGranted && micPermGranted) {
-                    permissionMessage.textContent = "All permissions granted! You'll join the meeting momentarily.";
-                    requestPermissionsBtn.style.display = 'none';
-                    
-                    // Hide overlay after a short delay
-                    setTimeout(() => {
-                        permissionsOverlay.classList.add('hidden');
-                    }, 1500);
-                } else if (cameraPermGranted || micPermGranted) {
-                    permissionMessage.textContent = "Additional permissions required. Please click the button below.";
-                    requestPermissionsBtn.textContent = "Grant Missing Permissions";
-                } else {
-                    permissionMessage.textContent = "Camera and microphone access is required for meetings.";
-                    requestPermissionsBtn.textContent = "Request Access";
-                }
-            }
-            
-            // Request access to camera and microphone
-            async function requestMediaAccess() {
-                try {
-                    permissionMessage.textContent = "Requesting permissions...";
-                    requestPermissionsBtn.disabled = true;
-                    
-                    // More detailed video constraints to handle potential issues
-                    const constraints = {
-                        audio: true,
-                        video: {
-                            width: { ideal: 1280, min: 640 },
-                            height: { ideal: 720, min: 480 },
-                            facingMode: "user"
-                        }
-                    };
-                    
-                    try {
-                        // First try with both audio and video
-                        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-                        
-                        // Update permission status
-                        updateCameraPermissionUI(true);
-                        updateMicPermissionUI(true);
-                    } catch (mediaError) {
-                        console.error("Error with full media request:", mediaError);
-                        
-                        // If that fails, try with just audio and handle camera separately
-                        if (mediaError.name === "NotFoundError" || 
-                            mediaError.name === "DevicesNotFoundError" || 
-                            mediaError.message.includes("could not be found")) {
-                            
-                            console.log("Camera not found, falling back to audio only");
-                            
-                            // Try audio only
-                            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                            updateMicPermissionUI(true);
-                            updateCameraPermissionUI(false);
-                            
-                            // Show camera error message
-                            permissionMessage.innerHTML = "Your microphone is working, but we couldn't access your camera.<br><small>Please check that your camera is connected and not in use by another application.</small>";
-                            permissionMessage.classList.add('text-yellow-600', 'dark:text-yellow-400');
-                            
-                            // Keep the permissions overlay visible but change the button text
-                            requestPermissionsBtn.disabled = false;
-                            requestPermissionsBtn.textContent = "Continue with Audio Only";
-                            requestPermissionsBtn.addEventListener('click', function continueAudioOnly() {
-                                // Remove this specific event listener
-                                requestPermissionsBtn.removeEventListener('click', continueAudioOnly);
-                                // Hide the overlay
-                                permissionsOverlay.classList.add('hidden');
-                            }, { once: true });
-                            
-                            // Don't continue with the rest of the function
-                            return;
-                        } else {
-                            // Re-throw for other errors to be caught by the outer catch
-                            throw mediaError;
-                        }
-                    }
-                    
-                    // Display local video
-                    localVideo.srcObject = localStream;
-                    
-                    // Connect to signaling server
-                    connectSignaling();
-                    
-                    // Set meeting link for invitation
-                    document.getElementById('meetingLink').value = window.location.href;
-                    
-                    requestPermissionsBtn.disabled = false;
-                    
-                } catch (error) {
-                    console.error("Error requesting media access:", error);
-                    requestPermissionsBtn.disabled = false;
-                    
-                    // Check which permission was denied
-                    if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
-                        permissionMessage.innerHTML = "Permission denied. Please allow camera and microphone access in your browser settings and try again.<br><small>You may need to click the camera icon in your browser's address bar.</small>";
-                        permissionMessage.classList.add('text-red-600', 'dark:text-red-400');
-                    } else if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError" || error.message.includes("could not be found")) {
-                        permissionMessage.innerHTML = "Camera or microphone device not found.<br><small>Please check that your devices are properly connected and not being used by another application.</small>";
-                        permissionMessage.classList.add('text-red-600', 'dark:text-red-400');
-                    } else if (error.name === "NotReadableError" || error.name === "TrackStartError") {
-                        permissionMessage.innerHTML = "Could not access your camera or microphone.<br><small>The device might be in use by another application or there might be a hardware error.</small>";
-                        permissionMessage.classList.add('text-red-600', 'dark:text-red-400');
-                    } else if (error.name === "OverconstrainedError") {
-                        permissionMessage.innerHTML = "Your camera doesn't meet the required constraints.<br><small>Try using a different camera if available.</small>";
-                        permissionMessage.classList.add('text-red-600', 'dark:text-red-400');
-                    } else if (error.name === "TypeError" && error.message.includes("undefined")) {
-                        permissionMessage.innerHTML = "Browser API error. Please refresh the page and try again.";
-                        permissionMessage.classList.add('text-red-600', 'dark:text-red-400');
-                    } else {
-                        permissionMessage.innerHTML = `Error accessing media devices: ${error.message}<br><small>(${error.name})</small>`;
-                        permissionMessage.classList.add('text-red-600', 'dark:text-red-400');
-                    }
-                    
-                    // Try to determine which specific permission failed
-                    try {
-                        const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                        updateMicPermissionUI(true);
-                        audioOnly.getTracks().forEach(track => track.stop()); // Clean up
-                        
-                        // If microphone works but we still have an error, it's likely a camera issue
-                        if (error.name === "NotFoundError" || error.message.includes("could not be found")) {
-                            // Add option to continue with audio only
-                            permissionMessage.innerHTML += "<br><br>You can continue with audio only if your camera is unavailable.";
-                            requestPermissionsBtn.textContent = "Continue with Audio Only";
-                            requestPermissionsBtn.addEventListener('click', function audioOnlyHandler() {
-                                // Create audio-only stream
-                                navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-                                    .then(stream => {
-                                        localStream = stream;
-                                        updateMicPermissionUI(true);
-                                        connectSignaling();
-                                        permissionsOverlay.classList.add('hidden');
-                                    })
-                                    .catch(err => {
-                                        console.error("Failed to get audio stream:", err);
-                                    });
-                                
-                                // Remove this specific handler
-                                requestPermissionsBtn.removeEventListener('click', audioOnlyHandler);
-                            }, { once: true });
-                        }
-                    } catch (e) {
-                        updateMicPermissionUI(false);
-                    }
-                    
-                    try {
-                        const videoOnly = await navigator.mediaDevices.getUserMedia({ 
-                            audio: false, 
-                            video: {
-                                width: { ideal: 640, min: 320 },
-                                height: { ideal: 480, min: 240 }
-                            } 
-                        });
-                        updateCameraPermissionUI(true);
-                        videoOnly.getTracks().forEach(track => track.stop()); // Clean up
-                    } catch (e) {
-                        console.error("Video only test failed:", e);
-                        updateCameraPermissionUI(false);
-                    }
-                }
-            }
-            
-            // Initialize the meeting
-            async function initializeMeeting() {
-                // Check available devices first (for diagnostics)
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                    const audioDevices = devices.filter(device => device.kind === 'audioinput');
-                    
-                    console.log(`Available devices: ${devices.length} total`);
-                    console.log(`Video input devices: ${videoDevices.length}`);
-                    console.log(`Audio input devices: ${audioDevices.length}`);
-                    
-                    if (videoDevices.length === 0) {
-                        console.warn("No video input devices detected!");
-                        updateCameraPermissionUI(false);
-                        permissionMessage.innerHTML = "No camera detected on your device.<br><small>You can still join with audio only.</small>";
-                    }
-                    
-                    if (audioDevices.length === 0) {
-                        console.warn("No audio input devices detected!");
-                        updateMicPermissionUI(false);
-                        permissionMessage.innerHTML = "No microphone detected on your device.<br><small>You may not be able to speak in the meeting.</small>";
-                    }
-                } catch (err) {
-                    console.error("Error enumerating devices:", err);
-                }
-                
-                // Check for existing permissions
-                await checkPermissions();
-                
-                // Add event listener for permission button
-                requestPermissionsBtn.addEventListener('click', requestMediaAccess);
-            }
-            
-            // Connect to the signaling server
-            function connectSignaling() {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${protocol}//${window.location.host}/ws/rtc`;
-                
-                signalingConnection = new WebSocket(wsUrl);
-                
-                signalingConnection.onopen = () => {
-                    console.log("Connected to signaling server");
-                    // Join the room
-                    sendSignal({
-                        type: "join",
-                        roomId: meetingId
-                    });
-                };
-                
-                signalingConnection.onmessage = (event) => {
-                    const signal = JSON.parse(event.data);
-                    handleSignalingMessage(signal);
-                };
-                
-                signalingConnection.onclose = () => {
-                    console.log("Disconnected from signaling server");
-                };
-                
-                signalingConnection.onerror = (error) => {
-                    console.error("Signaling server error:", error);
-                };
-            }
-            
-            // Send signal through the signaling server
-            function sendSignal(signal) {
-                if (signalingConnection && signalingConnection.readyState === WebSocket.OPEN) {
-                    signalingConnection.send(JSON.stringify(signal));
-                }
-            }
-            
-            // Handle incoming signaling messages
-            function handleSignalingMessage(signal) {
-                switch(signal.type) {
-                    case "room-info":
-                        const participants = JSON.parse(signal.payload);
-                        updateParticipantCount(participants.length + 1); // +1 for local user
-                        
-                        // Set up connections with existing participants
-                        participants.forEach(participantId => {
-                            createPeerConnection(participantId);
-                            sendOffer(participantId);
-                        });
-                        break;
-                        
-                    case "user-joined":
-                        // A new user joined, update UI
-                        const remoteId = signal.from;
-                        console.log("User joined:", remoteId);
-                        // Wait for them to send us an offer
-                        break;
-                        
-                    case "user-left":
-                        // A user left, clean up their connection
-                        const leftUserId = signal.from;
-                        closePeerConnection(leftUserId);
-                        break;
-                        
-                    case "offer":
-                        handleOffer(signal);
-                        break;
-                        
-                    case "answer":
-                        handleAnswer(signal);
-                        break;
-                        
-                    case "ice-candidate":
-                        handleIceCandidate(signal);
-                        break;
-                }
-            }
-            
-            // Create a new peer connection for a remote user
-            function createPeerConnection(remoteUserId) {
-                if (peerConnections[remoteUserId]) {
-                    console.log("Peer connection already exists for:", remoteUserId);
-                    return peerConnections[remoteUserId];
-                }
-                
-                const peerConnection = new RTCPeerConnection(iceServers);
-                peerConnections[remoteUserId] = peerConnection;
-                
-                // Add local tracks to the connection
-                localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, localStream);
-                });
-                
-                // Handle ICE candidates
-                peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        sendSignal({
-                            type: "ice-candidate",
-                            to: remoteUserId,
-                            roomId: meetingId,
-                            payload: JSON.stringify(event.candidate)
-                        });
-                    }
-                };
-                
-                // Handle connection state changes
-                peerConnection.onconnectionstatechange = (event) => {
-                    console.log(`Connection state for ${remoteUserId}:`, peerConnection.connectionState);
-                };
-                
-                // Handle tracks arriving from the remote user
-                peerConnection.ontrack = (event) => {
-                    // Create video element for remote stream if it doesn't exist
-                    let remoteVideo = document.getElementById(`remote-${remoteUserId}`);
-                    
-                    if (!remoteVideo) {
-                        const container = document.createElement('div');
-                        container.id = `container-${remoteUserId}`;
-                        container.className = 'relative';
-                        
-                        remoteVideo = document.createElement('video');
-                        remoteVideo.id = `remote-${remoteUserId}`;
-                        remoteVideo.autoplay = true;
-                        remoteVideo.playsInline = true;
-                        remoteVideo.className = 'rounded-lg shadow-lg bg-gray-800 w-64 h-48 object-cover';
-                        
-                        const label = document.createElement('div');
-                        label.className = 'absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 text-xs rounded';
-                        label.textContent = `User ${remoteUserId.substring(0, 8)}`;
-                        
-                        container.appendChild(remoteVideo);
-                        container.appendChild(label);
-                        videoContainer.appendChild(container);
-                    }
-                    
-                    // Assign the remote stream to the video element
-                    if (remoteVideo.srcObject !== event.streams[0]) {
-                        remoteVideo.srcObject = event.streams[0];
-                    }
-                };
-                
-                return peerConnection;
-            }
-            
-            // Close a peer connection when a user leaves
-            function closePeerConnection(userId) {
-                const peerConnection = peerConnections[userId];
-                if (peerConnection) {
-                    peerConnection.close();
-                    delete peerConnections[userId];
-                    
-                    // Remove the remote video element
-                    const container = document.getElementById(`container-${userId}`);
-                    if (container) {
-                        container.remove();
-                    }
-                    
-                    // Update participant count
-                    updateParticipantCount(Object.keys(peerConnections).length + 1); // +1 for local user
-                }
-            }
-            
-            // Send an offer to a remote user
-            async function sendOffer(remoteUserId) {
-                try {
-                    const peerConnection = createPeerConnection(remoteUserId);
-                    const offer = await peerConnection.createOffer();
-                    await peerConnection.setLocalDescription(offer);
-                    
-                    sendSignal({
-                        type: "offer",
-                        to: remoteUserId,
-                        roomId: meetingId,
-                        payload: JSON.stringify(offer)
-                    });
-                } catch (error) {
-                    console.error("Error creating offer:", error);
-                }
-            }
-            
-            // Handle an incoming offer
-            async function handleOffer(signal) {
-                try {
-                    const remoteUserId = signal.from;
-                    const offer = JSON.parse(signal.payload);
-                    
-                    const peerConnection = createPeerConnection(remoteUserId);
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-                    
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    
-                    sendSignal({
-                        type: "answer",
-                        to: remoteUserId,
-                        roomId: meetingId,
-                        payload: JSON.stringify(answer)
-                    });
-                } catch (error) {
-                    console.error("Error handling offer:", error);
-                }
-            }
-            
-            // Handle an incoming answer
-            async function handleAnswer(signal) {
-                try {
-                    const remoteUserId = signal.from;
-                    const answer = JSON.parse(signal.payload);
-                    
-                    const peerConnection = peerConnections[remoteUserId];
-                    if (peerConnection) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-                    }
-                } catch (error) {
-                    console.error("Error handling answer:", error);
-                }
-            }
-            
-            // Handle an incoming ICE candidate
-            async function handleIceCandidate(signal) {
-                try {
-                    const remoteUserId = signal.from;
-                    const candidate = JSON.parse(signal.payload);
-                    
-                    const peerConnection = peerConnections[remoteUserId];
-                    if (peerConnection) {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                    }
-                } catch (error) {
-                    console.error("Error handling ICE candidate:", error);
-                }
-            }
-            
-            // Toggle microphone
-            function toggleMicrophone() {
-                if (localStream) {
-                    const audioTracks = localStream.getAudioTracks();
-                    if (audioTracks.length > 0) {
-                        isAudioMuted = !isAudioMuted;
-                        audioTracks[0].enabled = !isAudioMuted;
-                        
-                        // Update UI
-                        toggleMicBtn.innerHTML = isAudioMuted 
-                            ? '<i class="fas fa-microphone-slash"></i>' 
-                            : '<i class="fas fa-microphone"></i>';
-                        toggleMicBtn.classList.toggle('bg-red-600', isAudioMuted);
-                        toggleMicBtn.classList.toggle('bg-gray-700', !isAudioMuted);
-                    }
-                }
-            }
-            
-            // Toggle camera
-            function toggleCamera() {
-                if (localStream) {
-                    const videoTracks = localStream.getVideoTracks();
-                    if (videoTracks.length > 0) {
-                        isVideoOff = !isVideoOff;
-                        videoTracks[0].enabled = !isVideoOff;
-                        
-                        // Update UI
-                        toggleVideoBtn.innerHTML = isVideoOff 
-                            ? '<i class="fas fa-video-slash"></i>' 
-                            : '<i class="fas fa-video"></i>';
-                        toggleVideoBtn.classList.toggle('bg-red-600', isVideoOff);
-                        toggleVideoBtn.classList.toggle('bg-gray-700', !isVideoOff);
-                    }
-                }
-            }
-            
-            // Toggle screen sharing
-            async function toggleScreenSharing() {
-                try {
-                    if (!isScreenSharing) {
-                        // Start screen sharing
-                        screenStream = await navigator.mediaDevices.getDisplayMedia({
-                            video: true
-                        });
-                        
-                        // Replace video track in all peer connections
-                        const videoTrack = screenStream.getVideoTracks()[0];
-                        
-                        Object.values(peerConnections).forEach(pc => {
-                            const senders = pc.getSenders();
-                            const videoSender = senders.find(sender => 
-                                sender.track && sender.track.kind === 'video'
-                            );
-                            
-                            if (videoSender) {
-                                videoSender.replaceTrack(videoTrack);
-                            }
-                        });
-                        
-                        // Replace local video display
-                        localVideo.srcObject = screenStream;
-                        
-                        // Update button style
-                        toggleScreenShareBtn.classList.replace('bg-gray-700', 'bg-green-600');
-                        isScreenSharing = true;
-                        
-                        // Handle when user stops screen sharing through browser UI
-                        videoTrack.onended = () => {
-                            stopScreenSharing();
-                        };
-                    } else {
-                        stopScreenSharing();
-                    }
-                } catch (error) {
-                    console.error("Error toggling screen share:", error);
-                    alert("Could not start screen sharing. Please check permissions.");
-                }
-            }
-            
-            // Stop screen sharing
-            function stopScreenSharing() {
-                if (screenStream) {
-                    screenStream.getTracks().forEach(track => track.stop());
-                    screenStream = null;
-                    
-                    // Replace with camera video track in all peer connections
-                    const videoTrack = localStream.getVideoTracks()[0];
-                    
-                    Object.values(peerConnections).forEach(pc => {
-                        const senders = pc.getSenders();
-                        const videoSender = senders.find(sender => 
-                            sender.track && sender.track.kind === 'video'
-                        );
-                        
-                        if (videoSender) {
-                            videoSender.replaceTrack(videoTrack);
-                        }
-                    });
-                    
-                    // Restore local video display
-                    localVideo.srcObject = localStream;
-                    
-                    // Update button style
-                    toggleScreenShareBtn.classList.replace('bg-green-600', 'bg-gray-700');
-                    isScreenSharing = false;
-                }
-            }
-            
-            // Toggle chat sidebar
-            function toggleChat() {
-                chatSidebar.classList.toggle('hidden');
-            }
-            
-            // Show invite modal
-            function showInviteModal() {
-                document.getElementById('inviteModal').classList.remove('hidden');
-            }
-            
-            // Copy meeting link
-            function copyMeetingLink() {
-                const meetingLink = document.getElementById('meetingLink');
-                meetingLink.select();
-                document.execCommand('copy');
-                
-                // Show feedback
-                const originalText = copyLinkBtn.innerHTML;
-                copyLinkBtn.innerHTML = '<i class="fas fa-check"></i>';
-                setTimeout(() => {
-                    copyLinkBtn.innerHTML = originalText;
-                }, 2000);
-            }
-            
-            // Leave meeting
-            function leaveMeeting() {
-                // Close all peer connections
-                Object.keys(peerConnections).forEach(userId => {
-                    closePeerConnection(userId);
-                });
-                
-                // Stop all local media tracks
-                if (localStream) {
-                    localStream.getTracks().forEach(track => track.stop());
-                }
-                
-                if (screenStream) {
-                    screenStream.getTracks().forEach(track => track.stop());
-                }
-                
-                // Notify server
-                sendSignal({
-                    type: "leave",
-                    roomId: meetingId
-                });
-                
-                // Close signaling connection
-                if (signalingConnection) {
-                    signalingConnection.close();
-                }
-                
-                // Redirect to home page
-                window.location.href = "/dashboard";
-            }
-            
-            // Update participant count in UI
-            function updateParticipantCount(count) {
-                participantCount.textContent = `${count} ${count === 1 ? 'participant' : 'participants'}`;
-            }
-            
-            // Event listeners
-            toggleMicBtn.addEventListener('click', toggleMicrophone);
-            toggleVideoBtn.addEventListener('click', toggleCamera);
-            toggleScreenShareBtn.addEventListener('click', toggleScreenSharing);
-            toggleChatBtn.addEventListener('click', toggleChat);
-            closeChatBtn.addEventListener('click', toggleChat);
-            inviteBtn.addEventListener('click', showInviteModal);
-            copyLinkBtn.addEventListener('click', copyMeetingLink);
-            leaveBtn.addEventListener('click', leaveMeeting);
-            
-            // Chat form submission
-            chatForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const message = chatInput.value.trim();
-                if (message) {
-                    // TODO: Implement chat functionality
-                    // For now, just show it locally
-                    const messageEl = document.createElement('div');
-                    messageEl.className = 'p-2 bg-ocean-600 rounded text-white self-end max-w-xs';
-                    messageEl.textContent = message;
-                    
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'flex justify-end';
-                    wrapper.appendChild(messageEl);
-                    
-                    chatMessages.appendChild(wrapper);
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                    
-                    chatInput.value = '';
-                }
-            });
-            
-            // Initialize when the page loads
-            document.addEventListener('DOMContentLoaded', initializeMeeting);
-            
-            // Handle page unload
-            window.addEventListener('beforeunload', () => {
-                leaveMeeting();
-            });
-        </script>
+			const meetingId = document.getElementById('meeting').dataset.meetingId;
+			const ws = new WebSocket(`wss://dentately-famous-daleyza.ngrok-free.dev/ws/rtc`);
+			
+			// Generate a unique user ID for this session
+			const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+			
+			// WebRTC configuration
+			const rtcConfig = {
+				iceServers: [
+					{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
+				],
+				iceCandidatePoolSize: 10,
+			};
+
+			// State management
+			const peerConnections = new Map(); // Map of userId -> RTCPeerConnection
+			const remoteStreams = new Map(); // Map of userId -> MediaStream
+			let localStream = null;
+			let isAudioMuted = false;
+			let isVideoOff = false;
+			
+			// DOM elements
+			const localVideo = document.getElementById('localVideo');
+			const videoGrid = document.getElementById('videoGrid');
+			const participantList = document.getElementById('participantList');
+			const participantCount = document.getElementById('participantCount');
+			const connectionStatus = document.getElementById('connectionStatus');
+			const toggleMicBtn = document.getElementById('toggleMicBtn');
+			const toggleVideoBtn = document.getElementById('toggleVideoBtn');
+			const leaveBtn = document.getElementById('leaveBtn');
+			const copyLinkBtn = document.getElementById('copyLinkBtn');
+
+			// Initialize media and WebSocket
+			async function initialize() {
+				try {
+					console.log('Initializing media devices...');
+					// Get local media
+					localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+					localVideo.srcObject = localStream;
+					
+					console.log('Local media initialized:', localStream.getTracks().map(t => `${t.kind}:${t.enabled}`));
+					
+				// If WebSocket is already connected, join the room now
+				if (ws.readyState === WebSocket.OPEN) {
+					console.log('WebSocket ready, joining room now');
+					ws.send(JSON.stringify({
+						type: 'join',
+						roomId: meetingId,
+						roomID: meetingId, // Also send with capital ID for server compatibility
+						from: userId
+					}));
+				}					updateConnectionStatus('connected', 'Media Ready');
+				} catch (error) {
+					console.error('Error accessing media devices:', error);
+					updateConnectionStatus('error', 'Media Error');
+				}
+			}
+
+			// WebSocket event handlers
+			ws.onopen = async () => {
+				console.log('WebSocket connected');
+				updateConnectionStatus('connected', 'Connected');
+				
+				// Wait for media to be ready before joining
+				if (localStream) {
+					console.log('Local stream ready, joining room');
+					ws.send(JSON.stringify({
+						type: 'join',
+						roomId: meetingId,
+						roomID: meetingId, // Also send with capital ID for server compatibility
+						from: userId
+					}));
+				} else {
+					console.log('Waiting for local stream before joining room');
+					// Will join after media is initialized
+				}
+			};
+
+			ws.onmessage = async (event) => {
+				const message = JSON.parse(event.data);
+				console.log('Received message:', message);
+
+				switch (message.type) {
+					case 'room-info':
+						handleRoomInfo(message);
+						break;
+					case 'user-joined':
+						handleUserJoined(message);
+						break;
+					case 'user-left':
+						handleUserLeft(message);
+						break;
+					case 'offer':
+						handleOffer(message);
+						break;
+					case 'answer':
+						handleAnswer(message);
+						break;
+					case 'ice-candidate':
+						handleIceCandidate(message);
+						break;
+				}
+			};
+
+			ws.onclose = () => {
+				updateConnectionStatus('disconnected', 'Disconnected');
+			};
+
+			ws.onerror = (error) => {
+				console.error('WebSocket error:', error);
+				updateConnectionStatus('error', 'Connection Error');
+			};
+
+			// Room management functions
+			function handleRoomInfo(message) {
+				let existingParticipants = [];
+				if (message.payload) {
+					try {
+						existingParticipants = typeof message.payload === 'string' ? JSON.parse(message.payload) : message.payload;
+					} catch (e) {
+						console.error('Error parsing room info payload:', e);
+						existingParticipants = [];
+					}
+				}
+				console.log('Room info received, existing participants:', existingParticipants);
+				
+				// Create peer connections for existing participants
+				existingParticipants.forEach(participantId => {
+					console.log('Creating peer connection for existing participant:', participantId);
+					addParticipant(participantId);
+					createPeerConnection(participantId, true); // As initiator
+				});
+				
+				updateParticipantCount();
+			}
+
+			function handleUserJoined(message) {
+				console.log('User joined:', message.from);
+				addParticipant(message.from);
+				createPeerConnection(message.from, false); // As receiver
+				updateParticipantCount();
+			}
+
+			function handleUserLeft(message) {
+				console.log('User left:', message.from);
+				removeParticipant(message.from);
+				
+				// Clean up peer connection
+				if (peerConnections.has(message.from)) {
+					peerConnections.get(message.from).close();
+					peerConnections.delete(message.from);
+				}
+				
+				updateParticipantCount();
+			}
+
+			// Participant UI management
+			function addParticipant(participantId) {
+				// Add to participant list
+				const participantItem = document.createElement('div');
+				participantItem.id = `participant-${participantId}`;
+				participantItem.className = 'flex items-center space-x-3 p-2 bg-gray-700 rounded';
+				participantItem.innerHTML = `
+					<div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-semibold">
+						${participantId.substr(0, 2).toUpperCase()}
+					</div>
+					<span class="flex-1 text-sm">${participantId}</span>
+					<div class="flex space-x-1">
+						<div class="w-2 h-2 bg-green-500 rounded-full" title="Audio on"></div>
+						<div class="w-2 h-2 bg-green-500 rounded-full" title="Video on"></div>
+					</div>
+				`;
+				participantList.appendChild(participantItem);
+
+				// Add video element for remote stream
+				const videoContainer = document.createElement('div');
+				videoContainer.id = `video-${participantId}`;
+				videoContainer.className = 'relative bg-gray-800 rounded-lg overflow-hidden';
+				videoContainer.innerHTML = `
+					<video autoplay playsinline class="w-full h-full object-cover"></video>
+					<div class="absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
+						${participantId}
+					</div>
+				`;
+				videoGrid.appendChild(videoContainer);
+			}
+
+			function removeParticipant(participantId) {
+				// Remove from participant list
+				const participantItem = document.getElementById(`participant-${participantId}`);
+				if (participantItem) {
+					participantItem.remove();
+				}
+
+				// Remove video element
+				const videoContainer = document.getElementById(`video-${participantId}`);
+				if (videoContainer) {
+					videoContainer.remove();
+				}
+
+				// Clean up remote stream
+				if (remoteStreams.has(participantId)) {
+					remoteStreams.delete(participantId);
+				}
+			}
+
+			function updateParticipantCount() {
+				const count = participantList.children.length + 1; // +1 for local user
+				participantCount.textContent = count;
+			}
+
+			function updateConnectionStatus(status, text) {
+				connectionStatus.textContent = text;
+				connectionStatus.className = connectionStatus.className.replace(/bg-\w+-\d+/, '');
+				
+				switch (status) {
+					case 'connected':
+						connectionStatus.classList.add('bg-green-600');
+						break;
+					case 'connecting':
+						connectionStatus.classList.add('bg-yellow-600');
+						break;
+					case 'disconnected':
+						connectionStatus.classList.add('bg-gray-600');
+						break;
+					case 'error':
+						connectionStatus.classList.add('bg-red-600');
+						break;
+				}
+			}
+
+			// WebRTC functions
+			async function createPeerConnection(participantId, isInitiator) {
+				console.log(`Creating peer connection for ${participantId}, isInitiator: ${isInitiator}`);
+				const pc = new RTCPeerConnection(rtcConfig);
+				peerConnections.set(participantId, pc);
+
+				// Add connection state monitoring
+				pc.onconnectionstatechange = () => {
+					console.log(`Peer connection state for ${participantId}:`, pc.connectionState);
+				};
+
+				pc.oniceconnectionstatechange = () => {
+					console.log(`ICE connection state for ${participantId}:`, pc.iceConnectionState);
+				};
+
+				pc.onicegatheringstatechange = () => {
+					console.log(`ICE gathering state for ${participantId}:`, pc.iceGatheringState);
+				};
+
+				// Add local stream tracks to peer connection
+				if (localStream) {
+					console.log(`Adding ${localStream.getTracks().length} local tracks to peer connection for ${participantId}`);
+					localStream.getTracks().forEach(track => {
+						console.log(`Adding track: ${track.kind} (enabled: ${track.enabled})`);
+						pc.addTrack(track, localStream);
+					});
+				} else {
+					console.warn('No local stream available when creating peer connection for', participantId);
+				}
+
+				// Handle incoming tracks
+				pc.ontrack = (event) => {
+					console.log('Received remote track from:', participantId, 'Track kind:', event.track.kind);
+					const remoteStream = event.streams[0];
+					remoteStreams.set(participantId, remoteStream);
+					
+					console.log('Remote stream tracks:', remoteStream.getTracks().map(t => `${t.kind}:${t.enabled}`));
+					
+					const videoContainer = document.getElementById(`video-${participantId}`);
+					if (videoContainer) {
+						const video = videoContainer.querySelector('video');
+						video.srcObject = remoteStream;
+						console.log('Set remote stream to video element for', participantId);
+						
+						// Add event listeners to monitor video playback
+						video.onloadedmetadata = () => console.log('Video metadata loaded for', participantId);
+						video.onplay = () => console.log('Video started playing for', participantId);
+						video.onerror = (e) => console.error('Video error for', participantId, e);
+					} else {
+						console.error('Video container not found for participant:', participantId);
+					}
+				};
+
+				// Handle ICE candidates
+				pc.onicecandidate = (event) => {
+					if (event.candidate) {
+						ws.send(JSON.stringify({
+							type: 'ice-candidate',
+							to: participantId,
+							from: userId,
+							roomId: meetingId,
+							payload: JSON.stringify(event.candidate)
+						}));
+					}
+				};
+
+				// If initiator, create and send offer
+				if (isInitiator) {
+					try {
+						const offer = await pc.createOffer();
+						await pc.setLocalDescription(offer);
+						
+						ws.send(JSON.stringify({
+							type: 'offer',
+							to: participantId,
+							from: userId,
+							roomId: meetingId,
+							payload: JSON.stringify(offer)
+						}));
+					} catch (error) {
+						console.error('Error creating offer:', error);
+					}
+				}
+			}
+
+			async function handleOffer(message) {
+				const pc = peerConnections.get(message.from);
+				if (!pc) return;
+
+				try {
+					const offer = JSON.parse(message.payload);
+					await pc.setRemoteDescription(offer);
+					
+					const answer = await pc.createAnswer();
+					await pc.setLocalDescription(answer);
+					
+					ws.send(JSON.stringify({
+						type: 'answer',
+						to: message.from,
+						from: userId,
+						roomId: meetingId,
+						roomID: meetingId,
+						payload: JSON.stringify(answer)
+					}));
+				} catch (error) {
+					console.error('Error handling offer:', error);
+				}
+			}
+
+			async function handleAnswer(message) {
+				const pc = peerConnections.get(message.from);
+				if (!pc) return;
+
+				try {
+					const answer = JSON.parse(message.payload);
+					await pc.setRemoteDescription(answer);
+				} catch (error) {
+					console.error('Error handling answer:', error);
+				}
+			}
+
+			async function handleIceCandidate(message) {
+				const pc = peerConnections.get(message.from);
+				if (!pc) return;
+
+				try {
+					const candidate = JSON.parse(message.payload);
+					await pc.addIceCandidate(candidate);
+				} catch (error) {
+					console.error('Error adding ICE candidate:', error);
+				}
+			}
+
+			// Control button handlers
+			toggleMicBtn.addEventListener('click', () => {
+				if (localStream) {
+					const audioTrack = localStream.getAudioTracks()[0];
+					if (audioTrack) {
+						audioTrack.enabled = !audioTrack.enabled;
+						isAudioMuted = !audioTrack.enabled;
+						
+						toggleMicBtn.innerHTML = isAudioMuted ? 
+							'<i class="fas fa-microphone-slash text-red-500"></i>' :
+							'<i class="fas fa-microphone text-white"></i>';
+					}
+				}
+			});
+
+			toggleVideoBtn.addEventListener('click', () => {
+				if (localStream) {
+					const videoTrack = localStream.getVideoTracks()[0];
+					if (videoTrack) {
+						videoTrack.enabled = !videoTrack.enabled;
+						isVideoOff = !videoTrack.enabled;
+						
+						toggleVideoBtn.innerHTML = isVideoOff ? 
+							'<i class="fas fa-video-slash text-red-500"></i>' :
+							'<i class="fas fa-video text-white"></i>';
+					}
+				}
+			});
+
+			leaveBtn.addEventListener('click', () => {
+				// Send leave message
+				ws.send(JSON.stringify({
+					type: 'leave',
+					roomId: meetingId,
+					roomID: meetingId,
+					from: userId
+				}));
+				
+				// Clean up and redirect
+				if (localStream) {
+					localStream.getTracks().forEach(track => track.stop());
+				}
+				
+				peerConnections.forEach(pc => pc.close());
+				ws.close();
+				
+				window.location.href = '/';
+			});
+
+			copyLinkBtn.addEventListener('click', () => {
+				const meetingUrl = window.location.href;
+				navigator.clipboard.writeText(meetingUrl).then(() => {
+					const originalText = copyLinkBtn.textContent;
+					copyLinkBtn.textContent = 'Copied!';
+					setTimeout(() => {
+						copyLinkBtn.textContent = originalText;
+					}, 2000);
+				});
+			});
+
+			// Initialize the application
+			initialize();
+		</script>
 	}
 }

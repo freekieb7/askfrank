@@ -53,9 +53,9 @@ func (a *Auditor) LogEvent(ctx context.Context, params LogEventParam) error {
 	}
 
 	if _, err = a.db.CreateAuditLogEvent(ctx, database.CreateAuditLogEventParams{
-		OwnerID:   params.OwnerID,
-		EventType: string(params.Type),
-		EventData: data,
+		OrganisationOwnerID: params.OwnerID,
+		EventType:           string(params.Type),
+		EventData:           data,
 	}); err != nil {
 		return fmt.Errorf("failed to create audit log event: %w", err)
 	}
