@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hp/internal/audit"
 	"hp/internal/auth"
+	"hp/internal/calendar"
 	"hp/internal/config"
 	"hp/internal/database"
 	"hp/internal/drive"
@@ -22,11 +24,8 @@ import (
 	"hp/internal/web/views"
 	"hp/internal/web/views/component"
 	"hp/internal/webhook"
-	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,28 +38,29 @@ func init() {
 }
 
 type PageHandler struct {
-	logger              *slog.Logger
-	translator          *i18n.Translator
-	sessionStore        *session.Store
-	db                  *database.Database
-	authorization       *openfga.AuthorizationService
-	userManager         *user.Manager
-	authenticator       *auth.Authenticator
-	webhookManager      *webhook.Manager
-	notificationManager *notifications.Manager
-	organisationManager *organisation.Manager
-	driveManager        *drive.Manager
-	oauthManager        *oauth.Manager
+	Logger              *slog.Logger
+	Translator          *i18n.Translator
+	SessionStore        *session.Store
+	Authorizer          *openfga.AuthorizationService
+	UserManager         *user.Manager
+	Authenticator       *auth.Authenticator
+	WebhookManager      *webhook.Manager
+	Notifier            *notifications.Manager
+	OrganisationManager *organisation.Manager
+	DriveManager        *drive.Manager
+	OAuthManager        *oauth.Manager
+	Planner             *calendar.Manager
+	Auditor             *audit.Auditor
 }
 
-func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, db *database.Database, userManager *user.Manager, webhookManager *webhook.Manager, authenticator *auth.Authenticator, notificationManager *notifications.Manager, organisationManager *organisation.Manager, driveManager *drive.Manager, oauthManager *oauth.Manager) *PageHandler {
-	return &PageHandler{logger: logger, translator: translator, sessionStore: sessionStore, db: db, userManager: userManager, webhookManager: webhookManager, authenticator: authenticator, notificationManager: notificationManager, organisationManager: organisationManager, driveManager: driveManager, oauthManager: oauthManager}
+func NewPageHandler(logger *slog.Logger, translator *i18n.Translator, sessionStore *session.Store, userManager *user.Manager, webhookManager *webhook.Manager, authenticator *auth.Authenticator, notifier *notifications.Manager, organisationManager *organisation.Manager, driveManager *drive.Manager, oauthManager *oauth.Manager, planner *calendar.Manager, auditor *audit.Auditor) *PageHandler {
+	return &PageHandler{Logger: logger, Translator: translator, SessionStore: sessionStore, UserManager: userManager, WebhookManager: webhookManager, Authenticator: authenticator, Notifier: notifier, OrganisationManager: organisationManager, DriveManager: driveManager, OAuthManager: oauthManager, Planner: planner, Auditor: auditor}
 }
 
 func (h *PageHandler) layoutProps(ctx context.Context, title string) component.LayoutProps {
 	lang := ctx.Value(config.LanguageContextKey).(i18n.Language)
 	translator := translate.Translator{
-		Translator: h.translator,
+		Translator: h.Translator,
 		Language:   lang,
 	}
 	CSRFToken := ctx.Value(config.CSRFTokenContextKey).(string)
@@ -78,9 +78,9 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
 	// Get recent notifications for the dropdown (limit to 10)
-	unreadNotifications, err := h.notificationManager.Unread(ctx, userID)
+	unreadNotifications, err := h.Notifier.Unread(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to get recent notifications", "error", err)
+		h.Logger.Error("Failed to get recent notifications", "error", err)
 		unreadNotifications = []notifications.Notification{}
 	}
 
@@ -98,9 +98,9 @@ func (h *PageHandler) appLayoutProps(ctx context.Context, layoutProps component.
 		}
 	}
 
-	user, err := h.userManager.GetUser(ctx, userID)
+	user, err := h.UserManager.GetUser(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to get user by ID", "error", err)
+		h.Logger.Error("Failed to get user by ID", "error", err)
 	}
 
 	return component.AppLayoutProps{
@@ -151,13 +151,13 @@ func (h *PageHandler) ShowDashboardPage(w http.ResponseWriter, r *http.Request) 
 func (h *PageHandler) ShowLoginPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	sess, err := h.sessionStore.Get(ctx, r)
+	sess, err := h.SessionStore.Get(ctx, r)
 	if err != nil {
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 	defer func() {
-		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
-			h.logger.Error("Failed to save session", "error", err)
+		if err := h.SessionStore.Save(ctx, w, sess); err != nil {
+			h.Logger.Error("Failed to save session", "error", err)
 		}
 	}()
 
@@ -185,7 +185,7 @@ type LoginRequest struct {
 func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	sess, err := h.sessionStore.Get(ctx, r)
+	sess, err := h.SessionStore.Get(ctx, r)
 	if err != nil {
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
@@ -193,8 +193,8 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 	defer func() {
-		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
-			h.logger.Error("Failed to save session", "error", err)
+		if err := h.SessionStore.Save(ctx, w, sess); err != nil {
+			h.Logger.Error("Failed to save session", "error", err)
 		}
 	}()
 
@@ -216,7 +216,7 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Fetch user by email
-	userID, err := h.authenticator.Login(ctx, auth.LoginParam{
+	userID, err := h.Authenticator.Login(ctx, auth.LoginParam{
 		Email:    loginReq.Email,
 		Password: loginReq.Password,
 	})
@@ -265,7 +265,7 @@ func (h *PageHandler) Login(w http.ResponseWriter, r *http.Request) error {
 func (h *PageHandler) Logout(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	sess, err := h.sessionStore.Get(ctx, r)
+	sess, err := h.SessionStore.Get(ctx, r)
 	if err != nil {
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
@@ -273,17 +273,17 @@ func (h *PageHandler) Logout(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 	defer func() {
-		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
-			h.logger.Error("Failed to save session", "error", err)
+		if err := h.SessionStore.Save(ctx, w, sess); err != nil {
+			h.Logger.Error("Failed to save session", "error", err)
 		}
 	}()
 
-	if err := h.authenticator.Logout(ctx, sess.UserID.Data); err != nil {
-		h.logger.Error("Failed to sign out user", "error", err)
+	if err := h.Authenticator.Logout(ctx, sess.UserID.Data); err != nil {
+		h.Logger.Error("Failed to sign out user", "error", err)
 	}
 
-	if err := h.sessionStore.Destroy(ctx, w, sess); err != nil {
-		h.logger.Error("Failed to destroy session", "error", err)
+	if err := h.SessionStore.Destroy(ctx, w, sess); err != nil {
+		h.Logger.Error("Failed to destroy session", "error", err)
 	}
 
 	return JSONResponse(w, http.StatusOK, ApiResponse{
@@ -312,7 +312,7 @@ type RegisterRequest struct {
 func (h *PageHandler) RegisterStandaloneUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	sess, err := h.sessionStore.Get(ctx, r)
+	sess, err := h.SessionStore.Get(ctx, r)
 	if err != nil {
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
@@ -320,15 +320,15 @@ func (h *PageHandler) RegisterStandaloneUser(w http.ResponseWriter, r *http.Requ
 		})
 	}
 	defer func() {
-		if err := h.sessionStore.Save(ctx, w, sess); err != nil {
-			h.logger.Error("Failed to save session", "error", err)
+		if err := h.SessionStore.Save(ctx, w, sess); err != nil {
+			h.Logger.Error("Failed to save session", "error", err)
 		}
 	}()
 
 	// Get form data
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("Failed to decode register request", "error", err)
+		h.Logger.Error("Failed to decode register request", "error", err)
 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Invalid request",
@@ -358,7 +358,7 @@ func (h *PageHandler) RegisterStandaloneUser(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Check if user already exists
-	userID, err := h.authenticator.Register(ctx, auth.RegisterParam{
+	userID, err := h.Authenticator.Register(ctx, auth.RegisterParam{
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: req.Password,
@@ -371,7 +371,7 @@ func (h *PageHandler) RegisterStandaloneUser(w http.ResponseWriter, r *http.Requ
 			})
 		}
 
-		h.logger.Error("Failed to register user", "error", err)
+		h.Logger.Error("Failed to register user", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to register user",
@@ -426,7 +426,7 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 
 	var req ChangeSubscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("Failed to decode change subscription request", "error", err)
+		h.Logger.Error("Failed to decode change subscription request", "error", err)
 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Invalid request",
@@ -434,9 +434,9 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 	}
 
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
-	user, err := h.userManager.GetUser(ctx, userID)
+	user, err := h.UserManager.GetUser(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to get user from session", "error", err)
+		h.Logger.Error("Failed to get user from session", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Internal server error",
@@ -450,9 +450,9 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	org, err := h.organisationManager.GetOrganisation(ctx, user.OrganisationID.Data)
+	org, err := h.OrganisationManager.GetOrganisation(ctx, user.OrganisationID.Data)
 	if err != nil {
-		h.logger.Error("Failed to get organisation", "error", err)
+		h.Logger.Error("Failed to get organisation", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Internal server error",
@@ -483,11 +483,11 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 
 	if plan == organisation.SubscriptionPlanFree {
 		// Downgrading to free plan - change immediately
-		if err := h.organisationManager.ChangeSubscription(ctx, organisation.ChangeSubscriptionParam{
+		if err := h.OrganisationManager.ChangeSubscription(ctx, organisation.ChangeSubscriptionParam{
 			OrganisationID: org.ID,
 			NewPlan:        plan,
 		}); err != nil {
-			h.logger.Error("Failed to change subscription", "error", err, "user_id", userID, "new_plan", plan)
+			h.Logger.Error("Failed to change subscription", "error", err, "user_id", userID, "new_plan", plan)
 			return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 				Status:  APIResponseStatusError,
 				Message: "Failed to change subscription",
@@ -504,15 +504,15 @@ func (h *PageHandler) ChangeSubscription(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Upgrading to paid plan - create checkout session
-	checkoutURL, err := h.organisationManager.CreateCheckoutSession(ctx, organisation.CreateCheckoutSessionParams{
+	checkoutURL, err := h.OrganisationManager.CreateCheckoutSession(ctx, organisation.CreateCheckoutSessionParams{
 		OrganisationID: org.ID,
 		Plan:           plan,
 		SuccessURL:     "http://" + r.Host + "/billing?session=success",
 		CancelURL:      "http://" + r.Host + "/billing?session=cancel",
 	})
 	if err != nil {
-		h.logger.Info(r.URL.Scheme + "://" + r.Host + "/billing?session=success")
-		h.logger.Error("Failed to create checkout session", "error", err, "user_id", userID, "new_plan", plan)
+		h.Logger.Info(r.URL.Scheme + "://" + r.Host + "/billing?session=success")
+		h.Logger.Error("Failed to create checkout session", "error", err, "user_id", userID, "new_plan", plan)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to create checkout session",
@@ -533,21 +533,21 @@ func (h *PageHandler) ShowMyDrivePage(w http.ResponseWriter, r *http.Request) er
 
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	driveID, err := h.driveManager.UserDriveID(ctx, userID)
+	driveID, err := h.DriveManager.UserDriveID(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to get user drive ID", "error", err, "user_id", userID)
+		h.Logger.Error("Failed to get user drive ID", "error", err, "user_id", userID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to get user drive",
 		})
 	}
 
-	files, err := h.driveManager.List(ctx, drive.ListParams{
+	files, err := h.DriveManager.ListFiles(ctx, drive.ListFilesParams{
 		DriveID:  driveID,
 		FolderID: util.None[uuid.UUID](),
 	})
 	if err != nil {
-		h.logger.Error("Failed to get files for folder", "error", err)
+		h.Logger.Error("Failed to get files for folder", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to load files for folder",
@@ -647,9 +647,9 @@ func (h *PageHandler) CreateFolder(w http.ResponseWriter, r *http.Request) error
 		parentID = util.Some(parentIDRaw)
 	}
 
-	driveID, err := h.driveManager.UserDriveID(ctx, userID)
+	driveID, err := h.DriveManager.UserDriveID(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to get user drive ID", "error", err, "user_id", userID)
+		h.Logger.Error("Failed to get user drive ID", "error", err, "user_id", userID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to get user drive",
@@ -657,13 +657,13 @@ func (h *PageHandler) CreateFolder(w http.ResponseWriter, r *http.Request) error
 	}
 
 	// Create folder in database
-	folder, err := h.driveManager.CreateFolder(ctx, drive.CreateFolderParams{
+	folder, err := h.DriveManager.CreateFolder(ctx, drive.CreateFolderParams{
 		DriveID:  driveID,
 		ParentID: parentID,
 		Name:     requestBody.Name,
 	})
 	if err != nil {
-		h.logger.Error("Failed to create folder", "error", err)
+		h.Logger.Error("Failed to create folder", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to create folder",
@@ -683,186 +683,193 @@ type UploadFileRequest struct {
 	FolderID string `json:"folder_id"`
 }
 
-func (h *PageHandler) UploadFile(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
+// func (h *PageHandler) UploadFile(w http.ResponseWriter, r *http.Request) error {
+// 	ctx := r.Context()
+// 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	// Get folder ID from form data (optional)
-	var uploadReq UploadFileRequest
+// 	// Get folder ID from form data (optional)
+// 	var uploadReq UploadFileRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&uploadReq); err != nil {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to parse request",
-		})
-	}
+// 	if err := json.NewDecoder(r.Body).Decode(&uploadReq); err != nil {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to parse request",
+// 		})
+// 	}
 
-	var folderID util.Optional[uuid.UUID]
-	if folderIDStr := uploadReq.FolderID; folderIDStr != "" {
-		id, err := uuid.Parse(folderIDStr)
-		if err != nil {
-			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-				Status:  APIResponseStatusError,
-				Message: "Invalid folder ID",
-			})
-		}
-		folderID = util.Some(id)
-	}
+// 	var folderID util.Optional[uuid.UUID]
+// 	if folderIDStr := uploadReq.FolderID; folderIDStr != "" {
+// 		id, err := uuid.Parse(folderIDStr)
+// 		if err != nil {
+// 			return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 				Status:  APIResponseStatusError,
+// 				Message: "Invalid folder ID",
+// 			})
+// 		}
+// 		folderID = util.Some(id)
+// 	}
 
-	// Parse multipart form
-	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MB
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to parse multipart form",
-		})
-	}
+// 	// Parse multipart form
+// 	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MB
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to parse multipart form",
+// 		})
+// 	}
 
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "No files provided",
-		})
-	}
+// 	files := r.MultipartForm.File["files"]
+// 	if len(files) == 0 {
+// 		return JSONResponse(w, http.StatusBadRequest, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "No files provided",
+// 		})
+// 	}
 
-	// Create uploads directory if it doesn't exist
-	uploadDir := "uploads"
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		slog.Error("Failed to create upload directory", "error", err)
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to create upload directory",
-		})
-	}
+// 	// Create uploads directory if it doesn't exist
+// 	uploadDir := "uploads"
+// 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+// 		slog.Error("Failed to create upload directory", "error", err)
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to create upload directory",
+// 		})
+// 	}
 
-	var uploadedFiles []map[string]any
+// 	var uploadedFiles []map[string]any
 
-	for _, fileHeader := range files {
-		// Generate unique filename
-		ext := filepath.Ext(fileHeader.Filename)
-		baseFilename := strings.TrimSuffix(fileHeader.Filename, ext)
-		uniqueFilename := baseFilename + "_" + uuid.New().String() + ext
-		filePath := filepath.Join(uploadDir, uniqueFilename)
+// 	for _, fileHeader := range files {
+// 		// Generate unique filename
+// 		ext := filepath.Ext(fileHeader.Filename)
+// 		baseFilename := strings.TrimSuffix(fileHeader.Filename, ext)
+// 		uniqueFilename := baseFilename + "_" + uuid.New().String() + ext
+// 		filePath := filepath.Join(uploadDir, uniqueFilename)
 
-		// Open the uploaded file
-		srcFile, err := fileHeader.Open()
-		if err != nil {
-			slog.Error("Failed to open uploaded file", "error", err, "filename", fileHeader.Filename)
-			continue
-		}
-		defer srcFile.Close()
+// 		// Open the uploaded file
+// 		srcFile, err := fileHeader.Open()
+// 		if err != nil {
+// 			slog.Error("Failed to open uploaded file", "error", err, "filename", fileHeader.Filename)
+// 			continue
+// 		}
+// 		defer srcFile.Close()
 
-		// Create destination file
-		dstFile, err := os.Create(filePath)
-		if err != nil {
-			slog.Error("Failed to create destination file", "error", err, "filename", fileHeader.Filename)
-			continue
-		}
-		defer dstFile.Close()
+// 		// Create destination file
+// 		dstFile, err := os.Create(filePath)
+// 		if err != nil {
+// 			slog.Error("Failed to create destination file", "error", err, "filename", fileHeader.Filename)
+// 			continue
+// 		}
+// 		defer dstFile.Close()
 
-		if _, err := io.Copy(dstFile, srcFile); err != nil {
-			slog.Error("Failed to save uploaded file", "error", err, "filename", fileHeader.Filename)
-			// Try to delete the partially saved file
-			os.Remove(filePath)
-			continue
-		}
+// 		if _, err := io.Copy(dstFile, srcFile); err != nil {
+// 			slog.Error("Failed to save uploaded file", "error", err, "filename", fileHeader.Filename)
+// 			// Try to delete the partially saved file
+// 			os.Remove(filePath)
+// 			continue
+// 		}
 
-		// Re-open the file to read its header for MIME type detection
-		savedFile, err := os.Open(filePath)
-		if err != nil {
-			slog.Error("Failed to open saved file for MIME type detection", "error", err, "filename", fileHeader.Filename)
-			// Try to delete the saved file
-			os.Remove(filePath)
-			continue
-		}
-		defer savedFile.Close()
+// 		// Re-open the file to read its header for MIME type detection
+// 		savedFile, err := os.Open(filePath)
+// 		if err != nil {
+// 			slog.Error("Failed to open saved file for MIME type detection", "error", err, "filename", fileHeader.Filename)
+// 			// Try to delete the saved file
+// 			os.Remove(filePath)
+// 			continue
+// 		}
+// 		defer savedFile.Close()
 
-		buffer := make([]byte, 512)
-		if _, err := savedFile.Read(buffer); err != nil {
-			slog.Error("Failed to read file header for MIME type detection", "error", err, "filename", fileHeader.Filename)
-			// Try to delete the saved file
-			os.Remove(filePath)
-			continue
-		}
+// 		buffer := make([]byte, 512)
+// 		if _, err := savedFile.Read(buffer); err != nil {
+// 			slog.Error("Failed to read file header for MIME type detection", "error", err, "filename", fileHeader.Filename)
+// 			// Try to delete the saved file
+// 			os.Remove(filePath)
+// 			continue
+// 		}
 
-		fileHeader.Header.Set("Content-Type", http.DetectContentType(buffer))
+// 		fileHeader.Header.Set("Content-Type", http.DetectContentType(buffer))
 
-		// Reset file pointer
-		if _, err := savedFile.Seek(0, 0); err != nil {
-			slog.Error("Failed to reset file pointer", "error", err, "filename", fileHeader.Filename)
-			// Try to delete the saved file
-			os.Remove(filePath)
-			continue
-		}
+// 		// Reset file pointer
+// 		if _, err := savedFile.Seek(0, 0); err != nil {
+// 			slog.Error("Failed to reset file pointer", "error", err, "filename", fileHeader.Filename)
+// 			// Try to delete the saved file
+// 			os.Remove(filePath)
+// 			continue
+// 		}
 
-		// Optionally, you can implement virus scanning here
+// 		// Optionally, you can implement virus scanning here
 
-		// Optionally, upload to S3 or another storage service here and get the S3 key
+// 		// Optionally, upload to S3 or another storage service here and get the S3 key
 
-		// For this example, we'll just store the local file path
-		// In a real application, you might want to store a URL or S3 key instead
+// 		// For this example, we'll just store the local file path
+// 		// In a real application, you might want to store a URL or S3 key instead
 
-		// Determine MIME type
-		mimeType := fileHeader.Header.Get("Content-Type")
-		if mimeType == "" {
-			mimeType = "application/octet-stream"
-		}
+// 		// Determine MIME type
+// 		mimeType := fileHeader.Header.Get("Content-Type")
+// 		if mimeType == "" {
+// 			mimeType = "application/octet-stream"
+// 		}
 
-		driveID, err := h.driveManager.UserDriveID(ctx, userID)
-		if err != nil {
-			slog.Error("Failed to get user drive ID", "error", err, "user_id", userID)
-			// Try to delete the saved file
-			os.Remove(filePath)
-			continue
-		}
+// 		driveID, err := h.driveManager.UserDriveID(ctx, userID)
+// 		if err != nil {
+// 			slog.Error("Failed to get user drive ID", "error", err, "user_id", userID)
+// 			// Try to delete the saved file
+// 			os.Remove(filePath)
+// 			continue
+// 		}
 
-		// Create file record in database
-		file, err := h.db.CreateFile(ctx, database.CreateFileParams{
-			DriveID:   driveID,
-			ParentID:  folderID,
-			Name:      fileHeader.Filename,
-			MimeType:  mimeType,
-			Path:      filePath,
-			SizeBytes: uint64(fileHeader.Size),
-		})
-		if err != nil {
-			slog.Error("Failed to create file record", "error", err, "filename", fileHeader.Filename)
-			// Try to delete the saved file
-			os.Remove(filePath)
-			continue
-		}
+// 		// Create file record in database
+// 		h.driveManager.StoreFile(ctx, drive.StoreFileParams{
+// 			DriveID:   driveID,
+// 			FolderID:  folderID,
+// 			Name:      fileHeader.Filename,
+// 			Path:      filePath,
+// 			SizeBytes: uint64(fileHeader.Size),
+// 		})
+// 		file, err := h.db.CreateFile(ctx, database.CreateFileParams{
+// 			DriveID:   driveID,
+// 			ParentID:  folderID,
+// 			Name:      fileHeader.Filename,
+// 			MimeType:  mimeType,
+// 			Path:      filePath,
+// 			SizeBytes: uint64(fileHeader.Size),
+// 		})
+// 		if err != nil {
+// 			slog.Error("Failed to create file record", "error", err, "filename", fileHeader.Filename)
+// 			// Try to delete the saved file
+// 			os.Remove(filePath)
+// 			continue
+// 		}
 
-		// if err := h.authorization.AddFileReader(ctx, userID, file.ID); err != nil {
-		// 	slog.Error("Failed to add file reader permission", "error", err, "user_id", userID, "file_id", file.ID)
-		// 	// Try to delete the saved file and database record
-		// 	os.Remove(filePath)
-		// 	if err := h.db.DeleteFile(ctx, file.ID); err != nil {
-		// 		slog.Error("Failed to delete file record after permission error", "error", err, "file_id", file.ID)
-		// 	}
-		// 	continue
-		// }
+// 		// if err := h.authorization.AddFileReader(ctx, userID, file.ID); err != nil {
+// 		// 	slog.Error("Failed to add file reader permission", "error", err, "user_id", userID, "file_id", file.ID)
+// 		// 	// Try to delete the saved file and database record
+// 		// 	os.Remove(filePath)
+// 		// 	if err := h.db.DeleteFile(ctx, file.ID); err != nil {
+// 		// 		slog.Error("Failed to delete file record after permission error", "error", err, "file_id", file.ID)
+// 		// 	}
+// 		// 	continue
+// 		// }
 
-		uploadedFiles = append(uploadedFiles, map[string]any{
-			"id":       file.ID,
-			"name":     file.Name,
-			"size":     file.SizeBytes,
-			"mimeType": file.MimeType,
-		})
-	}
+// 		uploadedFiles = append(uploadedFiles, map[string]any{
+// 			"id":       file.ID,
+// 			"name":     file.Name,
+// 			"size":     file.SizeBytes,
+// 			"mimeType": file.MimeType,
+// 		})
+// 	}
 
-	if len(uploadedFiles) == 0 {
-		slog.Error("No files were uploaded successfully")
-		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
-			Status:  APIResponseStatusError,
-			Message: "Failed to upload any files",
-		})
-	}
+// 	if len(uploadedFiles) == 0 {
+// 		slog.Error("No files were uploaded successfully")
+// 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+// 			Status:  APIResponseStatusError,
+// 			Message: "Failed to upload any files",
+// 		})
+// 	}
 
-	return JSONResponse(w, http.StatusCreated, ApiResponse{
-		Status: APIResponseStatusSuccess,
-		Data:   uploadedFiles,
-	})
-}
+// 	return JSONResponse(w, http.StatusCreated, ApiResponse{
+// 		Status: APIResponseStatusSuccess,
+// 		Data:   uploadedFiles,
+// 	})
+// }
 
 // type ShareFileRequest struct {
 // 	FileID string `json:"file_id"`
@@ -1073,9 +1080,9 @@ func (h *PageHandler) ShowOAuthClientsPage(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	user, err := h.userManager.GetUser(ctx, userID)
+	user, err := h.UserManager.GetUser(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to get user from session", "error", err)
+		h.Logger.Error("Failed to get user from session", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Internal server error",
@@ -1091,9 +1098,9 @@ func (h *PageHandler) ShowOAuthClientsPage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Get the list of OAuth clients for this user
-	clients, err := h.oauthManager.ListClients(ctx, userID)
+	clients, err := h.OAuthManager.ListClients(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to list OAuth clients", "error", err)
+		h.Logger.Error("Failed to list OAuth clients", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to load OAuth clients",
@@ -1136,6 +1143,12 @@ func (h *PageHandler) CreateOAuthClient(w http.ResponseWriter, r *http.Request) 
 			Message: "Invalid request payload",
 		})
 	}
+
+	// Trim whitespace from all fields
+	req.Name = strings.TrimSpace(req.Name)
+	req.RedirectURIs = strings.TrimSpace(req.RedirectURIs)
+	req.Public = strings.TrimSpace(req.Public)
+	req.Scopes = strings.TrimSpace(req.Scopes)
 
 	// Validation
 	if req.Name == "" {
@@ -1182,26 +1195,31 @@ func (h *PageHandler) CreateOAuthClient(w http.ResponseWriter, r *http.Request) 
 		allowedScopes[i] = strings.TrimSpace(scope)
 	}
 
-	// Create the client in the database
-	secret, err := util.RandomString(32)
+	user, err := h.UserManager.GetUser(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to generate client secret", "error", err)
+		h.Logger.Error("Failed to get user from session", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
-			Message: "Failed to generate client credentials",
+			Message: "Internal server error",
 		})
 	}
 
-	client, err := h.db.CreateOAuthClient(ctx, database.CreateOAuthClientParams{
-		OwnerID:       userID,
-		Name:          req.Name,
-		RedirectURIs:  filteredURIs,
-		Secret:        secret,
-		IsPublic:      isPublic,
-		AllowedScopes: allowedScopes,
+	if !user.OrganisationID.Some {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You must belong to an organisation to create OAuth clients",
+		})
+	}
+
+	client, err := h.OAuthManager.CreateClient(ctx, oauth.CreateClientParams{
+		OrganisationID: user.OrganisationID.Data,
+		Name:           req.Name,
+		IsPublic:       isPublic,
+		RedirectURIs:   filteredURIs,
+		AllowedScopes:  allowedScopes,
 	})
 	if err != nil {
-		h.logger.Error("Failed to create OAuth client", "error", err)
+		h.Logger.Error("Failed to create OAuth client", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to create OAuth client",
@@ -1218,7 +1236,6 @@ func (h *PageHandler) CreateOAuthClient(w http.ResponseWriter, r *http.Request) 
 			"redirectURIs": client.RedirectURIs,
 			"public":       false,
 			"secret":       client.Secret,
-			"createdAt":    client.CreatedAt,
 		},
 	})
 }
@@ -1236,7 +1253,7 @@ func (h *PageHandler) GetOAuthClient(w http.ResponseWriter, r *http.Request) err
 		})
 	}
 
-	client, err := h.db.GetOAuthClientByID(ctx, clientID)
+	client, err := h.OAuthManager.GetClientByID(ctx, clientID)
 	if err != nil {
 		if err == database.ErrOAuthClientNotFound {
 			return JSONResponse(w, http.StatusNotFound, ApiResponse{
@@ -1244,7 +1261,7 @@ func (h *PageHandler) GetOAuthClient(w http.ResponseWriter, r *http.Request) err
 				Message: "OAuth client not found",
 			})
 		}
-		h.logger.Error("Failed to get OAuth client", "error", err, "client_id", clientID)
+		h.Logger.Error("Failed to get OAuth client", "error", err, "client_id", clientID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to retrieve OAuth client",
@@ -1257,13 +1274,12 @@ func (h *PageHandler) GetOAuthClient(w http.ResponseWriter, r *http.Request) err
 	return JSONResponse(w, http.StatusOK, ApiResponse{
 		Status: APIResponseStatusSuccess,
 		Data: map[string]any{
-			"id":           client.ID.String(),
-			"name":         client.Name,
-			"redirectURIs": client.RedirectURIs,
-			"public":       client.IsPublic,
-			"scopes":       client.AllowedScopes,
-			"createdAt":    client.CreatedAt,
-			"updatedAt":    client.UpdatedAt,
+			"id":            client.ID.String(),
+			"name":          client.Name,
+			"redirect_uris": client.RedirectURIs,
+			"public":        client.IsPublic,
+			"scopes":        client.AllowedScopes,
+			"modified_at":   client.ModifiedAt,
 		},
 	})
 }
@@ -1282,7 +1298,7 @@ func (h *PageHandler) DeleteOAuthClient(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Check if the client exists and belongs to the user
-	_, err = h.db.GetOAuthClientByID(ctx, clientID)
+	_, err = h.OAuthManager.GetClientByID(ctx, clientID)
 	if err != nil {
 		if err == database.ErrOAuthClientNotFound {
 			return JSONResponse(w, http.StatusNotFound, ApiResponse{
@@ -1290,7 +1306,7 @@ func (h *PageHandler) DeleteOAuthClient(w http.ResponseWriter, r *http.Request) 
 				Message: "OAuth client not found",
 			})
 		}
-		h.logger.Error("Failed to get OAuth client for deletion", "error", err, "client_id", clientID)
+		h.Logger.Error("Failed to get OAuth client for deletion", "error", err, "client_id", clientID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to retrieve OAuth client",
@@ -1298,8 +1314,8 @@ func (h *PageHandler) DeleteOAuthClient(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Delete the client
-	if err := h.db.DeleteOAuthClientByID(ctx, clientID); err != nil {
-		h.logger.Error("Failed to delete OAuth client", "error", err, "client_id", clientID)
+	if err := h.OAuthManager.DeleteClientByID(ctx, clientID); err != nil {
+		h.Logger.Error("Failed to delete OAuth client", "error", err, "client_id", clientID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to delete OAuth client",
@@ -1335,9 +1351,9 @@ func (h *PageHandler) ShowFolderPage(w http.ResponseWriter, r *http.Request) err
 	}
 
 	// Check if the user has access to this folder
-	ok, err := h.authorization.CanReadFile(ctx, userID, folderID)
+	ok, err := h.Authorizer.CanReadFile(ctx, userID, folderID)
 	if err != nil {
-		h.logger.Error("Authorization check failed", "error", err, "user_id", userID, "folder_id", folderID)
+		h.Logger.Error("Authorization check failed", "error", err, "user_id", userID, "folder_id", folderID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to check permissions",
@@ -1350,11 +1366,30 @@ func (h *PageHandler) ShowFolderPage(w http.ResponseWriter, r *http.Request) err
 		})
 	}
 
-	files, err := h.db.ListFiles(ctx, database.ListFilesParams{
-		ParentID: util.Some(util.Some(folderID)),
+	user, err := h.UserManager.GetUser(ctx, userID)
+	if err != nil {
+		h.Logger.Error("Failed to get user from session", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
+		})
+	}
+
+	driveID, err := h.DriveManager.UserDriveID(ctx, user.ID)
+	if err != nil {
+		h.Logger.Error("Failed to get user drive ID", "error", err, "user_id", user.ID)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Failed to get user drive",
+		})
+	}
+
+	files, err := h.DriveManager.ListFiles(ctx, drive.ListFilesParams{
+		DriveID:  driveID,
+		FolderID: util.Some(folderID),
 	})
 	if err != nil {
-		h.logger.Error("Failed to get files for folder", "error", err)
+		h.Logger.Error("Failed to get files for folder", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to load files for folder",
@@ -1442,13 +1477,13 @@ func (h *PageHandler) ShowCalendarPage(w http.ResponseWriter, r *http.Request) e
 	startDate := time.Now()
 	endDate := startDate.AddDate(0, 0, numDays)
 
-	events, err := h.db.ListCalendarEvents(ctx, database.ListCalendarEventsParams{
-		OwnerID:   util.Some(userID),
-		StartDate: util.Some(startDate),
-		EndDate:   util.Some(endDate),
+	events, err := h.Planner.Events(ctx, calendar.EventsParams{
+		UserID:    userID,
+		StartTime: startDate,
+		EndTime:   endDate,
 	})
 	if err != nil {
-		h.logger.Error("Failed to list calendar events", "error", err, "user_id", userID)
+		h.Logger.Error("Failed to list calendar events", "error", err, "user_id", userID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to load calendar events",
@@ -1464,9 +1499,9 @@ func (h *PageHandler) ShowCalendarPage(w http.ResponseWriter, r *http.Request) e
 			Description: event.Description,
 			StartTime:   event.StartTime,
 			EndTime:     event.EndTime,
-			Location:    event.Location.Unwrap(),
+			Location:    event.Location,
 			AllDay:      event.AllDay,
-			Status:      string(event.Status),
+			Status:      event.Status,
 		}
 	}
 
@@ -1495,13 +1530,29 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 	ctx := r.Context()
 	userID := ctx.Value(config.UserIDContextKey).(uuid.UUID)
 
-	// Get the list of webhooks for this user
+	user, err := h.UserManager.GetUser(ctx, userID)
+	if err != nil {
+		h.Logger.Error("Failed to get user from session", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
+		})
+	}
 
-	subscription, err := h.db.ListWebhookSubscriptions(ctx, database.ListWebhookSubscriptionsParams{
-		OwnerID: util.Some(userID),
+	if !user.OrganisationID.Some {
+		// User has no organisation - they cannot create webhooks
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You must belong to an organisation to manage webhooks",
+		})
+	}
+
+	// Get the list of webhooks for this user
+	subscriptions, err := h.WebhookManager.Subscriptions(ctx, webhook.SubscriptionParams{
+		OrganisationID: user.OrganisationID.Data,
 	})
 	if err != nil {
-		h.logger.Error("Failed to list webhooks", "error", err)
+		h.Logger.Error("Failed to list webhooks", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to load webhooks",
@@ -1509,20 +1560,20 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 	}
 
 	// Convert to view model
-	viewSubscriptions := make([]views.WebhookSubscription, 0, len(subscription))
-	for _, webhook := range subscription {
-		eventTypes := make([]string, len(webhook.EventTypes))
-		for i, eventType := range webhook.EventTypes {
+	viewSubscriptions := make([]views.WebhookSubscription, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		eventTypes := make([]string, len(subscription.EventTypes))
+		for i, eventType := range subscription.EventTypes {
 			eventTypes[i] = string(eventType)
 		}
 
 		viewSubscriptions = append(viewSubscriptions, views.WebhookSubscription{
-			ID:           webhook.ID.String(),
-			Name:         webhook.Name,
-			Description:  webhook.Description,
-			URL:          webhook.URL,
+			ID:           subscription.ID.String(),
+			Name:         subscription.Name,
+			Description:  subscription.Description,
+			URL:          subscription.URL,
 			EventTypes:   eventTypes,
-			IsActive:     webhook.IsActive,
+			IsActive:     subscription.IsActive,
 			Activity:     time.Time{},
 			ResponseTime: time.Time{},
 			ErrorRate:    0,
@@ -1531,7 +1582,7 @@ func (h *PageHandler) ShowWebhooksPage(w http.ResponseWriter, r *http.Request) e
 	return render(ctx, w, views.WebhooksPage(views.WebhooksPageProps{
 		AppLayoutProps: h.appLayoutProps(ctx, h.layoutProps(ctx, "Webhooks"), r),
 		Subscriptions:  viewSubscriptions,
-		EventTypes:     h.webhookManager.EventTypes(),
+		EventTypes:     h.WebhookManager.EventTypes(),
 	}))
 }
 
@@ -1574,12 +1625,29 @@ func (h *PageHandler) CreateWebhookSubscription(w http.ResponseWriter, r *http.R
 		eventTypes[idx] = vet
 	}
 
-	subscriptionID, err := h.webhookManager.RegisterSubscription(ctx, webhook.RegisterSubscriptionParam{
-		OwnerID:     userID,
-		Name:        req.Name,
-		Description: req.Description,
-		URL:         req.URL,
-		EventTypes:  eventTypes,
+	user, err := h.UserManager.GetUser(ctx, userID)
+	if err != nil {
+		h.Logger.Error("Failed to get user from session", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
+		})
+	}
+
+	if !user.OrganisationID.Some {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You must belong to an organisation to create webhooks",
+		})
+	}
+
+	// Create the webhook subscription
+	subscriptionID, err := h.WebhookManager.Subscribe(ctx, webhook.SubscribeParams{
+		OrganisationID: user.OrganisationID.Data,
+		Name:           req.Name,
+		Description:    req.Description,
+		URL:            req.URL,
+		EventTypes:     eventTypes,
 	})
 	if err != nil {
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
@@ -1623,11 +1691,28 @@ func (h *PageHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) erro
 		})
 	}
 
+	user, err := h.UserManager.GetUser(ctx, userID)
+	if err != nil {
+		h.Logger.Error("Failed to get user from session", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
+		})
+	}
+
+	if !user.OrganisationID.Some {
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You must belong to an organisation to delete webhooks",
+		})
+	}
+
 	// First check if the webhook exists and belongs to this user by listing user webhooks
-	if err := h.db.DeleteWebhookByID(ctx, webhookUUID, database.DeleteWebhookParams{
-		OwnerID: util.Some(userID),
+	if err := h.WebhookManager.Unsubscribe(ctx, webhook.UnsubscribeParams{
+		OrganisationID: user.OrganisationID.Data,
+		SubscriptionID: webhookUUID,
 	}); err != nil {
-		h.logger.Error("Failed to delete webhook", "error", err, "webhookID", webhookID)
+		h.Logger.Error("Failed to delete webhook", "error", err, "webhookID", webhookID)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to delete webhook",
@@ -1683,14 +1768,29 @@ func (h *PageHandler) ShowAuditLogsPage(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
+	user, err := h.UserManager.GetUser(ctx, userID)
+	if err != nil {
+		h.Logger.Error("Failed to get user from session", "error", err)
+		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "Internal server error",
+		})
+	}
+
+	if !user.OrganisationID.Some {
+		// User has no organisation - they cannot view audit logs
+		return JSONResponse(w, http.StatusForbidden, ApiResponse{
+			Status:  APIResponseStatusError,
+			Message: "You must belong to an organisation to view audit logs",
+		})
+	}
+
 	// Get the list of audit logs for this user
-	logs, err := h.db.ListAuditLogEvents(ctx, database.ListAuditLogEventsParams{
-		OwnerID:   util.Some(userID),
-		StartTime: util.Some(startTime),
-		EndTime:   util.Some(endTime),
+	events, err := h.Auditor.ListEvents(ctx, audit.ListEventsParam{
+		OrganisationID: user.OrganisationID.Data,
 	})
 	if err != nil {
-		h.logger.Error("Failed to list audit logs", "error", err)
+		h.Logger.Error("Failed to list audit logs", "error", err)
 		return JSONResponse(w, http.StatusInternalServerError, ApiResponse{
 			Status:  APIResponseStatusError,
 			Message: "Failed to load audit logs",
@@ -1698,13 +1798,13 @@ func (h *PageHandler) ShowAuditLogsPage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Convert to view model
-	viewEvents := make([]views.AuditLogEvent, len(logs))
-	for i := range logs {
+	viewEvents := make([]views.AuditLogEvent, len(events))
+	for i := range events {
 		viewEvents[i] = views.AuditLogEvent{
-			ID:        logs[i].ID.String(),
-			Title:     logs[i].EventType,
-			Info:      string(logs[i].EventData),
-			CreatedAt: logs[i].CreatedAt,
+			ID:        events[i].ID.String(),
+			Title:     string(events[i].Type),
+			Info:      string(events[i].Data),
+			CreatedAt: events[i].CreatedAt,
 		}
 	}
 	return render(ctx, w, views.AuditLogsPage(views.AuditLogsPageProps{

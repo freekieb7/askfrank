@@ -3,11 +3,27 @@ networks:
 
 
 services:
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: askfrank
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - DATABASE_URL=postgres://postgres:password@postgres:5432/postgres?sslmode=disable
+  #     - STRIPE_API_KEY=your_stripe_api_key_here
+  #     # - SMTP_HOST=smtp.example.com
+  #     # - SMTP_PORT=587
+  #     # - SMTP_USER=your_smtp_user_here
+  #     # - SMTP_PASSWORD=your_smtp_password_here
+  #     # - JWT_SECRET=your_jwt_secret_here
+  #     # - SESSION_KEY=your_session_key_here
+  #     # - AUDIT_LOG_PATH=/var/log/askfrank/audit.log
+  #     # -
+
   postgres:
     image: postgres:18
-    container_name: postgres
-    networks:
-      - openfga
     ports:
       - "5432:5432"
     environment:

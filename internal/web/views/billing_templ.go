@@ -9,12 +9,13 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import "hp/internal/web/views/component"
-import "hp/internal/account"
+import "hp/internal/organisation"
 
 type BillingPageProps struct {
 	component.AppLayoutProps
-	SuccessMsg string
-	ErrorMsg   string
+	SubscriptionPlan organisation.SubscriptionPlan
+	SuccessMsg       string
+	ErrorMsg         string
 }
 
 func BillingPage(props BillingPageProps) templ.Component {
@@ -79,7 +80,7 @@ func BillingPage(props BillingPageProps) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(props.ErrorMsg)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 34, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 35, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -114,7 +115,7 @@ func BillingPage(props BillingPageProps) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(props.SuccessMsg)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 50, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/billing.templ`, Line: 51, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -124,7 +125,7 @@ func BillingPage(props BillingPageProps) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if props.AppLayoutProps.UserInfo.SubscriptionPlan == account.SubscriptionPlanFree {
+			if props.SubscriptionPlan == organisation.SubscriptionPlanFree {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "Current Plan")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -139,7 +140,7 @@ func BillingPage(props BillingPageProps) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if props.AppLayoutProps.UserInfo.SubscriptionPlan == account.SubscriptionPlanPro {
+			if props.SubscriptionPlan == organisation.SubscriptionPlanPro {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "Current Plan")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err

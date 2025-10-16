@@ -10,19 +10,20 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
+	"hp/internal/calendar"
 	"hp/internal/web/views/component"
 	"time"
 )
 
 type CalendarEvent struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	StartTime   time.Time `json:"start"`
-	EndTime     time.Time `json:"end"`
-	AllDay      bool      `json:"all_day"`
-	Location    string    `json:"location"`
-	Status      string    `json:"status"` // confirmed, tentative, cancelled
+	ID          string               `json:"id"`
+	Title       string               `json:"title"`
+	Description string               `json:"description"`
+	StartTime   time.Time            `json:"start"`
+	EndTime     time.Time            `json:"end"`
+	AllDay      bool                 `json:"all_day"`
+	Location    string               `json:"location"`
+	Status      calendar.EventStatus `json:"status"`
 }
 
 type CalendarDay struct {
@@ -77,7 +78,7 @@ func CalendarPage(props CalendarPageProps) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(props.CurrentMonth.Format("January 2006"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/calendar.templ`, Line: 71, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/calendar.templ`, Line: 72, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -95,7 +96,7 @@ func CalendarPage(props CalendarPageProps) templ.Component {
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%02d:00", hour))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/calendar.templ`, Line: 105, Col: 40}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/calendar.templ`, Line: 106, Col: 40}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -118,7 +119,7 @@ func CalendarPage(props CalendarPageProps) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%02d:00", hour))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/calendar.templ`, Line: 122, Col: 40}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/calendar.templ`, Line: 123, Col: 40}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {

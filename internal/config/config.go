@@ -37,14 +37,7 @@ const (
 )
 
 type DatabaseConfig struct {
-	Host         string
-	Port         int
-	User         string
-	Password     string
-	Name         string
-	SSLMode      string
-	MaxOpenConns int
-	MaxIdleConns int
+	URL string
 }
 
 type StripeConfig struct {
@@ -62,14 +55,7 @@ func NewConfig() Config {
 			Environment:  getEnvEnvironment("SERVER_ENVIRONMENT", EnvironmentDevelopment),
 		},
 		Database: DatabaseConfig{
-			Host:         getEnv("DB_HOST", "localhost"),
-			Port:         getEnvInt("DB_PORT", 5432),
-			User:         getEnv("DB_USER", "postgres"),
-			Password:     getEnv("DB_PASSWORD", "password"),
-			Name:         getEnv("DB_NAME", "postgres"),
-			SSLMode:      getEnv("DB_SSL_MODE", "disable"),
-			MaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 10),
-			MaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
+			URL: getEnv("DATABASE_URL", ""),
 		},
 		Stripe: StripeConfig{
 			APIKey:        getEnv("STRIPE_API_KEY", ""),

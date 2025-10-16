@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"hp/internal/database"
+	"hp/internal/util"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -38,6 +40,43 @@ type Auditor struct {
 
 func NewAuditor(logger *slog.Logger, db *database.Database) Auditor {
 	return Auditor{logger: logger, db: db}
+}
+
+type Event struct {
+	ID        uuid.UUID
+	CreatedAt time.Time
+	Type      AuditLogEventType
+	Data      []byte
+}
+
+type ListEventsParam struct {
+	OrganisationID uuid.UUID
+	StartTime      util.Optional[time.Time]
+	EndTime        util.Optional[time.Time]
+	Limit          uint8
+}
+
+func (a *Auditor) ListEvents(ctx context.Context, params ListEventsParam) ([]Event, error) {
+	dbEvents, err := a.db.ListAuditLogEvents(ctx, database.ListAuditLogEventsParams{
+		OwnerOrganisationID: util.Some(params.OrganisationID),
+		StartTimestamp:      params.StartTime,
+		EndTimestamp:        params.EndTime,
+		Limit:               util.Some(params.Limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list audit log events: %w", err)
+	}
+
+	events := make([]Event, len(dbEvents))
+	for i, dbEvent := range dbEvents {
+		events[i] = Event{
+			ID:        dbEvent.ID,
+			CreatedAt: dbEvent.CreatedAt,
+			Type:      AuditLogEventType(dbEvent.Type),
+			Data:      dbEvent.Data,
+		}
+	}
+	return events, nil
 }
 
 type LogEventParam struct {

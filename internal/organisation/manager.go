@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hp/internal/audit"
 	"hp/internal/database"
+	"hp/internal/notifications"
 	"hp/internal/stripe"
 	"hp/internal/util"
 	"log/slog"
@@ -13,16 +14,20 @@ import (
 )
 
 type Manager struct {
-	db      *database.Database
-	logger  *slog.Logger
-	stripe  *stripe.Client
-	auditor *audit.Auditor
+	Logger   *slog.Logger
+	DB       *database.Database
+	Stripe   *stripe.Client
+	Auditor  *audit.Auditor
+	Notifier *notifications.Manager
 }
 
-func NewManager(db *database.Database, logger *slog.Logger) Manager {
+func NewManager(logger *slog.Logger, db *database.Database, stripe *stripe.Client, auditor *audit.Auditor, notifier *notifications.Manager) Manager {
 	return Manager{
-		db:     db,
-		logger: logger,
+		Logger:   logger,
+		DB:       db,
+		Stripe:   stripe,
+		Auditor:  auditor,
+		Notifier: notifier,
 	}
 }
 
@@ -33,7 +38,7 @@ type Organisation struct {
 
 func (m *Manager) GetOrganisation(ctx context.Context, id uuid.UUID) (Organisation, error) {
 	var org Organisation
-	dbOrg, err := m.db.GetOrganisationByID(ctx, id)
+	dbOrg, err := m.DB.GetOrganisationByID(ctx, id)
 	if err != nil {
 		return org, err
 	}
@@ -67,12 +72,12 @@ func (m *Manager) ChangeSubscription(ctx context.Context, params ChangeSubscript
 		err error
 	)
 	if params.StripeCustomerID != "" {
-		org, err = m.db.GetOrganisationByStripeCustomerID(ctx, params.StripeCustomerID)
+		org, err = m.DB.GetOrganisationByStripeCustomerID(ctx, params.StripeCustomerID)
 		if err != nil {
 			return fmt.Errorf("failed to get organisation by Stripe customer ID %s: %w", params.StripeCustomerID, err)
 		}
 	} else {
-		org, err = m.db.GetOrganisationByID(ctx, params.OrganisationID)
+		org, err = m.DB.GetOrganisationByID(ctx, params.OrganisationID)
 		if err != nil {
 			return fmt.Errorf("failed to get organisation %s: %w", params.OrganisationID, err)
 		}
@@ -84,22 +89,22 @@ func (m *Manager) ChangeSubscription(ctx context.Context, params ChangeSubscript
 	}
 
 	// Don't log here - external service errors should be logged at boundary
-	if err := m.stripe.SwitchSubscriptionPlan(ctx, org.ID, priceID); err != nil {
+	if err := m.Stripe.SwitchSubscriptionPlan(ctx, org.ID, priceID); err != nil {
 		return fmt.Errorf("stripe subscription change failed for organisation %s to plan %s: %w",
 			org.ID, params.NewPlan, err)
 	}
 
 	// Update organisation in database
-	if err := m.db.UpdateOrganisationByID(ctx, org.ID, database.UpdateOrganisationParams{
+	if err := m.DB.UpdateOrganisationByID(ctx, org.ID, database.UpdateOrganisationParams{
 		StripeProductPriceID: util.Some(string(priceID)),
 	}); err != nil {
 		return fmt.Errorf("failed to update Stripe price ID for organisation %s: %w", org.ID, err)
 	}
 
-	m.logger.Info("Successfully changed organisation subscription", "organisation_id", org.ID, "new_plan", params.NewPlan)
+	m.Logger.Info("Successfully changed organisation subscription", "organisation_id", org.ID, "new_plan", params.NewPlan)
 
 	// Audit log
-	if err := m.auditor.LogEvent(ctx, audit.LogEventParam{
+	if err := m.Auditor.LogEvent(ctx, audit.LogEventParam{
 		OwnerID: org.ID,
 		Type:    audit.AuditLogEventTypeSubscriptionChanged,
 		Data: map[string]any{
@@ -148,7 +153,7 @@ func (m *Manager) CreateCheckoutSession(ctx context.Context, params CreateChecko
 		return "", fmt.Errorf("unknown plan: %s", params.Plan)
 	}
 
-	org, err := m.db.GetOrganisationByID(ctx, params.OrganisationID)
+	org, err := m.DB.GetOrganisationByID(ctx, params.OrganisationID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get organisation by ID: %w", err)
 	}
@@ -157,7 +162,7 @@ func (m *Manager) CreateCheckoutSession(ctx context.Context, params CreateChecko
 		return "", fmt.Errorf("organisation %s is already on the requested plan", params.OrganisationID)
 	}
 
-	sessionURL, err := m.stripe.CreateCheckoutSession(ctx, params.OrganisationID, priceID, params.SuccessURL, params.CancelURL)
+	sessionURL, err := m.Stripe.CreateCheckoutSession(ctx, params.OrganisationID, priceID, params.SuccessURL, params.CancelURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to create checkout session: %w", err)
 	}
@@ -166,12 +171,12 @@ func (m *Manager) CreateCheckoutSession(ctx context.Context, params CreateChecko
 }
 
 func (m *Manager) SyncOrganisationSubscription(ctx context.Context, subscriptionID string) error {
-	org, err := m.db.GetOrganisationByStripeSubscriptionID(ctx, subscriptionID)
+	org, err := m.DB.GetOrganisationByStripeSubscriptionID(ctx, subscriptionID)
 	if err != nil {
 		return fmt.Errorf("failed to get organisation by subscription ID %s: %w", subscriptionID, err)
 	}
 
-	subscription, err := m.stripe.GetSubscriptionByCustomerID(ctx, org.StripeCustomerID)
+	subscription, err := m.Stripe.GetSubscriptionByCustomerID(ctx, org.StripeCustomerID)
 	if err != nil {
 		return fmt.Errorf("failed to get subscription for organisation %s: %w", org.ID, err)
 	}

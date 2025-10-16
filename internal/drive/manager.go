@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hp/internal/audit"
 	"hp/internal/database"
+	"hp/internal/notifications"
 	"hp/internal/util"
 	"log/slog"
 	"time"
@@ -15,14 +17,18 @@ import (
 const FolderMimeType = "application/askfrank.folder"
 
 type Manager struct {
-	DB     *database.Database
-	Logger *slog.Logger
+	Logger   *slog.Logger
+	DB       *database.Database
+	Auditor  *audit.Auditor
+	Notifier *notifications.Manager
 }
 
-func NewManager(db *database.Database, logger *slog.Logger) Manager {
+func NewManager(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, notifier *notifications.Manager) Manager {
 	return Manager{
-		DB:     db,
-		Logger: logger,
+		Logger:   logger,
+		DB:       db,
+		Auditor:  auditor,
+		Notifier: notifier,
 	}
 }
 
@@ -55,12 +61,12 @@ func (m *Manager) UserDriveID(ctx context.Context, userID uuid.UUID) (uuid.UUID,
 	return driveID, nil
 }
 
-type ListParams struct {
+type ListFilesParams struct {
 	DriveID  uuid.UUID
 	FolderID util.Optional[uuid.UUID]
 }
 
-func (m *Manager) List(ctx context.Context, params ListParams) ([]File, error) {
+func (m *Manager) ListFiles(ctx context.Context, params ListFilesParams) ([]File, error) {
 	dbFiles, err := m.DB.ListFiles(ctx, database.ListFilesParams{
 		DriveID:  util.Some(params.DriveID),
 		ParentID: util.Some(params.FolderID),
@@ -79,6 +85,89 @@ func (m *Manager) List(ctx context.Context, params ListParams) ([]File, error) {
 
 	return files, nil
 }
+
+type StoreFileParams struct {
+	DriveID  uuid.UUID
+	FolderID util.Optional[uuid.UUID]
+	Name     string
+	Path     string // Path to the file on the local filesystem
+}
+
+// func (m *Manager) StoreFile(ctx context.Context, params StoreFileParams) (File, error) {
+// 	var file File
+
+// 	// Validate file name
+// 	if params.Name == "" {
+// 		return file, fmt.Errorf("file name cannot be empty")
+// 	}
+
+// 	// Check if parent folder exists if FolderID is provided
+// 	if params.FolderID.Some {
+// 		_, err := m.DB.GetFile(ctx, database.GetFileParams{
+// 			ID:      util.Some(params.FolderID.Data),
+// 			DriveID: util.Some(params.DriveID),
+// 		})
+// 		if err != nil {
+// 			if errors.Is(err, database.ErrFileNotFound) {
+// 				return file, fmt.Errorf("parent folder not found: %w", err)
+// 			}
+
+// 			return file, fmt.Errorf("failed to get parent folder: %w", err)
+// 		}
+// 	}
+
+// 	// Check if file with the same name already exists in the parent directory
+// 	existingFiles, err := m.DB.ListFiles(ctx, database.ListFilesParams{
+// 		DriveID:  util.Some(params.DriveID),
+// 		ParentID: util.Some(params.FolderID),
+// 	})
+// 	if err != nil {
+// 		return file, fmt.Errorf("failed to check existing files: %w", err)
+// 	}
+
+// 	for _, f := range existingFiles {
+// 		if f.Name == params.Name {
+// 			return file, fmt.Errorf("a folder or file with the name '%s' already exists", params.Name)
+// 		}
+// 	}
+
+// 	// Here you would typically upload the file to a storage service (e.g., AWS S3, Google Cloud Storage)
+// 	// For simplicity, we'll skip that step and assume the file is stored successfully.
+
+// 	// Get file info to determine size and mime type
+// 	fileInfo, err := util.GetFileInfo(params.Path)
+// 	if err != nil {
+// 		return file, fmt.Errorf("failed to get file info: %w", err)
+// 	}
+
+// 	// Create file in database
+// 	dbFile, err := m.DB.CreateFile(ctx, database.CreateFileParams{
+// 		DriveID:  params.DriveID,
+// 		ParentID: params.FolderID,
+// 		Name:     params.Name,
+// 		MimeType: fileInfo.MimeType,
+// 		SizeBytes: func() uint64 {
+// 			if fileInfo.Size < 0 {
+// 				return 0
+// 			}
+// 			return uint64(fileInfo.Size)
+// 		}(),
+// 	})
+// 	if err != nil {
+// 		return file, fmt.Errorf("failed to create file record: %w", err)
+// 	}
+
+// 	file = File{
+// 		ID:         dbFile.ID,
+// 		Name:       dbFile.Name,
+// 		MimeType:   dbFile.MimeType,
+// 		SizeBytes:  dbFile.SizeBytes,
+// 		ModifiedAt: dbFile.UpdatedAt,
+// 	}
+
+// 	return file, nil
+
+// }
 
 type CreateFolderParams struct {
 	DriveID  uuid.UUID

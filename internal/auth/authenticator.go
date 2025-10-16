@@ -24,16 +24,16 @@ var (
 )
 
 type Authenticator struct {
-	logger              *slog.Logger
-	db                  *database.Database
-	auditor             *audit.Auditor
-	webhookManager      *webhook.Manager
-	notificationManager *notifications.Manager
-	stripeClient        *stripe.Client
+	logger         *slog.Logger
+	db             *database.Database
+	auditor        *audit.Auditor
+	webhookManager *webhook.Manager
+	notifier       *notifications.Manager
+	stripeClient   *stripe.Client
 }
 
-func NewAuthenticator(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notificationManager *notifications.Manager, stripe *stripe.Client) Authenticator {
-	return Authenticator{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notificationManager: notificationManager, stripeClient: stripe}
+func NewAuthenticator(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notifier *notifications.Manager, stripe *stripe.Client) Authenticator {
+	return Authenticator{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notifier: notifier, stripeClient: stripe}
 }
 
 type LoginParam struct {
@@ -74,7 +74,7 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 	}
 
 	// Webhook event
-	if err = a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParam{
+	if err = a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParams{
 		OwnerID: user.ID,
 		Type:    webhook.EventTypeUserLogin,
 		Data: map[string]any{
@@ -87,7 +87,7 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 	}
 
 	// Notification
-	if err = a.notificationManager.Notify(ctx, notifications.NotifyParam{
+	if err = a.notifier.Notify(ctx, notifications.NotifyParam{
 		OwnerID: user.ID,
 		Title:   "Login Successful",
 		Message: "You have successfully logged in to your account.",
@@ -112,7 +112,7 @@ func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {
 	}
 
 	// Webhook event
-	if err := a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParam{
+	if err := a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParams{
 		OwnerID: userID,
 		Type:    webhook.EventTypeUserLogout,
 		Data: map[string]any{
@@ -124,7 +124,7 @@ func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {
 	}
 
 	// Notification
-	if err := a.notificationManager.Notify(ctx, notifications.NotifyParam{
+	if err := a.notifier.Notify(ctx, notifications.NotifyParam{
 		OwnerID: userID,
 		Title:   "Logout Successful",
 		Message: "You have successfully logged out of your account.",
@@ -189,7 +189,7 @@ func (a *Authenticator) Register(ctx context.Context, params RegisterParam) (uui
 	}
 
 	// Webhook event
-	if err := a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParam{
+	if err := a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParams{
 		OwnerID: user.ID,
 		Type:    webhook.EventTypeUserRegister,
 		Data: map[string]any{
@@ -201,7 +201,7 @@ func (a *Authenticator) Register(ctx context.Context, params RegisterParam) (uui
 	}
 
 	// Notification
-	if err := a.notificationManager.Notify(ctx, notifications.NotifyParam{
+	if err := a.notifier.Notify(ctx, notifications.NotifyParam{
 		OwnerID: user.ID,
 		Title:   "Signup Successful",
 		Message: "Welcome! Your account has been created successfully.",

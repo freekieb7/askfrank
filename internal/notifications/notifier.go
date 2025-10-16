@@ -45,7 +45,7 @@ type NotifyParam struct {
 	Type    NotificationType
 }
 
-func (m *Manager) Notify(ctx context.Context, params NotifyParam) error {
+func (n *Manager) Notify(ctx context.Context, params NotifyParam) error {
 	// if _, err := n.db.CreateNotification(ctx, database.CreateNotificationParams{
 	// 	OwnerID: params.OwnerID,
 	// 	Title:   params.Title,
@@ -58,8 +58,8 @@ func (m *Manager) Notify(ctx context.Context, params NotifyParam) error {
 	return nil
 }
 
-func (m *Manager) Unread(ctx context.Context, userID uuid.UUID) ([]Notification, error) {
-	notifications, err := m.db.ListNotifications(ctx, database.ListNotificationsParams{
+func (n *Manager) Unread(ctx context.Context, userID uuid.UUID) ([]Notification, error) {
+	notifications, err := n.db.ListNotifications(ctx, database.ListNotificationsParams{
 		OwnerUserID:      util.Some(userID),
 		Limit:            util.Some(uint16(10)),
 		OrderByCreatedAt: util.Some(database.OrderByDESC),

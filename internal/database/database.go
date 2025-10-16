@@ -201,7 +201,7 @@ type CalendarEvent struct {
 	EndTime             time.Time
 	AllDay              bool
 	Status              CalendarEventStatus
-	Location            util.Optional[string]
+	Location            string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 }
@@ -1368,56 +1368,62 @@ func (db *Database) CreateAuditLogEvent(ctx context.Context, params CreateAuditL
 	return event, nil
 }
 
-// type ListAuditLogEventsParams struct {
-// 	OwnerID   util.Optional[uuid.UUID]
-// 	StartTime util.Optional[time.Time]
-// 	EndTime   util.Optional[time.Time]
-// }
+type ListAuditLogEventsParams struct {
+	OwnerOrganisationID util.Optional[uuid.UUID]
+	StartTimestamp      util.Optional[time.Time]
+	EndTimestamp        util.Optional[time.Time]
+	Limit               util.Optional[uint8]
+}
 
-// func (db *Database) ListAuditLogEvents(ctx context.Context, params ListAuditLogEventsParams) ([]AuditLogEvent, error) {
-// 	var events []AuditLogEvent
+func (db *Database) ListAuditLogEvents(ctx context.Context, params ListAuditLogEventsParams) ([]AuditLogEvent, error) {
+	var events []AuditLogEvent
 
-// 	var query strings.Builder
-// 	query.WriteString(`SELECT id, owner_id, event_type, event_data, created_at FROM tbl_audit_log_event WHERE 1=1`)
-// 	var args []any
-// 	argNum := 1
+	var query strings.Builder
+	query.WriteString(`SELECT id, owner_organisation_id, event_type, event_data, created_at FROM tbl_audit_log_event WHERE 1=1`)
+	var args []any
+	argNum := 1
 
-// 	if params.OwnerID.Some {
-// 		query.WriteString(fmt.Sprintf(" AND owner_id = $%d", argNum))
-// 		args = append(args, params.OwnerID.Data)
-// 		argNum++
-// 	}
-// 	if params.StartTime.Some {
-// 		query.WriteString(fmt.Sprintf(" AND created_at >= $%d", argNum))
-// 		args = append(args, params.StartTime.Data)
-// 		argNum++
-// 	}
-// 	if params.EndTime.Some {
-// 		query.WriteString(fmt.Sprintf(" AND created_at <= $%d", argNum))
-// 		args = append(args, params.EndTime.Data)
-// 		argNum++
-// 	}
+	if params.OwnerOrganisationID.Some {
+		query.WriteString(fmt.Sprintf(" AND owner_organisation_id = $%d", argNum))
+		args = append(args, params.OwnerOrganisationID.Data)
+		argNum++
+	}
+	if params.StartTimestamp.Some {
+		query.WriteString(fmt.Sprintf(" AND created_at >= $%d", argNum))
+		args = append(args, params.StartTimestamp.Data)
+		argNum++
+	}
+	if params.EndTimestamp.Some {
+		query.WriteString(fmt.Sprintf(" AND created_at <= $%d", argNum))
+		args = append(args, params.EndTimestamp.Data)
+		argNum++
+	}
+	if params.Limit.Some {
+		query.WriteString(fmt.Sprintf(" LIMIT $%d", argNum))
+		args = append(args, params.Limit.Data)
+		argNum++
+	}
 
-// 	rows, err := db.Query(ctx, query.String(), args...)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("ListAuditLogEvents: failed to execute query: %w", err)
-// 	}
-// 	defer rows.Close()
+	rows, err := db.Query(ctx, query.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("ListAuditLogEvents: failed to execute query: %w", err)
+	}
+	defer rows.Close()
 
-// 	for rows.Next() {
-// 		var event AuditLogEvent
-// 		if err := rows.Scan(&event.ID, &event.OwnerID, &event.EventType, &event.EventData, &event.CreatedAt); err != nil {
-// 			return nil, fmt.Errorf("ListAuditLogEvents: failed to scan audit log event: %w", err)
-// 		}
-// 		events = append(events, event)
-// 	}
+	for rows.Next() {
+		var event AuditLogEvent
+		if err := rows.Scan(&event.ID, &event.OwnerOrganisationID, &event.Type, &event.Data, &event.CreatedAt); err != nil {
+			return nil, fmt.Errorf("ListAuditLogEvents: failed to scan audit log event: %w", err)
+		}
+		events = append(events, event)
+	}
 
-// 	if err := rows.Err(); err != nil {
-// 		return nil, fmt.Errorf("ListAuditLogEvents: rows error: %w", err)
-// 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListAuditLogEvents: rows error: %w", err)
+	}
 
-// 	return events, nil
-// }
+	return events, nil
+}
 
 type CreateWebhookSubscriptionParams struct {
 	OwnerOrganisationID uuid.UUID
@@ -1450,50 +1456,50 @@ func (db *Database) CreateWebhookSubscription(ctx context.Context, params Create
 	return subscription, nil
 }
 
-// type ListWebhookSubscriptionsParams struct {
-// 	OwnerID util.Optional[uuid.UUID]
-// 	Active  util.Optional[bool]
-// }
+type ListWebhookSubscriptionsParams struct {
+	OwnerOrganisationID util.Optional[uuid.UUID]
+	Active              util.Optional[bool]
+}
 
-// func (db *Database) ListWebhookSubscriptions(ctx context.Context, params ListWebhookSubscriptionsParams) ([]WebhookSubscription, error) {
-// 	var subscriptions []WebhookSubscription
+func (db *Database) ListWebhookSubscriptions(ctx context.Context, params ListWebhookSubscriptionsParams) ([]WebhookSubscription, error) {
+	var subscriptions []WebhookSubscription
 
-// 	var query strings.Builder
-// 	query.WriteString(`SELECT id, owner_id, name, description, url, secret, event_types, is_active, created_at, updated_at FROM tbl_webhook_subscription WHERE 1=1`)
-// 	var args []any
-// 	argNum := 1
+	var query strings.Builder
+	query.WriteString(`SELECT id, owner_organisation_id, name, description, url, secret, event_types, is_active, created_at, updated_at FROM tbl_webhook_subscription WHERE 1=1`)
+	var args []any
+	argNum := 1
 
-// 	if params.OwnerID.Some {
-// 		query.WriteString(fmt.Sprintf(" AND owner_id = $%d", argNum))
-// 		args = append(args, params.OwnerID.Data)
-// 		argNum++
-// 	}
-// 	if params.Active.Some {
-// 		query.WriteString(fmt.Sprintf(" AND active = $%d", argNum))
-// 		args = append(args, params.Active.Data)
-// 		argNum++
-// 	}
+	if params.OwnerOrganisationID.Some {
+		query.WriteString(fmt.Sprintf(" AND owner_organisation_id = $%d", argNum))
+		args = append(args, params.OwnerOrganisationID.Data)
+		argNum++
+	}
+	if params.Active.Some {
+		query.WriteString(fmt.Sprintf(" AND active = $%d", argNum))
+		args = append(args, params.Active.Data)
+		argNum++
+	}
 
-// 	rows, err := db.Query(ctx, query.String(), args...)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("ListWebhookSubscriptions: failed to execute query: %w", err)
-// 	}
-// 	defer rows.Close()
+	rows, err := db.Query(ctx, query.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("ListWebhookSubscriptions: failed to execute query: %w", err)
+	}
+	defer rows.Close()
 
-// 	for rows.Next() {
-// 		var subscription WebhookSubscription
-// 		if err := rows.Scan(&subscription.ID, &subscription.OwnerID, &subscription.Name, &subscription.Description, &subscription.URL, &subscription.Secret, &subscription.EventTypes, &subscription.IsActive, &subscription.CreatedAt, &subscription.UpdatedAt); err != nil {
-// 			return nil, fmt.Errorf("ListWebhookSubscriptions: failed to scan webhook subscription: %w", err)
-// 		}
-// 		subscriptions = append(subscriptions, subscription)
-// 	}
+	for rows.Next() {
+		var subscription WebhookSubscription
+		if err := rows.Scan(&subscription.ID, &subscription.OwnerOrganisationID, &subscription.Name, &subscription.Description, &subscription.URL, &subscription.Secret, &subscription.EventTypes, &subscription.IsActive, &subscription.CreatedAt, &subscription.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("ListWebhookSubscriptions: failed to scan webhook subscription: %w", err)
+		}
+		subscriptions = append(subscriptions, subscription)
+	}
 
-// 	if err := rows.Err(); err != nil {
-// 		return nil, fmt.Errorf("ListWebhookSubscriptions: rows error: %w", err)
-// 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListWebhookSubscriptions: rows error: %w", err)
+	}
 
-// 	return subscriptions, nil
-// }
+	return subscriptions, nil
+}
 
 // type UpdateWebhookSubscriptionParams struct {
 // 	Name        util.Optional[string]
@@ -1550,27 +1556,27 @@ func (db *Database) CreateWebhookSubscription(ctx context.Context, params Create
 // 	return nil
 // }
 
-// type DeleteWebhookParams struct {
-// 	OwnerID util.Optional[uuid.UUID]
-// }
+type DeleteWebhookSubscriptionParams struct {
+	OwnerOrganisationID util.Optional[uuid.UUID]
+}
 
-// func (db *Database) DeleteWebhookByID(ctx context.Context, id uuid.UUID, params DeleteWebhookParams) error {
-// 	var query strings.Builder
-// 	query.WriteString(`DELETE FROM tbl_webhook WHERE id = $1`)
-// 	args := []any{id}
-// 	argNum := 2
+func (db *Database) DeleteWebhookSubscriptionByID(ctx context.Context, id uuid.UUID, params DeleteWebhookSubscriptionParams) error {
+	var query strings.Builder
+	query.WriteString(`DELETE FROM tbl_webhook_subscription WHERE id = $1`)
+	args := []any{id}
+	argNum := 2
 
-// 	if params.OwnerID.Some {
-// 		query.WriteString(fmt.Sprintf(" AND owner_id = $%d", argNum))
-// 		args = append(args, params.OwnerID.Data)
-// 		argNum++
-// 	}
+	if params.OwnerOrganisationID.Some {
+		query.WriteString(fmt.Sprintf(" AND owner_organisation_id = $%d", argNum))
+		args = append(args, params.OwnerOrganisationID.Data)
+		argNum++
+	}
 
-// 	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
-// 		return fmt.Errorf("DeleteWebhookByID: failed to delete webhook (id=%s): %w", id, err)
-// 	}
-// 	return nil
-// }
+	if _, err := db.Exec(ctx, query.String(), args...); err != nil {
+		return fmt.Errorf("DeleteWebhookByID: failed to delete webhook (id=%s): %w", id, err)
+	}
+	return nil
+}
 
 type CreateWebhookEventParams struct {
 	EventType string
@@ -1820,56 +1826,56 @@ func (db *Database) CreateWebhookEvent(ctx context.Context, params CreateWebhook
 // 	return event, nil
 // }
 
-// type ListCalendarEventsParams struct {
-// 	OwnerID   util.Optional[uuid.UUID]
-// 	StartDate util.Optional[time.Time]
-// 	EndDate   util.Optional[time.Time]
-// }
+type ListCalendarEventsParams struct {
+	OwnerUserID    util.Optional[uuid.UUID]
+	StartTimestamp util.Optional[time.Time]
+	EndTimestamp   util.Optional[time.Time]
+}
 
-// func (db *Database) ListCalendarEvents(ctx context.Context, params ListCalendarEventsParams) ([]CalendarEvent, error) {
-// 	var events []CalendarEvent
+func (db *Database) ListCalendarEvents(ctx context.Context, params ListCalendarEventsParams) ([]CalendarEvent, error) {
+	var events []CalendarEvent
 
-// 	var query strings.Builder
-// 	query.WriteString(`SELECT id, owner_id, title, description, start_time, end_time, all_day, status, location, created_at, updated_at FROM tbl_calendar_event WHERE 1=1`)
-// 	var args []any
-// 	argNum := 1
+	var query strings.Builder
+	query.WriteString(`SELECT id, owner_user_id, title, description, start_timestamp, end_timestamp, all_day, status, location, created_at, updated_at FROM tbl_calendar_event WHERE 1=1`)
+	var args []any
+	argNum := 1
 
-// 	if params.OwnerID.Some {
-// 		query.WriteString(fmt.Sprintf(" AND owner_id = $%d", argNum))
-// 		args = append(args, params.OwnerID.Data)
-// 		argNum++
-// 	}
-// 	if params.StartDate.Some {
-// 		query.WriteString(fmt.Sprintf(" AND start_time >= $%d", argNum))
-// 		args = append(args, params.StartDate.Data)
-// 		argNum++
-// 	}
-// 	if params.EndDate.Some {
-// 		query.WriteString(fmt.Sprintf(" AND end_time <= $%d", argNum))
-// 		args = append(args, params.EndDate.Data)
-// 		argNum++
-// 	}
+	if params.OwnerUserID.Some {
+		query.WriteString(fmt.Sprintf(" AND owner_user_id = $%d", argNum))
+		args = append(args, params.OwnerUserID.Data)
+		argNum++
+	}
+	if params.StartTimestamp.Some {
+		query.WriteString(fmt.Sprintf(" AND start_timestamp >= $%d", argNum))
+		args = append(args, params.StartTimestamp.Data)
+		argNum++
+	}
+	if params.EndTimestamp.Some {
+		query.WriteString(fmt.Sprintf(" AND end_timestamp <= $%d", argNum))
+		args = append(args, params.EndTimestamp.Data)
+		argNum++
+	}
 
-// 	rows, err := db.Query(ctx, query.String(), args...)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("ListCalendarEvents: failed to execute query: %w", err)
-// 	}
-// 	defer rows.Close()
+	rows, err := db.Query(ctx, query.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("ListCalendarEvents: failed to execute query: %w", err)
+	}
+	defer rows.Close()
 
-// 	for rows.Next() {
-// 		var event CalendarEvent
-// 		if err := rows.Scan(&event.ID, &event.OwnerID, &event.Title, &event.Description, &event.StartTime, &event.EndTime, &event.AllDay, &event.Status, &event.Location, &event.CreatedAt, &event.UpdatedAt); err != nil {
-// 			return nil, fmt.Errorf("ListCalendarEvents: failed to scan calendar event: %w", err)
-// 		}
-// 		events = append(events, event)
-// 	}
+	for rows.Next() {
+		var event CalendarEvent
+		if err := rows.Scan(&event.ID, &event.OwnerUserID, &event.Title, &event.Description, &event.StartTime, &event.EndTime, &event.AllDay, &event.Status, &event.Location, &event.CreatedAt, &event.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("ListCalendarEvents: failed to scan calendar event: %w", err)
+		}
+		events = append(events, event)
+	}
 
-// 	if err := rows.Err(); err != nil {
-// 		return nil, fmt.Errorf("ListCalendarEvents: rows error: %w", err)
-// 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListCalendarEvents: rows error: %w", err)
+	}
 
-// 	return events, nil
-// }
+	return events, nil
+}
 
 // type UpdateCalendarEventParams struct {
 // 	Title       util.Optional[string]
@@ -2250,34 +2256,34 @@ func (db *Database) ListNotifications(ctx context.Context, params ListNotificati
 // 	return nil
 // }
 
-// type CreateOAuthClientParams struct {
-// 	OwnerID       uuid.UUID
-// 	Name          string
-// 	Secret        string
-// 	RedirectURIs  []string
-// 	IsPublic      bool
-// 	AllowedScopes []string
-// }
+type CreateOAuthClientParams struct {
+	OwnerOrganisationID uuid.UUID
+	Name                string
+	Secret              string
+	RedirectURIs        []string
+	IsPublic            bool
+	AllowedScopes       []string
+}
 
-// func (db *Database) CreateOAuthClient(ctx context.Context, params CreateOAuthClientParams) (OAuthClient, error) {
-// 	client := OAuthClient{
-// 		ID:            uuid.New(),
-// 		OwnerID:       params.OwnerID,
-// 		Name:          params.Name,
-// 		Secret:        params.Secret,
-// 		RedirectURIs:  params.RedirectURIs,
-// 		IsPublic:      params.IsPublic,
-// 		AllowedScopes: params.AllowedScopes,
-// 		CreatedAt:     time.Now(),
-// 		UpdatedAt:     time.Now(),
-// 	}
+func (db *Database) CreateOAuthClient(ctx context.Context, params CreateOAuthClientParams) (OAuthClient, error) {
+	client := OAuthClient{
+		ID:                  uuid.New(),
+		OwnerOrganisationID: params.OwnerOrganisationID,
+		Name:                params.Name,
+		Secret:              params.Secret,
+		RedirectURIs:        params.RedirectURIs,
+		IsPublic:            params.IsPublic,
+		AllowedScopes:       params.AllowedScopes,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
+	}
 
-// 	if _, err := db.Exec(ctx, `INSERT INTO tbl_oauth_client (id, owner_id, name, secret, redirect_uris, is_public, allowed_scopes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-// 		client.ID, client.OwnerID, client.Name, client.Secret, client.RedirectURIs, client.IsPublic, client.AllowedScopes, client.CreatedAt, client.UpdatedAt); err != nil {
-// 		return client, fmt.Errorf("CreateOAuthClient: failed to insert OAuth client (owner_id=%s): %w", client.OwnerID, err)
-// 	}
-// 	return client, nil
-// }
+	if _, err := db.Exec(ctx, `INSERT INTO tbl_oauth_client (id, owner_organisation_id, name, secret, redirect_uris, is_public, allowed_scopes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		client.ID, client.OwnerOrganisationID, client.Name, client.Secret, client.RedirectURIs, client.IsPublic, client.AllowedScopes, client.CreatedAt, client.UpdatedAt); err != nil {
+		return client, fmt.Errorf("CreateOAuthClient: failed to insert OAuth client (owner_organisation_id=%s): %w", client.OwnerOrganisationID, err)
+	}
+	return client, nil
+}
 
 type ListOAuthClientsParams struct {
 	OwnerOrganisationID util.Optional[uuid.UUID]
@@ -2318,18 +2324,18 @@ func (db *Database) ListOAuthClients(ctx context.Context, params ListOAuthClient
 	return clients, nil
 }
 
-// func (db *Database) GetOAuthClientByID(ctx context.Context, id uuid.UUID) (OAuthClient, error) {
-// 	var client OAuthClient
-// 	err := db.QueryRow(ctx, `SELECT id, owner_id, name, secret, redirect_uris, is_public, allowed_scopes, created_at, updated_at FROM tbl_oauth_client WHERE id = $1`, id).Scan(
-// 		&client.ID, &client.OwnerID, &client.Name, &client.Secret, &client.RedirectURIs, &client.IsPublic, &client.AllowedScopes, &client.CreatedAt, &client.UpdatedAt)
-// 	if err != nil {
-// 		if errors.Is(err, pgx.ErrNoRows) {
-// 			return client, ErrOAuthClientNotFound
-// 		}
-// 		return client, fmt.Errorf("GetOAuthClient: failed to scan OAuth client (id=%s): %w", id, err)
-// 	}
-// 	return client, nil
-// }
+func (db *Database) GetOAuthClientByID(ctx context.Context, id uuid.UUID) (OAuthClient, error) {
+	var client OAuthClient
+	err := db.QueryRow(ctx, `SELECT id, owner_organisation_id, name, secret, redirect_uris, is_public, allowed_scopes, created_at, updated_at FROM tbl_oauth_client WHERE id = $1`, id).Scan(
+		&client.ID, &client.OwnerOrganisationID, &client.Name, &client.Secret, &client.RedirectURIs, &client.IsPublic, &client.AllowedScopes, &client.CreatedAt, &client.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return client, ErrOAuthClientNotFound
+		}
+		return client, fmt.Errorf("GetOAuthClient: failed to scan OAuth client (id=%s): %w", id, err)
+	}
+	return client, nil
+}
 
 // type UpdateOAuthClientParams struct {
 // 	Name          util.Optional[string]
@@ -2379,12 +2385,12 @@ func (db *Database) ListOAuthClients(ctx context.Context, params ListOAuthClient
 // 	return nil
 // }
 
-// func (db *Database) DeleteOAuthClientByID(ctx context.Context, id uuid.UUID) error {
-// 	if _, err := db.Exec(ctx, `DELETE FROM tbl_oauth_client WHERE id = $1`, id); err != nil {
-// 		return fmt.Errorf("DeleteOAuthClient: failed to delete OAuth client (id=%s): %w", id, err)
-// 	}
-// 	return nil
-// }
+func (db *Database) DeleteOAuthClientByID(ctx context.Context, id uuid.UUID) error {
+	if _, err := db.Exec(ctx, `DELETE FROM tbl_oauth_client WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("DeleteOAuthClient: failed to delete OAuth client (id=%s): %w", id, err)
+	}
+	return nil
+}
 
 // type CreateOAuthAccessTokenParams struct {
 // 	Token     string

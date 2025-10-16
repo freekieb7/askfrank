@@ -2,19 +2,20 @@ package views
 
 import (
 	"fmt"
+	"hp/internal/calendar"
 	"hp/internal/web/views/component"
 	"time"
 )
 
 type CalendarEvent struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	StartTime   time.Time `json:"start"`
-	EndTime     time.Time `json:"end"`
-	AllDay      bool      `json:"all_day"`
-	Location    string    `json:"location"`
-	Status      string    `json:"status"` // confirmed, tentative, cancelled
+	ID          string               `json:"id"`
+	Title       string               `json:"title"`
+	Description string               `json:"description"`
+	StartTime   time.Time            `json:"start"`
+	EndTime     time.Time            `json:"end"`
+	AllDay      bool                 `json:"all_day"`
+	Location    string               `json:"location"`
+	Status      calendar.EventStatus `json:"status"`
 }
 
 type CalendarDay struct {

@@ -3,23 +3,27 @@ package main
 import (
 	"context"
 	"fmt"
-	"hp/internal/account"
 	"hp/internal/audit"
+	"hp/internal/auth"
+	"hp/internal/calendar"
 	"hp/internal/config"
 	"hp/internal/daemon"
 	"hp/internal/database"
+	"hp/internal/drive"
 	"hp/internal/i18n"
 	"hp/internal/notifications"
+	"hp/internal/oauth"
+	"hp/internal/organisation"
 	"hp/internal/rtc"
 	"hp/internal/session"
 	"hp/internal/stripe"
+	"hp/internal/user"
 	"hp/internal/web"
 	"hp/internal/webhook"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 )
@@ -48,14 +52,6 @@ func run(ctx context.Context) error {
 		Level: slog.LevelInfo,
 	}))
 
-	// // Set up OpenFGA client
-	// fgaClient, err := openfga.NewClient(cfg.OpenFGA)
-	// if err != nil {
-	// 	logger.Error("Failed to create OpenFGA client", "error", err)
-	// 	return err
-	// }
-	// authorization := openfga.NewAuthorizationService(&fgaClient)
-
 	// Set up i18n translator
 	translator := i18n.NewTranslator(i18n.NL)
 	if err := translator.LoadTranslations(); err != nil {
@@ -65,14 +61,8 @@ func run(ctx context.Context) error {
 	// Set up Postgres connection
 	pg := database.NewPostgres()
 	db := database.NewDatabase(&pg)
-	dsn := "host=" + cfg.Database.Host +
-		" port=" + strconv.Itoa(cfg.Database.Port) +
-		" user=" + cfg.Database.User +
-		" password=" + cfg.Database.Password +
-		" dbname=" + cfg.Database.Name +
-		" sslmode=" + cfg.Database.SSLMode
 
-	if err := db.Connect(dsn); err != nil {
+	if err := db.Connect(cfg.Database.URL, database.Options{}); err != nil {
 		logger.Error("Failed to initialize database", "error", err)
 		return err
 	}
@@ -96,14 +86,15 @@ func run(ctx context.Context) error {
 	)
 
 	auditor := audit.NewAuditor(logger, &db)
-
 	webhookManager := webhook.NewManager(logger, &db)
-
-	notifier := notifications.NewNotifier(logger, &db)
-
-	authenticator := account.NewAuthenticator(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
-
-	accountManager := account.NewManager(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
+	notifier := notifications.NewManager(logger, &db)
+	authenticator := auth.NewAuthenticator(logger, &db, &auditor, &webhookManager, &notifier, &stripeClient)
+	userManager := user.NewManager(logger, &db, &auditor, &webhookManager, &notifier)
+	organisationManager := organisation.NewManager(logger, &db, &stripeClient, &auditor, &notifier)
+	driveManager := drive.NewManager(logger, &db, &auditor, &notifier)
+	oauthManager := oauth.NewManager(logger, &db, &auditor)
+	planner := calendar.NewManager(logger, &db, &auditor, &notifier)
+	webhookManager = webhook.NewManager(logger, &db)
 
 	// Set up signaling server for WebRTC
 	signalingServer := rtc.NewSignalingServer(logger)
@@ -115,7 +106,7 @@ func run(ctx context.Context) error {
 	// 	WriteTimeout: cfg.Server.WriteTimeout,
 	// })
 
-	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &db, &accountManager, &webhookManager, &authenticator)
+	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &userManager, &webhookManager, &authenticator, &notifier, &organisationManager, &driveManager, &oauthManager, &planner, &auditor)
 	// apiHandler := web.NewApiHandler(logger, &db, &sessionStore, &accountManager)
 	meetingHandler := web.NewMeetingHandler(logger, signalingServer, &sessionStore)
 	chatHandler := web.NewChatHandler(logger)
@@ -143,7 +134,7 @@ func run(ctx context.Context) error {
 
 		group.Group("/register", func(registerGroup *web.Router) {
 			registerGroup.GET("", pageHandler.ShowRegisterPage)
-			registerGroup.POST("", pageHandler.Register)
+			registerGroup.POST("", pageHandler.RegisterStandaloneUser)
 		})
 
 		// Protected routes
@@ -159,8 +150,8 @@ func run(ctx context.Context) error {
 			group.Group("/drive", func(driveGroup *web.Router) {
 				driveGroup.GET("", pageHandler.ShowMyDrivePage)
 				driveGroup.POST("/create_folder", pageHandler.CreateFolder)
-				driveGroup.POST("/upload_file", pageHandler.UploadFile)
-				driveGroup.GET("/shared", pageHandler.ShowSharedFilePage)
+				// driveGroup.POST("/upload_file", pageHandler.UploadFile)
+				// driveGroup.GET("/shared", pageHandler.ShowSharedFilePage)
 				// driveGroup.GET("/recent", pageHandler.ShowRecentFilePage)
 				driveGroup.GET("/folder/{folder_id}", pageHandler.ShowFolderPage)
 			})

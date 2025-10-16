@@ -1,12 +1,13 @@
 package views
 
 import "hp/internal/web/views/component"
-import "hp/internal/account"
+import "hp/internal/organisation"
 
 type BillingPageProps struct {
 	component.AppLayoutProps
-	SuccessMsg string
-	ErrorMsg   string
+	SubscriptionPlan organisation.SubscriptionPlan
+	SuccessMsg       string
+	ErrorMsg         string
 }
 
 templ BillingPage(props BillingPageProps) {
@@ -89,7 +90,7 @@ templ BillingPage(props BillingPageProps) {
 						<form id="upgrade-free-form">
 							<input type="hidden" name="plan" value="free"/>
 							<button id="upgrade-free-button" type="submit" class="btn-secondary w-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-								if props.AppLayoutProps.UserInfo.SubscriptionPlan == account.SubscriptionPlanFree {
+								if props.SubscriptionPlan == organisation.SubscriptionPlanFree {
 									Current Plan
 								} else {
 									Downgrade to Free
@@ -135,7 +136,7 @@ templ BillingPage(props BillingPageProps) {
 						<form id="upgrade-pro-form">
 							<input type="hidden" name="plan" value="pro"/>
 							<button id="upgrade-pro-button" type="submit" class="btn-secondary w-full">
-								if props.AppLayoutProps.UserInfo.SubscriptionPlan == account.SubscriptionPlanPro {
+								if props.SubscriptionPlan == organisation.SubscriptionPlanPro {
 									Current Plan
 								} else {
 									Upgrade to Pro

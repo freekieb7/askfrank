@@ -22,16 +22,7 @@ func main() {
 
 	cfg := config.NewConfig()
 
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.Database.User,
-		cfg.Database.Password,
-		cfg.Database.Host,
-		cfg.Database.Port,
-		cfg.Database.Name,
-		cfg.Database.SSLMode,
-	)
-
-	pool, err := pgxpool.New(ctx, connStr)
+	pool, err := pgxpool.New(ctx, cfg.Database.URL)
 	if err != nil {
 		fmt.Printf("Failed to create connection pool: %v\n", err)
 		os.Exit(1)

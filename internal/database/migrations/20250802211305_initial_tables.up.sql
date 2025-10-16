@@ -224,21 +224,19 @@ CREATE INDEX idx_webhook_delivery_created_at ON tbl_webhook_delivery (created_at
 
 CREATE TABLE tbl_calendar_event (
     id UUID PRIMARY KEY,
-    owner_organisation_id UUID NOT NULL REFERENCES tbl_organisation(id) ON DELETE CASCADE,
     owner_user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
-    start_time TIMESTAMP NOT NULL,
-    end_time TIMESTAMP NOT NULL,
+    start_timestamp TIMESTAMP NOT NULL,
+    end_timestamp TIMESTAMP NOT NULL,
     all_day BOOLEAN NOT NULL,
     status TEXT NOT NULL, -- e.g., 'tentative', 'confirmed', 'cancelled'
-    location TEXT,
+    location TEXT NOT NULL,
     meeting_id TEXT, -- e.g., Zoom or Google Meet ID
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_calendar_event_owner_organisation_id ON tbl_calendar_event (owner_organisation_id);
 CREATE INDEX idx_calendar_event_owner_user_id ON tbl_calendar_event (owner_user_id);
 CREATE INDEX idx_calendar_event_start_time ON tbl_calendar_event (start_time);
 CREATE INDEX idx_calendar_event_end_time ON tbl_calendar_event (end_time);

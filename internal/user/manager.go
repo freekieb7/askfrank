@@ -6,7 +6,6 @@ import (
 	"hp/internal/audit"
 	"hp/internal/database"
 	"hp/internal/notifications"
-	"hp/internal/stripe"
 	"hp/internal/util"
 	"hp/internal/webhook"
 	"log/slog"
@@ -16,16 +15,15 @@ import (
 )
 
 type Manager struct {
-	logger              *slog.Logger
-	db                  *database.Database
-	auditor             *audit.Auditor
-	webhookManager      *webhook.Manager
-	notificationManager *notifications.Manager
-	stripeClient        *stripe.Client
+	logger         *slog.Logger
+	db             *database.Database
+	auditor        *audit.Auditor
+	webhookManager *webhook.Manager
+	notifier       *notifications.Manager
 }
 
-func NewManager(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notificationManager *notifications.Manager, stripeClient *stripe.Client) Manager {
-	return Manager{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notificationManager: notificationManager, stripeClient: stripeClient}
+func NewManager(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notifier *notifications.Manager) Manager {
+	return Manager{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notifier: notifier}
 }
 
 type User struct {
