@@ -6,7 +6,6 @@ import (
 	"hp/internal/audit"
 	"hp/internal/database"
 	"hp/internal/notifications"
-	"hp/internal/util"
 	"hp/internal/webhook"
 	"log/slog"
 	"time"
@@ -27,12 +26,11 @@ func NewManager(logger *slog.Logger, db *database.Database, auditor *audit.Audit
 }
 
 type User struct {
-	ID             uuid.UUID
-	OrganisationID util.Optional[uuid.UUID]
-	Name           string
-	Email          string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID        uuid.UUID
+	Name      string
+	Email     string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 func (m *Manager) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {
@@ -44,12 +42,11 @@ func (m *Manager) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {
 	}
 
 	user = User{
-		ID:             dbUser.ID,
-		OrganisationID: dbUser.OrganisationID,
-		Name:           dbUser.Name,
-		Email:          dbUser.Email,
-		CreatedAt:      dbUser.CreatedAt,
-		UpdatedAt:      dbUser.UpdatedAt,
+		ID:        dbUser.ID,
+		Name:      dbUser.Name,
+		Email:     dbUser.Email,
+		CreatedAt: dbUser.CreatedAt,
+		UpdatedAt: dbUser.UpdatedAt,
 	}
 
 	return user, nil

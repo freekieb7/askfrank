@@ -1,10 +1,31 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 )
+
+type APIResponseStatus string
+
+const (
+	APIResponseStatusSuccess APIResponseStatus = "success"
+	APIResponseStatusError   APIResponseStatus = "error"
+)
+
+// Response body format for API
+type JSONResponseBody struct {
+	Status  APIResponseStatus `json:"status"`
+	Message string            `json:"message,omitempty"`
+	Data    any               `json:"data,omitempty"`
+}
+
+// JSONResponse writes a JSON response with the given status code and body.
+func JSONResponse(w http.ResponseWriter, status int, body JSONResponseBody) error {
+	w.WriteHeader(status)
+	return json.NewEncoder(w).Encode(body)
+}
 
 func Redirect(w http.ResponseWriter, r *http.Request, urlStr string, code int) error {
 	http.Redirect(w, r, urlStr, code)

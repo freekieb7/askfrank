@@ -2,16 +2,13 @@ package web
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"hp/internal/config"
-	"hp/internal/database"
 	"hp/internal/i18n"
 	"hp/internal/session"
 	"hp/internal/util"
 	"log/slog"
 	"net/http"
-	"time"
 )
 
 func LocalizationMiddleware() MiddlewareFunc {
@@ -27,52 +24,41 @@ func LocalizationMiddleware() MiddlewareFunc {
 	}
 }
 
-func SessionMiddleware(sessionStore *session.Store) MiddlewareFunc {
+func SessionMiddleware(logger *slog.Logger, sessionStore *session.Store) MiddlewareFunc {
 	return func(next HandlerFunc) HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
-			cookie, err := r.Cookie(sessionStore.Config.CookieName)
+			// Get or create session using the store's GetOrCreate method
+			session, err := sessionStore.GetOrCreate(r.Context(), w, r)
 			if err != nil {
-				if !errors.Is(err, http.ErrNoCookie) {
-					return fmt.Errorf("failed to get session cookie: %w", err)
-				}
-
-				// Create a new cookie
-				sessionToken, err := util.RandomString(32)
-				if err != nil {
-					return fmt.Errorf("failed to generate session token: %w", err)
-				}
-
-				cookie := http.Cookie{
-					Name:        sessionStore.Config.CookieName,
-					Value:       sessionToken,
-					Expires:     time.Now().Add(sessionStore.Config.ExpiresIn),
-					Secure:      sessionStore.Config.CookieSecure,
-					HttpOnly:    sessionStore.Config.CookieHTTPOnly,
-					Path:        sessionStore.Config.Path,
-					Partitioned: sessionStore.Config.CookieSecure,
-					SameSite:    sessionStore.Config.CookieSameSite,
-					MaxAge:      sessionStore.Config.CookieMaxAge,
-					Domain:      sessionStore.Config.Domain,
-				}
-
-				// Add cookie to both request and response
-				http.SetCookie(w, &cookie)
-				r.AddCookie(&cookie)
-
-				// Add session ID to context
-				ctx := r.Context()
-				ctx = context.WithValue(ctx, config.SessionContextKey, cookie.Value)
-				r = r.WithContext(ctx)
-
-				return next(w, r)
+				logger.Error("failed to get or create session", "error", err)
+				return fmt.Errorf("failed to get or create session: %w", err)
 			}
 
-			// Add session ID to context
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, config.SessionContextKey, cookie.Value)
-			r = r.WithContext(ctx)
+			// Generate CSRF token if not present
+			if session.Data.CsrfToken == "" {
+				csrfToken, err := util.GenerateRandomString(32)
+				if err != nil {
+					logger.Error("failed to generate CSRF token", "error", err)
+					return fmt.Errorf("failed to generate CSRF token: %w", err)
+				}
+				session.Data.CsrfToken = csrfToken
 
-			return next(w, r)
+				// Save session with new CSRF token
+				if err := sessionStore.Save(r.Context(), w, session); err != nil {
+					logger.Error("failed to save session", "error", err)
+					return fmt.Errorf("failed to save session: %w", err)
+				}
+			}
+
+			// Add session data to context
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, config.SessionContextKey, session.Token)
+			ctx = context.WithValue(ctx, config.CSRFTokenContextKey, session.Data.CsrfToken)
+			if session.UserID.IsSet {
+				ctx = context.WithValue(ctx, config.UserIDContextKey, session.UserID.Val)
+			}
+
+			return next(w, r.WithContext(ctx))
 		}
 	}
 }
@@ -85,12 +71,21 @@ func AuthenticatedSessionMiddleware(sessionStore *session.Store) MiddlewareFunc 
 				return fmt.Errorf("failed to get session: %w", err)
 			}
 
-			if !sess.UserID.Some {
+			if !sess.UserID.IsSet {
+				// Check if this is an AJAX request
+				if isAjaxRequest(r) {
+					return JSONResponse(w, http.StatusUnauthorized, JSONResponseBody{
+						Status:  APIResponseStatusError,
+						Message: "Authentication required",
+					})
+				}
+
+				// For regular requests, redirect to login
 				return Redirect(w, r, "/login", http.StatusSeeOther)
 			}
 
 			// Add user ID to context
-			ctx := context.WithValue(r.Context(), config.UserIDContextKey, sess.UserID.Data)
+			ctx := context.WithValue(r.Context(), config.UserIDContextKey, sess.UserID.Val)
 			r = r.WithContext(ctx)
 
 			return next(w, r)
@@ -98,53 +93,12 @@ func AuthenticatedSessionMiddleware(sessionStore *session.Store) MiddlewareFunc 
 	}
 }
 
-func AuthenticatedTokenMiddleware(db *database.Database) MiddlewareFunc {
-	return func(next HandlerFunc) HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) error {
-			ctx := r.Context()
-
-			// Check if the user is authenticated via token (e.g., Bearer token)
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-					Status:  APIResponseStatusError,
-					Message: "Missing Authorization header",
-				})
-			}
-
-			// For simplicity, we'll just check if it starts with "Bearer "
-			if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
-				return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-					Status:  APIResponseStatusError,
-					Message: "Invalid Authorization header",
-				})
-			}
-			token := authHeader[7:]
-
-			// Validate the token (this is a placeholder, implement your own logic)
-			accessToken, err := db.GetOAuthAccessTokenByToken(ctx, token)
-			if err != nil {
-				return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-					Status:  APIResponseStatusError,
-					Message: "Invalid token",
-				})
-			}
-
-			// Check if the token has expired
-			if accessToken.ExpiresAt.Before(time.Now()) {
-				return JSONResponse(w, http.StatusUnauthorized, ApiResponse{
-					Status:  APIResponseStatusError,
-					Message: "Token has expired",
-				})
-			}
-
-			// Assuming the token is valid and corresponds to a user ID
-			ctx = context.WithValue(ctx, config.UserIDContextKey, accessToken.UserID)
-			r = r.WithContext(ctx)
-
-			return next(w, r)
-		}
-	}
+// isAjaxRequest checks if the request is an AJAX request
+func isAjaxRequest(r *http.Request) bool {
+	// Check for common AJAX indicators
+	return r.Header.Get("X-Requested-With") == "XMLHttpRequest" ||
+		r.Header.Get("Accept") == "application/json" ||
+		r.Header.Get("Content-Type") == "application/json"
 }
 
 func CSRFMiddleware(logger *slog.Logger, sessionStore *session.Store) MiddlewareFunc {
@@ -152,53 +106,96 @@ func CSRFMiddleware(logger *slog.Logger, sessionStore *session.Store) Middleware
 		return func(w http.ResponseWriter, r *http.Request) error {
 			switch r.Method {
 			case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
-				// Generate new CSRF token for each safe request
-				csrfToken, err := util.RandomString(32)
-				if err != nil {
-					return fmt.Errorf("failed to generate CSRF token: %w", err)
-				}
-
+				// Safe methods - ensure CSRF token exists in session
 				sess, err := sessionStore.Get(r.Context(), r)
 				if err != nil {
 					return fmt.Errorf("failed to get session: %w", err)
 				}
 
-				// Store the new CSRF token in the session
-				sess.Data.CsrfToken = csrfToken
-				if err := sessionStore.Save(r.Context(), w, sess); err != nil {
-					return fmt.Errorf("failed to save session: %w", err)
+				// Generate new CSRF token if not present
+				if sess.Data.CsrfToken == "" {
+					csrfToken, err := util.GenerateRandomString(32)
+					if err != nil {
+						logger.Error("failed to generate CSRF token", "error", err)
+						return fmt.Errorf("failed to generate CSRF token: %w", err)
+					}
+
+					sess.Data.CsrfToken = csrfToken
+					if err := sessionStore.Save(r.Context(), w, sess); err != nil {
+						logger.Error("failed to save session with CSRF token", "error", err)
+						return fmt.Errorf("failed to save session: %w", err)
+					}
 				}
 
 				// Add CSRF token to context
-				ctx := context.WithValue(r.Context(), config.CSRFTokenContextKey, csrfToken)
+				ctx := context.WithValue(r.Context(), config.CSRFTokenContextKey, sess.Data.CsrfToken)
 				r = r.WithContext(ctx)
 
 			default:
-				// Validate CSRF token for state-changing methods
+				// State-changing methods - validate CSRF token
 				sess, err := sessionStore.Get(r.Context(), r)
 				if err != nil {
-					return fmt.Errorf("failed to get session: %w", err)
+					logger.Warn("CSRF validation failed: could not get session", "error", err)
+					return handleCSRFError(w, r, "Session validation failed")
 				}
 
 				if sess.Data.CsrfToken == "" {
-					return fmt.Errorf("CSRF token not found in session")
+					logger.Warn("CSRF validation failed: no token in session")
+					return handleCSRFError(w, r, "Security token not found")
 				}
 
-				csrfToken := r.Header.Get("X-CSRF-Token")
+				// Get CSRF token from request (try multiple sources)
+				var csrfToken string
+				if csrfToken = r.Header.Get("X-CSRF-Token"); csrfToken == "" {
+					if csrfToken = r.Header.Get("X-Requested-With"); csrfToken == "" {
+						if err := r.ParseForm(); err == nil {
+							csrfToken = r.FormValue("_csrf")
+						}
+					}
+				}
+
 				if csrfToken == "" {
-					return fmt.Errorf("missing CSRF token")
+					logger.Warn("CSRF validation failed: no token in request")
+					return handleCSRFError(w, r, "Security token required")
 				}
 
 				if sess.Data.CsrfToken != csrfToken {
-					logger.Warn("CSRF token mismatch", "session_token", sess.Data.CsrfToken, "request_token", csrfToken)
-					return JSONResponse(w, http.StatusForbidden, ApiResponse{
-						Status:  APIResponseStatusError,
-						Message: "Invalid request please try again",
-					})
+					logger.Warn("CSRF token mismatch",
+						"session_token_hash", hashToken(sess.Data.CsrfToken),
+						"request_token_hash", hashToken(csrfToken),
+						"user_agent", r.UserAgent(),
+						"remote_addr", r.RemoteAddr)
+					return handleCSRFError(w, r, "Invalid security token")
 				}
+
+				// Add CSRF token to context for valid requests
+				ctx := context.WithValue(r.Context(), config.CSRFTokenContextKey, sess.Data.CsrfToken)
+				r = r.WithContext(ctx)
 			}
 
 			return next(w, r)
 		}
 	}
+}
+
+// handleCSRFError returns appropriate error response based on request type
+func handleCSRFError(w http.ResponseWriter, r *http.Request, message string) error {
+	if isAjaxRequest(r) {
+		return JSONResponse(w, http.StatusForbidden, JSONResponseBody{
+			Status:  APIResponseStatusError,
+			Message: message,
+		})
+	}
+
+	// For non-AJAX requests, return a proper error page
+	http.Error(w, message, http.StatusForbidden)
+	return nil
+}
+
+// hashToken creates a simple hash of the token for logging (security - don't log full tokens)
+func hashToken(token string) string {
+	if len(token) < 8 {
+		return "short_token"
+	}
+	return token[:4] + "****" + token[len(token)-4:]
 }

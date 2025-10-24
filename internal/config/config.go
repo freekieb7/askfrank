@@ -9,7 +9,6 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
-	Stripe   StripeConfig
 }
 
 type Environment string
@@ -40,11 +39,6 @@ type DatabaseConfig struct {
 	URL string
 }
 
-type StripeConfig struct {
-	APIKey        string
-	WebhookSecret string
-}
-
 func NewConfig() Config {
 	return Config{
 		Server: ServerConfig{
@@ -56,10 +50,6 @@ func NewConfig() Config {
 		},
 		Database: DatabaseConfig{
 			URL: getEnv("DATABASE_URL", ""),
-		},
-		Stripe: StripeConfig{
-			APIKey:        getEnv("STRIPE_API_KEY", ""),
-			WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 	}
 }

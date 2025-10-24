@@ -31,10 +31,8 @@ type Client struct {
 	ModifiedAt    time.Time
 }
 
-func (m *Manager) ListClients(ctx context.Context, organisationID uuid.UUID) ([]Client, error) {
-	clients, err := m.DB.ListOAuthClients(ctx, database.ListOAuthClientsParams{
-		OwnerOrganisationID: util.Some(organisationID),
-	})
+func (m *Manager) ListClients(ctx context.Context) ([]Client, error) {
+	clients, err := m.DB.ListOAuthClients(ctx, database.ListOAuthClientsParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -72,16 +70,15 @@ func (m *Manager) GetClientByID(ctx context.Context, clientID uuid.UUID) (Client
 }
 
 type CreateClientParams struct {
-	OrganisationID uuid.UUID
-	Name           string
-	RedirectURIs   []string
-	IsPublic       bool
-	AllowedScopes  []string
+	Name          string
+	RedirectURIs  []string
+	IsPublic      bool
+	AllowedScopes []string
 }
 
 func (m *Manager) CreateClient(ctx context.Context, params CreateClientParams) (Client, error) {
 	// Generate a secure random secret for confidential clients
-	secret, err := util.RandomString(32)
+	secret, err := util.GenerateRandomString(32)
 	if err != nil {
 		return Client{}, err
 	}
@@ -91,12 +88,11 @@ func (m *Manager) CreateClient(ctx context.Context, params CreateClientParams) (
 
 	// Store the client in the database
 	dbClient, err := m.DB.CreateOAuthClient(ctx, database.CreateOAuthClientParams{
-		OwnerOrganisationID: params.OrganisationID,
-		Name:                params.Name,
-		RedirectURIs:        params.RedirectURIs,
-		IsPublic:            params.IsPublic,
-		AllowedScopes:       params.AllowedScopes,
-		Secret:              secret,
+		Name:          params.Name,
+		RedirectURIs:  params.RedirectURIs,
+		IsPublic:      params.IsPublic,
+		AllowedScopes: params.AllowedScopes,
+		Secret:        secret,
 	})
 	if err != nil {
 		return Client{}, err

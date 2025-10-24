@@ -1,4 +1,4 @@
-package database
+package migrations
 
 import (
 	"context"
@@ -86,7 +86,7 @@ type DriftResult struct {
 func NewMigrator(pool *pgxpool.Pool) *Migrator {
 	return &Migrator{
 		pool:           pool,
-		migrationsPath: "internal/database/migrations",
+		migrationsPath: "internal/database/migrations/versions",
 		lockTimeout:    time.Minute * 5,
 		logger:         log.New(os.Stdout, "[MIGRATOR] ", log.LstdFlags),
 		enableBackup:   true,

@@ -6,8 +6,6 @@ import (
 	"hp/internal/audit"
 	"hp/internal/database"
 	"hp/internal/notifications"
-	"hp/internal/stripe"
-	"hp/internal/util"
 	"hp/internal/webhook"
 	"log/slog"
 	"time"
@@ -29,11 +27,10 @@ type Authenticator struct {
 	auditor        *audit.Auditor
 	webhookManager *webhook.Manager
 	notifier       *notifications.Manager
-	stripeClient   *stripe.Client
 }
 
-func NewAuthenticator(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notifier *notifications.Manager, stripe *stripe.Client) Authenticator {
-	return Authenticator{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notifier: notifier, stripeClient: stripe}
+func NewAuthenticator(logger *slog.Logger, db *database.Database, auditor *audit.Auditor, webhookManager *webhook.Manager, notifier *notifications.Manager) Authenticator {
+	return Authenticator{logger: logger, db: db, auditor: auditor, webhookManager: webhookManager, notifier: notifier}
 }
 
 type LoginParam struct {
@@ -63,8 +60,7 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 
 	// Audit log
 	if err = a.auditor.LogEvent(ctx, audit.LogEventParam{
-		OwnerID: user.ID,
-		Type:    audit.AuditLogEventTypeUserLogin,
+		Type: audit.AuditLogEventTypeUserLogin,
 		Data: map[string]any{
 			"email":   user.Email,
 			"user_id": user.ID,
@@ -75,8 +71,8 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 
 	// Webhook event
 	if err = a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParams{
-		OwnerID: user.ID,
-		Type:    webhook.EventTypeUserLogin,
+		OrganisationID: user.ID,
+		Type:           webhook.EventTypeUserLogin,
 		Data: map[string]any{
 			"user_id":   user.ID,
 			"email":     user.Email,
@@ -102,8 +98,7 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {
 	// Audit log
 	if err := a.auditor.LogEvent(ctx, audit.LogEventParam{
-		OwnerID: userID,
-		Type:    audit.AuditLogEventTypeUserLogout,
+		Type: audit.AuditLogEventTypeUserLogout,
 		Data: map[string]any{
 			"user_id": userID,
 		},
@@ -113,8 +108,8 @@ func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {
 
 	// Webhook event
 	if err := a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParams{
-		OwnerID: userID,
-		Type:    webhook.EventTypeUserLogout,
+		OrganisationID: userID,
+		Type:           webhook.EventTypeUserLogout,
 		Data: map[string]any{
 			"user_id":   userID,
 			"timestamp": fmt.Sprintf("%v", userID),
@@ -137,10 +132,9 @@ func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {
 }
 
 type RegisterParam struct {
-	OrganisationID util.Optional[uuid.UUID]
-	Name           string
-	Email          string
-	Password       string
+	Name     string
+	Email    string
+	Password string
 }
 
 func (a *Authenticator) Register(ctx context.Context, params RegisterParam) (uuid.UUID, error) {
@@ -163,12 +157,12 @@ func (a *Authenticator) Register(ctx context.Context, params RegisterParam) (uui
 	}
 
 	user, err := a.db.CreateUser(ctx, database.CreateUserParams{
-		OrganisationID:  params.OrganisationID,
 		Name:            params.Name,
 		Email:           params.Email,
 		PasswordHash:    string(passwordHash),
 		IsEmailVerified: false,
 		IsBot:           false,
+		IsGuest:         false,
 	})
 	if err != nil {
 		return userID, fmt.Errorf("failed to create user: %w", err)
@@ -178,20 +172,20 @@ func (a *Authenticator) Register(ctx context.Context, params RegisterParam) (uui
 	userID = user.ID
 
 	// Audit log
-	if err := a.auditor.LogEvent(ctx, audit.LogEventParam{
-		OwnerID: user.ID,
-		Type:    audit.AuditLogEventTypeUserRegister,
-		Data: map[string]any{
-			"user_id": user.ID,
-		},
-	}); err != nil {
-		return userID, fmt.Errorf("failed to log audit event: %w", err)
-	}
+	// if err := a.auditor.LogEvent(ctx, audit.LogEventParam{
+	// 	OrganisationID: user.ID,
+	// 	Type:    audit.AuditLogEventTypeUserRegister,
+	// 	Data: map[string]any{
+	// 		"user_id": user.ID,
+	// 	},
+	// }); err != nil {
+	// 	return userID, fmt.Errorf("failed to log audit event: %w", err)
+	// }
 
 	// Webhook event
 	if err := a.webhookManager.RegisterEvent(ctx, webhook.RegisterEventParams{
-		OwnerID: user.ID,
-		Type:    webhook.EventTypeUserRegister,
+		OrganisationID: user.ID,
+		Type:           webhook.EventTypeUserRegister,
 		Data: map[string]any{
 			"user_id":   user.ID,
 			"timestamp": user.CreatedAt.Format(time.RFC3339),

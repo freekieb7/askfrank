@@ -57,11 +57,9 @@ type SessionData struct {
 }
 
 func (s *Store) Get(ctx context.Context, r *http.Request) (Session, error) {
-	var session Session
-
 	sessionID, ok := ctx.Value(config.SessionContextKey).(string)
 	if !ok {
-		return session, fmt.Errorf("session id not found in context")
+		return Session{}, fmt.Errorf("session store: session id not found in context")
 	}
 
 	sess, err := s.Database.GetSessionByToken(ctx, sessionID)
@@ -78,10 +76,10 @@ func (s *Store) Get(ctx context.Context, r *http.Request) (Session, error) {
 			}, nil
 		}
 
-		return session, fmt.Errorf("failed to get session by token: %w", err)
+		return Session{}, fmt.Errorf("session store: failed to get session by token: %w", err)
 	}
 
-	session = Session{
+	session := Session{
 		ID:        sess.ID,
 		Token:     sess.Token,
 		UserID:    sess.UserID,
@@ -90,8 +88,97 @@ func (s *Store) Get(ctx context.Context, r *http.Request) (Session, error) {
 		ExpiresAt: sess.ExpiresAt,
 	}
 	if err := json.Unmarshal(sess.Data, &session.Data); err != nil {
-		return session, fmt.Errorf("failed to unmarshal session data: %w", err)
+		return Session{}, fmt.Errorf("session store: failed to unmarshal session data: %w", err)
 	}
+
+	return session, nil
+}
+
+// GetOrCreate retrieves an existing session or creates a new one if it doesn't exist
+// It automatically handles cookie setting for new sessions
+func (s *Store) GetOrCreate(ctx context.Context, w http.ResponseWriter, r *http.Request) (Session, error) {
+	// Try to get session ID from cookie
+	cookie, err := r.Cookie(s.Config.CookieName)
+	if err != nil || cookie.Value == "" {
+		// No session cookie found, create new session
+		return s.createNewSession(ctx, w, r)
+	}
+
+	// Check if session exists in database
+	sess, err := s.Database.GetSessionByToken(ctx, cookie.Value)
+	if err != nil {
+		if errors.Is(err, database.ErrSessionNotFound) {
+			// Session doesn't exist, create new one
+			return s.createNewSession(ctx, w, r)
+		}
+		return Session{}, fmt.Errorf("session store: failed to get session by token: %w", err)
+	}
+
+	// Check if session is expired
+	if sess.ExpiresAt.Before(time.Now()) {
+		// Session expired, create new one
+		return s.createNewSession(ctx, w, r)
+	}
+
+	// Session exists and is valid
+	session := Session{
+		ID:        sess.ID,
+		Token:     sess.Token,
+		UserID:    sess.UserID,
+		UserAgent: sess.UserAgent,
+		IPAddress: sess.IPAddress,
+		ExpiresAt: sess.ExpiresAt,
+	}
+	if err := json.Unmarshal(sess.Data, &session.Data); err != nil {
+		return Session{}, fmt.Errorf("session store: failed to unmarshal session data: %w", err)
+	}
+
+	// Update context with session token
+	ctx = context.WithValue(ctx, config.SessionContextKey, session.Token)
+	*r = *r.WithContext(ctx)
+
+	return session, nil
+}
+
+// createNewSession creates a new session and sets the cookie
+func (s *Store) createNewSession(ctx context.Context, w http.ResponseWriter, r *http.Request) (Session, error) {
+	token, err := util.GenerateRandomString(32)
+	if err != nil {
+		return Session{}, fmt.Errorf("session store: failed to generate session token: %w", err)
+	}
+
+	session := Session{
+		ID:        uuid.New(),
+		Token:     token,
+		UserID:    util.Optional[uuid.UUID]{},
+		UserAgent: r.UserAgent(),
+		IPAddress: r.RemoteAddr,
+		Data:      SessionData{},
+		ExpiresAt: time.Now().Add(s.Config.ExpiresIn),
+	}
+
+	// Save session to database
+	if err := s.Save(ctx, w, session); err != nil {
+		return Session{}, fmt.Errorf("session store: failed to save new session: %w", err)
+	}
+
+	// Set session cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:        s.Config.CookieName,
+		Value:       token,
+		Path:        s.Config.Path,
+		Domain:      s.Config.Domain,
+		Expires:     session.ExpiresAt,
+		HttpOnly:    s.Config.CookieHTTPOnly,
+		Secure:      s.Config.CookieSecure,
+		SameSite:    s.Config.CookieSameSite,
+		MaxAge:      s.Config.CookieMaxAge,
+		Partitioned: s.Config.CookieSecure,
+	})
+
+	// Update context with session token
+	ctx = context.WithValue(ctx, config.SessionContextKey, token)
+	*r = *r.WithContext(ctx)
 
 	return session, nil
 }
@@ -100,15 +187,16 @@ func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess Session) e
 	// Create new session
 	if sess.ID == uuid.Nil {
 		if _, err := s.Database.CreateSession(ctx, database.CreateSessionParams{
+			ID:        uuid.New(),
 			Token:     sess.Token,
 			UserID:    sess.UserID,
 			UserAgent: sess.UserAgent,
 			IPAddress: sess.IPAddress,
-			Data:      json.RawMessage{},
+			Data:      []byte("{}"),
 			ExpiresAt: sess.ExpiresAt,
 			RevokedAt: util.None[time.Time](),
 		}); err != nil {
-			return fmt.Errorf("failed to create session: %w", err)
+			return fmt.Errorf("session store: failed to create session: %w", err)
 		}
 		return nil
 	}
@@ -116,13 +204,13 @@ func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess Session) e
 	// Update existing session
 	data, err := json.Marshal(sess.Data)
 	if err != nil {
-		return fmt.Errorf("failed to marshal session data: %w", err)
+		return fmt.Errorf("session store: failed to marshal session data: %w", err)
 	}
 	if err := s.Database.UpdateSessionByID(ctx, sess.ID, database.UpdateSessionParams{
 		UserID: sess.UserID,
 		Data:   util.Some(data),
 	}); err != nil {
-		return fmt.Errorf("failed to update session: %w", err)
+		return fmt.Errorf("session store: failed to update session: %w", err)
 	}
 	return nil
 }
@@ -130,8 +218,7 @@ func (s *Store) Save(ctx context.Context, w http.ResponseWriter, sess Session) e
 func (s *Store) Destroy(ctx context.Context, w http.ResponseWriter, sess Session) error {
 	// Delete session from database
 	if err := s.Database.DeleteSessionByID(ctx, sess.ID); err != nil {
-		err = fmt.Errorf("failed to delete session: %w", err)
-		return err
+		return fmt.Errorf("session store: failed to delete session: %w", err)
 	}
 
 	// Expire session cookie
@@ -154,23 +241,23 @@ func (s *Store) Destroy(ctx context.Context, w http.ResponseWriter, sess Session
 func (s *Store) Refresh(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	sessionID, ok := ctx.Value(config.SessionContextKey).(uuid.UUID)
 	if !ok {
-		return fmt.Errorf("session id not found in context")
+		return fmt.Errorf("session store: session id not found in context")
 	}
 
 	sess, err := s.Database.GetSessionByID(ctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("failed to get session: %w", err)
+		return fmt.Errorf("session store: failed to get session: %w", err)
 	}
 
-	newToken, err := util.RandomString(32)
+	newToken, err := util.GenerateRandomString(32)
 	if err != nil {
-		return fmt.Errorf("failed to generate new token: %w", err)
+		return fmt.Errorf("session store: failed to generate new token: %w", err)
 	}
 
 	if err := s.Database.UpdateSessionByID(ctx, sess.ID, database.UpdateSessionParams{
 		Token: util.Some(newToken),
 	}); err != nil {
-		return fmt.Errorf("failed to refresh session: %w", err)
+		return fmt.Errorf("session store: failed to refresh session: %w", err)
 	}
 
 	// Set new session ID in context
