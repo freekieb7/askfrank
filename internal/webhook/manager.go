@@ -2,7 +2,6 @@ package webhook
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"hp/internal/database"
 	"hp/internal/util"
@@ -78,41 +77,42 @@ type SubscriptionParams struct {
 }
 
 func (m *Manager) Subscriptions(ctx context.Context, params SubscriptionParams) ([]Subscription, error) {
-	var subscriptions []Subscription
+	return make([]Subscription, 0), nil
+	// var subscriptions []Subscription
 
-	dbSubscriptions, err := m.db.ListWebhookSubscriptions(ctx, database.ListWebhookSubscriptionsParams{
-		OwnerOrganisationID: util.Some(params.OrganisationID),
-	})
-	if err != nil {
-		return subscriptions, fmt.Errorf("failed to list webhook subscriptions: %w", err)
-	}
+	// dbSubscriptions, err := m.db.ListWebhookSubscriptions(ctx, database.ListWebhookSubscriptionsParams{
+	// 	OwnerOrganisationID: util.Some(params.OrganisationID),
+	// })
+	// if err != nil {
+	// 	return subscriptions, fmt.Errorf("failed to list webhook subscriptions: %w", err)
+	// }
 
-	for _, s := range dbSubscriptions {
-		eventTypes := make([]EventType, len(s.EventTypes))
-		for i, et := range s.EventTypes {
-			eventType, err := EventTypeFromString(et)
-			if err != nil {
-				m.logger.Warn("Unknown webhook event type in subscription", "subscription_id", s.ID, "event_type", et)
-				continue
-			}
-			eventTypes[i] = eventType
-		}
+	// for _, s := range dbSubscriptions {
+	// 	eventTypes := make([]EventType, len(s.EventTypes))
+	// 	for i, et := range s.EventTypes {
+	// 		eventType, err := EventTypeFromString(et)
+	// 		if err != nil {
+	// 			m.logger.Warn("Unknown webhook event type in subscription", "subscription_id", s.ID, "event_type", et)
+	// 			continue
+	// 		}
+	// 		eventTypes[i] = eventType
+	// 	}
 
-		subscriptions = append(subscriptions, Subscription{
-			ID:                  s.ID,
-			OwnerOrganisationID: s.OwnerOrganisationID,
-			Name:                s.Name,
-			Description:         s.Description,
-			URL:                 s.URL,
-			Secret:              s.Secret,
-			EventTypes:          eventTypes,
-			IsActive:            s.IsActive,
-			CreatedAt:           s.CreatedAt,
-			UpdatedAt:           s.UpdatedAt,
-		})
-	}
+	// 	subscriptions = append(subscriptions, Subscription{
+	// 		ID:                  s.ID,
+	// 		OwnerOrganisationID: s.OwnerOrganisationID,
+	// 		Name:                s.Name,
+	// 		Description:         s.Description,
+	// 		URL:                 s.URL,
+	// 		Secret:              s.Secret,
+	// 		EventTypes:          eventTypes,
+	// 		IsActive:            s.IsActive,
+	// 		CreatedAt:           s.CreatedAt,
+	// 		UpdatedAt:           s.UpdatedAt,
+	// 	})
+	// }
 
-	return subscriptions, nil
+	// return subscriptions, nil
 }
 
 type SubscribeParams struct {
@@ -124,33 +124,34 @@ type SubscribeParams struct {
 }
 
 func (m *Manager) Subscribe(ctx context.Context, params SubscribeParams) (uuid.UUID, error) {
-	var subscriptionID uuid.UUID
+	return uuid.New(), nil
+	// var subscriptionID uuid.UUID
 
-	// Convert event types to string slice
-	eventTypeStrs := make([]string, len(params.EventTypes))
-	for i, et := range params.EventTypes {
-		eventTypeStrs[i] = string(et)
-	}
+	// // Convert event types to string slice
+	// eventTypeStrs := make([]string, len(params.EventTypes))
+	// for i, et := range params.EventTypes {
+	// 	eventTypeStrs[i] = string(et)
+	// }
 
-	randomSecret, err := util.RandomString(32)
-	if err != nil {
-		return subscriptionID, fmt.Errorf("failed to generate random string: %w", err)
-	}
+	// randomSecret, err := util.GenerateRandomString(32)
+	// if err != nil {
+	// 	return subscriptionID, fmt.Errorf("failed to generate random string: %w", err)
+	// }
 
-	subscription, err := m.db.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{
-		OwnerOrganisationID: params.OrganisationID,
-		Name:                params.Name,
-		Description:         params.Description,
-		URL:                 params.URL,
-		Secret:              randomSecret,
-		EventTypes:          eventTypeStrs,
-		IsActive:            true,
-	})
-	if err != nil {
-		return subscriptionID, fmt.Errorf("failed to create webhook subscription: %w", err)
-	}
+	// subscription, err := m.db.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{
+	// 	OwnerOrganisationID: params.OrganisationID,
+	// 	Name:                params.Name,
+	// 	Description:         params.Description,
+	// 	URL:                 params.URL,
+	// 	Secret:              randomSecret,
+	// 	EventTypes:          eventTypeStrs,
+	// 	IsActive:            true,
+	// })
+	// if err != nil {
+	// 	return subscriptionID, fmt.Errorf("failed to create webhook subscription: %w", err)
+	// }
 
-	return subscription.ID, nil
+	// return subscription.ID, nil
 }
 
 type UnsubscribeParams struct {
@@ -159,32 +160,34 @@ type UnsubscribeParams struct {
 }
 
 func (m *Manager) Unsubscribe(ctx context.Context, params UnsubscribeParams) error {
-	if err := m.db.DeleteWebhookSubscriptionByID(ctx, params.SubscriptionID, database.DeleteWebhookSubscriptionParams{
-		OwnerOrganisationID: util.Some(params.OrganisationID),
-	}); err != nil {
-		return fmt.Errorf("failed to delete webhook subscription: %w", err)
-	}
 	return nil
+	// if err := m.db.DeleteWebhookSubscriptionByID(ctx, params.SubscriptionID, database.DeleteWebhookSubscriptionParams{
+	// 	OwnerOrganisationID: util.Some(params.OrganisationID),
+	// }); err != nil {
+	// 	return fmt.Errorf("failed to delete webhook subscription: %w", err)
+	// }
+	// return nil
 }
 
 type RegisterEventParams struct {
-	OwnerID uuid.UUID
-	Type    EventType
-	Data    map[string]any
+	OrganisationID uuid.UUID
+	Type           EventType
+	Data           map[string]any
 }
 
 func (m *Manager) RegisterEvent(ctx context.Context, params RegisterEventParams) error {
-	data, err := json.Marshal(params.Data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal webhook event data: %w", err)
-	}
-
-	if _, err := m.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
-		EventType: string(params.Type),
-		Payload:   data,
-	}); err != nil {
-		return fmt.Errorf("failed to create webhook event: %w", err)
-	}
-
 	return nil
+	// data, err := json.Marshal(params.Data)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to marshal webhook event data: %w", err)
+	// }
+
+	// if _, err := m.db.CreateWebhookEvent(ctx, database.CreateWebhookEventParams{
+	// 	EventType: string(params.Type),
+	// 	Payload:   data,
+	// }); err != nil {
+	// 	return fmt.Errorf("failed to create webhook event: %w", err)
+	// }
+
+	// return nil
 }

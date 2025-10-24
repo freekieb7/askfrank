@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hp/internal/config"
-	"hp/internal/database"
+	"hp/internal/database/migrations"
 	"os"
 	"strconv"
 
@@ -29,7 +29,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	migrator := database.NewMigrator(pool)
+	migrator := migrations.NewMigrator(pool)
 	migrator.SetBackupConfig(false, "")
 
 	switch command {
@@ -62,7 +62,7 @@ func main() {
 	}
 }
 
-func handleUp(ctx context.Context, migrator *database.Migrator, args []string) {
+func handleUp(ctx context.Context, migrator *migrations.Migrator, args []string) {
 	steps := 0
 	if len(args) > 0 {
 		var err error
@@ -79,7 +79,7 @@ func handleUp(ctx context.Context, migrator *database.Migrator, args []string) {
 	}
 }
 
-func handleDown(ctx context.Context, migrator *database.Migrator, args []string) {
+func handleDown(ctx context.Context, migrator *migrations.Migrator, args []string) {
 	steps := 1
 	if len(args) > 0 {
 		var err error
@@ -96,7 +96,7 @@ func handleDown(ctx context.Context, migrator *database.Migrator, args []string)
 	}
 }
 
-func handleVersion(ctx context.Context, migrator *database.Migrator) {
+func handleVersion(ctx context.Context, migrator *migrations.Migrator) {
 	version, dirty, err := migrator.Version(ctx)
 	if err != nil {
 		fmt.Printf("Failed to get version: %v\n", err)
@@ -111,14 +111,14 @@ func handleVersion(ctx context.Context, migrator *database.Migrator) {
 	}
 }
 
-func handleHealth(ctx context.Context, migrator *database.Migrator) {
+func handleHealth(ctx context.Context, migrator *migrations.Migrator) {
 	if err := migrator.HealthCheck(ctx); err != nil {
 		fmt.Printf("Health check failed: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func handleStatus(ctx context.Context, migrator *database.Migrator) {
+func handleStatus(ctx context.Context, migrator *migrations.Migrator) {
 	status, err := migrator.GetStatus(ctx)
 	if err != nil {
 		fmt.Printf("Failed to get status: %v\n", err)
@@ -146,7 +146,7 @@ func handleStatus(ctx context.Context, migrator *database.Migrator) {
 	}
 }
 
-func handleCreate(migrator *database.Migrator, args []string) {
+func handleCreate(migrator *migrations.Migrator, args []string) {
 	if len(args) < 1 {
 		fmt.Printf("Usage: migrate create <migration_name>\n")
 		os.Exit(1)
@@ -159,7 +159,7 @@ func handleCreate(migrator *database.Migrator, args []string) {
 	}
 }
 
-func handleValidate(migrator *database.Migrator) {
+func handleValidate(migrator *migrations.Migrator) {
 	if err := migrator.ValidateMigrations(); err != nil {
 		fmt.Printf("Validation failed: %v\n", err)
 		os.Exit(1)
@@ -167,7 +167,7 @@ func handleValidate(migrator *database.Migrator) {
 	fmt.Printf("✓ All migrations are valid\n")
 }
 
-func handleDryRun(ctx context.Context, migrator *database.Migrator, args []string) {
+func handleDryRun(ctx context.Context, migrator *migrations.Migrator, args []string) {
 	if len(args) < 1 {
 		fmt.Printf("Usage: migrate dry-run <up|down> [steps]\n")
 		os.Exit(1)
@@ -221,7 +221,7 @@ func handleDryRun(ctx context.Context, migrator *database.Migrator, args []strin
 	fmt.Printf("\nTotal migrations to %s: %d\n", direction, len(results))
 }
 
-func handleMigrateTo(ctx context.Context, migrator *database.Migrator, args []string) {
+func handleMigrateTo(ctx context.Context, migrator *migrations.Migrator, args []string) {
 	if len(args) < 1 {
 		fmt.Printf("Usage: migrate migrate-to <version>\n")
 		os.Exit(1)
@@ -241,7 +241,7 @@ func handleMigrateTo(ctx context.Context, migrator *database.Migrator, args []st
 	fmt.Printf("Successfully migrated to version %d\n", targetVersion)
 }
 
-func handleDriftCheck(ctx context.Context, migrator *database.Migrator) {
+func handleDriftCheck(ctx context.Context, migrator *migrations.Migrator) {
 	result, err := migrator.DetectSchemaDrift(ctx)
 	if err != nil {
 		fmt.Printf("Schema drift check failed: %v\n", err)
@@ -279,7 +279,7 @@ func handleDriftCheck(ctx context.Context, migrator *database.Migrator) {
 	}
 }
 
-func handleEnhancedValidate(migrator *database.Migrator) {
+func handleEnhancedValidate(migrator *migrations.Migrator) {
 	if err := migrator.EnhancedValidation(); err != nil {
 		fmt.Printf("Enhanced validation failed: %v\n", err)
 		os.Exit(1)

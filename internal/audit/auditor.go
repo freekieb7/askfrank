@@ -2,8 +2,6 @@ package audit
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"hp/internal/database"
 	"hp/internal/util"
 	"log/slog"
@@ -57,46 +55,46 @@ type ListEventsParam struct {
 }
 
 func (a *Auditor) ListEvents(ctx context.Context, params ListEventsParam) ([]Event, error) {
-	dbEvents, err := a.db.ListAuditLogEvents(ctx, database.ListAuditLogEventsParams{
-		OwnerOrganisationID: util.Some(params.OrganisationID),
-		StartTimestamp:      params.StartTime,
-		EndTimestamp:        params.EndTime,
-		Limit:               util.Some(params.Limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list audit log events: %w", err)
-	}
+	return make([]Event, 0), nil
+	// dbEvents, err := a.db.ListAuditLogEvents(ctx, database.ListAuditLogEventsParams{
+	// 	OwnerOrganisationID: util.Some(params.OrganisationID),
+	// 	StartTimestamp:      params.StartTime,
+	// 	EndTimestamp:        params.EndTime,
+	// 	Limit:               util.Some(params.Limit),
+	// })
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to list audit log events: %w", err)
+	// }
 
-	events := make([]Event, len(dbEvents))
-	for i, dbEvent := range dbEvents {
-		events[i] = Event{
-			ID:        dbEvent.ID,
-			CreatedAt: dbEvent.CreatedAt,
-			Type:      AuditLogEventType(dbEvent.Type),
-			Data:      dbEvent.Data,
-		}
-	}
-	return events, nil
+	// events := make([]Event, len(dbEvents))
+	// for i, dbEvent := range dbEvents {
+	// 	events[i] = Event{
+	// 		ID:        dbEvent.ID,
+	// 		CreatedAt: dbEvent.CreatedAt,
+	// 		Type:      AuditLogEventType(dbEvent.Type),
+	// 		Data:      dbEvent.Data,
+	// 	}
+	// }
+	// return events, nil
 }
 
 type LogEventParam struct {
-	OwnerID uuid.UUID
-	Type    AuditLogEventType
-	Data    map[string]any
+	Type AuditLogEventType
+	Data map[string]any
 }
 
 func (a *Auditor) LogEvent(ctx context.Context, params LogEventParam) error {
-	data, err := json.Marshal(params.Data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal audit log event data: %w", err)
-	}
+	// data, err := json.Marshal(params.Data)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to marshal audit log event data: %w", err)
+	// }
 
-	if _, err = a.db.CreateAuditLogEvent(ctx, database.CreateAuditLogEventParams{
-		OrganisationOwnerID: params.OwnerID,
-		EventType:           string(params.Type),
-		EventData:           data,
-	}); err != nil {
-		return fmt.Errorf("failed to create audit log event: %w", err)
-	}
+	// if _, err = a.db.CreateAuditLogEvent(ctx, database.CreateAuditLogEventParams{
+	// 	OrganisationOwnerID: params.OrganisationID,
+	// 	EventType:           string(params.Type),
+	// 	EventData:           data,
+	// }); err != nil {
+	// 	return fmt.Errorf("failed to create audit log event: %w", err)
+	// }
 	return nil
 }

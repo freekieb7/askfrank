@@ -1,0 +1,127 @@
+package views
+
+import "hp/internal/web/page/views/component"
+
+type RegisterPageProps struct {
+	component.LayoutProps
+}
+
+templ RegisterPage(props RegisterPageProps) {
+	@component.Layout(props.LayoutProps) {
+		<div>
+			<h1>Register</h1>
+			<p>Create your account to get started.</p>
+			<div id="error-message" class="alert alert-error hidden">
+				<span id="error-text"></span>
+			</div>
+			<div id="success-message" class="alert alert-success hidden">
+				<span id="success-text"></span>
+			</div>
+			<form id="form-register">
+				<input type="text" id="input-name" name="name" placeholder="Full Name" class="border" required/>
+				<input type="email" id="input-email" name="email" placeholder="Email Address" class="border" required/>
+				<input type="password" id="input-password" name="password" placeholder="Password" class="border" required/>
+				<div>
+					<input type="checkbox" id="input-terms" name="terms" required/>
+					<label for="input-terms">I agree to the Terms of Service and Privacy Policy</label>
+				</div>
+				<button type="submit" id="button-register">Create Account</button>
+			</form>
+			<p>Already have an account? <a href="/login">Log in</a></p>
+		</div>
+		<script>
+			class RegisterError extends Error {
+				constructor(consoleMessage, userMessage) {
+					super(consoleMessage);
+					this.name = 'RegisterError';
+					this.userMessage = userMessage;
+					this.consoleMessage = consoleMessage;
+				}
+			}
+
+			document.addEventListener('DOMContentLoaded', function() {
+				// Focus the name field on page load
+				document.getElementById('input-name').focus();
+
+				const form = document.getElementById('form-register');
+				const errorDiv = document.getElementById('error-message');
+				const successDiv = document.getElementById('success-message');
+				const errorText = document.getElementById('error-text');
+				const successText = document.getElementById('success-text');
+				const submitButton = document.getElementById('button-register');
+
+				form.addEventListener('submit', async function(event) {
+					event.preventDefault();
+
+					// Hide previous messages
+					errorDiv.classList.add('hidden');
+					successDiv.classList.add('hidden');
+
+					// Check if terms are accepted
+					const termsCheckbox = document.getElementById('input-terms');
+					if (!termsCheckbox.checked) {
+						errorDiv.classList.remove('hidden');
+						errorText.textContent = 'You must accept the terms and conditions to register.';
+						return;
+					}
+
+					// Disable submit button and show loading state
+					submitButton.disabled = true;
+
+					const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+					try {
+						const response = await fetch('/register', {
+							method: 'POST',
+							headers: {
+								'X-CSRF-Token': csrfToken,
+								'Content-Type': 'application/json',
+								'Accept': 'application/json',
+							},
+							body: JSON.stringify({
+								name: document.getElementById('input-name').value,
+								email: document.getElementById('input-email').value,
+								password: document.getElementById('input-password').value,
+							}),
+						});
+
+						if (!response.ok) {
+							const errorData = await response.json();
+							if (errorData && errorData.message) {
+								throw new RegisterError(errorData.error, errorData.message);
+							}
+							throw new Error('Network response was not ok');
+						}
+					
+						successDiv.classList.remove('hidden');
+
+						const responseBody = await response.json();
+						if (!responseBody.data.redirect_to) {
+							throw new RegisterError('Registration failed: no redirect URL provided');
+						}
+
+						window.location.href = responseBody.data.redirect_to;
+					} catch (error) {
+						let consoleMessage, userMessage;
+
+						if (error instanceof RegisterError) {
+							consoleMessage = error.consoleMessage;
+							userMessage = error.userMessage;
+						} else {
+							consoleMessage = error.message;
+							userMessage = 'An unexpected error occurred. Please try again.';
+						}
+
+						// Handle network or other errors
+						console.error('Register error:', consoleMessage);
+						errorText.textContent = userMessage;
+						errorDiv.classList.remove('hidden');
+						
+						// Re-enable submit button
+						submitButton.disabled = false;
+					}
+				});
+			});
+		</script>
+	}
+}

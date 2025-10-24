@@ -3,7 +3,6 @@ package notifications
 import (
 	"context"
 	"hp/internal/database"
-	"hp/internal/util"
 	"log/slog"
 	"time"
 
@@ -46,6 +45,7 @@ type NotifyParam struct {
 }
 
 func (n *Manager) Notify(ctx context.Context, params NotifyParam) error {
+	return nil
 	// if _, err := n.db.CreateNotification(ctx, database.CreateNotificationParams{
 	// 	OwnerID: params.OwnerID,
 	// 	Title:   params.Title,
@@ -55,33 +55,34 @@ func (n *Manager) Notify(ctx context.Context, params NotifyParam) error {
 	// }); err != nil {
 	// 	return fmt.Errorf("failed to create notification: %w", err)
 	// }
-	return nil
+	// return nil
 }
 
 func (n *Manager) Unread(ctx context.Context, userID uuid.UUID) ([]Notification, error) {
-	notifications, err := n.db.ListNotifications(ctx, database.ListNotificationsParams{
-		OwnerUserID:      util.Some(userID),
-		Limit:            util.Some(uint16(10)),
-		OrderByCreatedAt: util.Some(database.OrderByDESC),
-		Read:             util.Some(false),
-	})
-	if err != nil {
-		return nil, err
-	}
+	return make([]Notification, 0), nil
+	// notifications, err := n.db.ListNotifications(ctx, database.ListNotificationsParams{
+	// 	OwnerUserID:      util.Some(userID),
+	// 	Limit:            util.Some(uint16(10)),
+	// 	OrderByCreatedAt: util.Some(database.OrderByDESC),
+	// 	Read:             util.Some(false),
+	// })
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	result := make([]Notification, len(notifications))
-	for i, notif := range notifications {
-		result[i] = Notification{
-			ID:        notif.ID,
-			UserID:    notif.OwnerUserID,
-			Title:     notif.Title,
-			Message:   notif.Message,
-			Type:      NotificationType(notif.Type),
-			IsRead:    notif.IsRead,
-			ActionURL: notif.ActionURL,
-			CreatedAt: notif.CreatedAt,
-		}
-	}
+	// result := make([]Notification, len(notifications))
+	// for i, notif := range notifications {
+	// 	result[i] = Notification{
+	// 		ID:        notif.ID,
+	// 		UserID:    notif.OwnerUserID,
+	// 		Title:     notif.Title,
+	// 		Message:   notif.Message,
+	// 		Type:      NotificationType(notif.Type),
+	// 		IsRead:    notif.IsRead,
+	// 		ActionURL: notif.ActionURL,
+	// 		CreatedAt: notif.CreatedAt,
+	// 	}
+	// }
 
-	return result, nil
+	// return result, nil
 }

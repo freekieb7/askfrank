@@ -9,7 +9,6 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
-	Stripe   StripeConfig
 }
 
 type Environment string
@@ -30,19 +29,12 @@ type ServerConfig struct {
 type ContextKey string
 
 const (
-	SessionContextKey   ContextKey = "session_id"
-	LanguageContextKey  ContextKey = "lang"
-	UserIDContextKey    ContextKey = "user_id"
-	CSRFTokenContextKey ContextKey = "csrf_token"
+	SessionContextKey     ContextKey = "session"
+	AccessTokenContextKey ContextKey = "access_token"
 )
 
 type DatabaseConfig struct {
 	URL string
-}
-
-type StripeConfig struct {
-	APIKey        string
-	WebhookSecret string
 }
 
 func NewConfig() Config {
@@ -56,10 +48,6 @@ func NewConfig() Config {
 		},
 		Database: DatabaseConfig{
 			URL: getEnv("DATABASE_URL", ""),
-		},
-		Stripe: StripeConfig{
-			APIKey:        getEnv("STRIPE_API_KEY", ""),
-			WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 	}
 }

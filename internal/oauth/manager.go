@@ -2,14 +2,47 @@ package oauth
 
 import (
 	"context"
+	"errors"
 	"hp/internal/audit"
 	"hp/internal/database"
 	"hp/internal/util"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type Scope string
+
+const (
+	ScopeOpenID        Scope = "openid"
+	ScopeProfile       Scope = "profile"
+	ScopeEmail         Scope = "email"
+	ScopeOfflineAccess Scope = "offline_access"
+	ScopeClientsRead   Scope = "clients.read"
+)
+
+func ScopeParse(s string) (Scope, error) {
+	switch s {
+	case string(ScopeOpenID):
+		return ScopeOpenID, nil
+	case string(ScopeProfile):
+		return ScopeProfile, nil
+	case string(ScopeEmail):
+		return ScopeEmail, nil
+	case string(ScopeOfflineAccess):
+		return ScopeOfflineAccess, nil
+	case string(ScopeClientsRead):
+		return ScopeClientsRead, nil
+	default:
+		return Scope(s), errors.New("unknown scope")
+	}
+}
+
+func (s Scope) String() string {
+	return string(s)
+}
 
 type Manager struct {
 	Logger  *slog.Logger
@@ -22,19 +55,17 @@ func NewManager(logger *slog.Logger, db *database.Database, auditor *audit.Audit
 }
 
 type Client struct {
-	ID            uuid.UUID
-	Name          string
-	Secret        string
-	RedirectURIs  []string
-	IsPublic      bool
-	AllowedScopes []string
-	ModifiedAt    time.Time
+	ID           uuid.UUID
+	Name         string
+	Secret       string
+	RedirectURIs []string
+	IsPublic     bool
+	Scopes       []string
+	ModifiedAt   time.Time
 }
 
-func (m *Manager) ListClients(ctx context.Context, organisationID uuid.UUID) ([]Client, error) {
-	clients, err := m.DB.ListOAuthClients(ctx, database.ListOAuthClientsParams{
-		OwnerOrganisationID: util.Some(organisationID),
-	})
+func (m *Manager) ListClients(ctx context.Context) ([]Client, error) {
+	clients, err := m.DB.ListOAuthClients(ctx, database.ListOAuthClientsParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -42,13 +73,13 @@ func (m *Manager) ListClients(ctx context.Context, organisationID uuid.UUID) ([]
 	var result []Client
 	for _, c := range clients {
 		result = append(result, Client{
-			ID:            c.ID,
-			Name:          c.Name,
-			Secret:        c.Secret,
-			RedirectURIs:  c.RedirectURIs,
-			IsPublic:      c.IsPublic,
-			AllowedScopes: c.AllowedScopes,
-			ModifiedAt:    c.UpdatedAt,
+			ID:           c.ID,
+			Name:         c.Name,
+			Secret:       c.Secret,
+			RedirectURIs: c.RedirectURIs,
+			IsPublic:     c.IsPublic,
+			Scopes:       c.Scopes,
+			ModifiedAt:   c.UpdatedAt,
 		})
 	}
 	return result, nil
@@ -61,54 +92,64 @@ func (m *Manager) GetClientByID(ctx context.Context, clientID uuid.UUID) (Client
 	}
 
 	return Client{
-		ID:            c.ID,
-		Name:          c.Name,
-		Secret:        c.Secret,
-		RedirectURIs:  c.RedirectURIs,
-		IsPublic:      c.IsPublic,
-		AllowedScopes: c.AllowedScopes,
-		ModifiedAt:    c.UpdatedAt,
+		ID:           c.ID,
+		Name:         c.Name,
+		Secret:       c.Secret,
+		RedirectURIs: c.RedirectURIs,
+		IsPublic:     c.IsPublic,
+		Scopes:       c.Scopes,
+		ModifiedAt:   c.UpdatedAt,
 	}, nil
 }
 
 type CreateClientParams struct {
-	OrganisationID uuid.UUID
-	Name           string
-	RedirectURIs   []string
-	IsPublic       bool
-	AllowedScopes  []string
+	Name          string
+	RedirectURIs  []string
+	IsPublic      bool
+	AllowedScopes []string
 }
 
 func (m *Manager) CreateClient(ctx context.Context, params CreateClientParams) (Client, error) {
 	// Generate a secure random secret for confidential clients
-	secret, err := util.RandomString(32)
+	secret, err := util.GenerateRandomString(32)
 	if err != nil {
 		return Client{}, err
 	}
 
-	// Ensure standard OpenID Connect scopes are included
-	params.AllowedScopes = append(params.AllowedScopes, "openid", "profile", "email")
+	// Validate and parse scopes
+	scopes := make([]string, len(params.AllowedScopes))
+	for idx, scopeStr := range params.AllowedScopes {
+		scope, err := ScopeParse(scopeStr)
+		if err != nil {
+			return Client{}, err
+		}
+		scopes[idx] = string(scope)
+	}
+
+	// Ensure standard OpenID Connect scopes are not included
+	if slices.Contains(scopes, string(ScopeOpenID)) || slices.Contains(scopes, string(ScopeProfile)) || slices.Contains(scopes, string(ScopeEmail)) || slices.Contains(scopes, string(ScopeOfflineAccess)) {
+		return Client{}, errors.New("standard OpenID Connect scopes cannot be manually assigned to clients")
+	}
 
 	// Store the client in the database
 	dbClient, err := m.DB.CreateOAuthClient(ctx, database.CreateOAuthClientParams{
-		OwnerOrganisationID: params.OrganisationID,
-		Name:                params.Name,
-		RedirectURIs:        params.RedirectURIs,
-		IsPublic:            params.IsPublic,
-		AllowedScopes:       params.AllowedScopes,
-		Secret:              secret,
+		Name:         params.Name,
+		RedirectURIs: params.RedirectURIs,
+		IsPublic:     params.IsPublic,
+		Scopes:       scopes,
+		Secret:       secret,
 	})
 	if err != nil {
 		return Client{}, err
 	}
 
 	return Client{
-		ID:            dbClient.ID,
-		Name:          dbClient.Name,
-		RedirectURIs:  dbClient.RedirectURIs,
-		IsPublic:      dbClient.IsPublic,
-		AllowedScopes: dbClient.AllowedScopes,
-		ModifiedAt:    dbClient.UpdatedAt,
+		ID:           dbClient.ID,
+		Name:         dbClient.Name,
+		RedirectURIs: dbClient.RedirectURIs,
+		IsPublic:     dbClient.IsPublic,
+		Scopes:       dbClient.Scopes,
+		ModifiedAt:   dbClient.UpdatedAt,
 	}, nil
 }
 
@@ -117,4 +158,10 @@ func (m *Manager) DeleteClientByID(ctx context.Context, clientID uuid.UUID) erro
 		return err
 	}
 	return nil
+}
+
+func (m *Manager) ListScopes() map[Scope]string {
+	return map[Scope]string{
+		ScopeClientsRead: "Read access to client information",
+	}
 }

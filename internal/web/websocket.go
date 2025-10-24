@@ -1,6 +1,7 @@
 package web
 
 import (
+	"hp/internal/config"
 	"hp/internal/rtc"
 	"hp/internal/session"
 	"log/slog"
@@ -31,13 +32,9 @@ func NewMeetingHandler(logger *slog.Logger, signalingServer *rtc.SignalingServer
 }
 
 func (h *MeetingHandler) HandleRTCConnection(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
 	// Get user session (session should be available in context through middleware)
-	sessionData, err := h.sessionStore.Get(r.Context(), r)
-	if err != nil {
-		h.logger.Error("Invalid session in WebSocket request", "error", err)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return err
-	}
+	sess := ctx.Value(config.SessionContextKey).(session.Session)
 
 	// Upgrade the HTTP connection to WebSocket
 	conn, err := h.upgrader.Upgrade(w, r, nil)
@@ -48,7 +45,7 @@ func (h *MeetingHandler) HandleRTCConnection(w http.ResponseWriter, r *http.Requ
 	defer conn.Close()
 
 	// Extract user ID from session
-	userID := sessionData.UserID.String()
+	userID := sess.UserID.String()
 
 	h.logger.Info("WebSocket connection established for RTC", "user_id", userID)
 

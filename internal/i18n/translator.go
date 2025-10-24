@@ -18,6 +18,21 @@ func (l Language) String() string {
 	return string(l)
 }
 
+func (l *Language) UnmarshalJSON(data []byte) error {
+	var langStr string
+	if err := json.Unmarshal(data, &langStr); err != nil {
+		return err
+	}
+
+	lang, err := ParseLanguage(langStr)
+	if err != nil {
+		return err
+	}
+
+	*l = lang
+	return nil
+}
+
 func ParseLanguage(lang string) (Language, error) {
 	switch lang {
 	case "nl":

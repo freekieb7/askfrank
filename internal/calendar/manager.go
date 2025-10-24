@@ -2,10 +2,10 @@ package calendar
 
 import (
 	"context"
+	"fmt"
 	"hp/internal/audit"
 	"hp/internal/database"
 	"hp/internal/notifications"
-	"hp/internal/util"
 	"log/slog"
 	"time"
 
@@ -49,30 +49,31 @@ type EventsParams struct {
 }
 
 func (m *Manager) Events(ctx context.Context, params EventsParams) ([]Event, error) {
-	var events []Event
+	return nil, fmt.Errorf("not implemented")
+	// var events []Event
 
-	// Fetch events from the database
-	dbEvents, err := m.DB.ListCalendarEvents(ctx, database.ListCalendarEventsParams{
-		OwnerUserID:    util.Some(params.UserID),
-		StartTimestamp: util.Some(params.StartTime),
-		EndTimestamp:   util.Some(params.EndTime),
-	})
-	if err != nil {
-		return events, err
-	}
+	// // Fetch events from the database
+	// dbEvents, err := m.DB.ListCalendarEvents(ctx, database.ListCalendarEventsParams{
+	// 	OwnerUserID:    util.Some(params.UserID),
+	// 	StartTimestamp: util.Some(params.StartTime),
+	// 	EndTimestamp:   util.Some(params.EndTime),
+	// })
+	// if err != nil {
+	// 	return events, err
+	// }
 
-	for _, e := range dbEvents {
-		events = append(events, Event{
-			ID:          e.ID,
-			Title:       e.Title,
-			Description: e.Description,
-			StartTime:   e.StartTime,
-			EndTime:     e.EndTime,
-			Location:    e.Location,
-			AllDay:      e.AllDay,
-			Status:      EventStatus(e.Status),
-		})
-	}
+	// for _, e := range dbEvents {
+	// 	events = append(events, Event{
+	// 		ID:          e.ID,
+	// 		Title:       e.Title,
+	// 		Description: e.Description,
+	// 		StartTime:   e.StartTime,
+	// 		EndTime:     e.EndTime,
+	// 		Location:    e.Location,
+	// 		AllDay:      e.AllDay,
+	// 		Status:      EventStatus(e.Status),
+	// 	})
+	// }
 
-	return events, nil
+	// return events, nil
 }
