@@ -3,9 +3,10 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"hp/internal/database"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/database"
 )
 
 func CleanupTask(db *database.Database, logger *slog.Logger) DaemonFunc {

@@ -9,9 +9,9 @@ CREATE TABLE tbl_user (
     password_hash TEXT NOT NULL,
     is_email_verified BOOLEAN NOT NULL,
     is_bot BOOLEAN NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    deleted_at TIMESTAMPTZ
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMP
 );
 
 CREATE INDEX idx_user_email ON tbl_user (email);
@@ -24,10 +24,10 @@ CREATE TABLE tbl_session (
     user_agent TEXT,
     ip_address TEXT,
     data JSONB NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    revoked_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     UNIQUE (token)
 );
 
@@ -40,10 +40,10 @@ CREATE TABLE tbl_password_reset (
     id UUID PRIMARY KEY,
     token TEXT NOT NULL,
     user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
-    used_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     UNIQUE (token),
     UNIQUE (user_id, used_at)
 );
@@ -55,8 +55,8 @@ CREATE INDEX idx_password_reset_created_at ON tbl_password_reset (created_at);
 CREATE TABLE tbl_group (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_group_created_at ON tbl_group (created_at);
@@ -66,8 +66,8 @@ CREATE TABLE tbl_group_member (
     group_id UUID NOT NULL REFERENCES tbl_group(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
     role TEXT NOT NULL, -- e.g., 'admin', 'member'
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     UNIQUE (group_id, user_id)
 );
 
@@ -81,10 +81,10 @@ CREATE TABLE tbl_group_invite (
     group_id UUID NOT NULL REFERENCES tbl_group(id) ON DELETE CASCADE,
     email TEXT NOT NULL,
     role TEXT NOT NULL, -- e.g., 'admin', 'member'
-    expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     UNIQUE (token),
     UNIQUE (group_id, email, used_at)
 );
@@ -103,8 +103,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     mime_type TEXT NOT NULL,
 --     path TEXT NOT NULL,
 --     size_bytes BIGINT NOT NULL,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_file_parent ON tbl_file (parent_id);
@@ -116,8 +116,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     file_id UUID NOT NULL REFERENCES tbl_file(id) ON DELETE CASCADE,
 --     shared_with_user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
 --     permission TEXT NOT NULL, -- e.g., 'read', 'write'
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL,
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL,
 --     UNIQUE (file_id, shared_with_user_id)
 -- );
 
@@ -129,8 +129,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     id UUID PRIMARY KEY,
 --     file_id UUID NOT NULL REFERENCES tbl_file(id) ON DELETE CASCADE,
 --     owner_user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL,
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL,
 --     UNIQUE (file_id, owner_user_id)
 -- );
 
@@ -138,7 +138,7 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     id UUID PRIMARY KEY,
 --     type TEXT NOT NULL, -- e.g., 'login', 'file_upload', 'file_delete'
 --     data JSONB,         -- Additional data related to the event
---     created_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_audit_log_event_type ON tbl_audit_log_event (type);
@@ -148,7 +148,7 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     id UUID PRIMARY KEY,
 --     type TEXT NOT NULL,  -- e.g., 'file_uploaded', 'file_deleted'
 --     payload JSONB NOT NULL,    -- The payload sent to the webhook
---     created_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_webhook_event_type ON tbl_webhook_event (type);
@@ -162,8 +162,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     secret TEXT NOT NULL,      
 --     event_types TEXT[] NOT NULL,
 --     is_active BOOLEAN NOT NULL,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_webhook_subscription_event_types ON tbl_webhook_subscription USING GIN (event_types);
@@ -177,12 +177,12 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     subscription_id UUID NOT NULL REFERENCES tbl_webhook_subscription(id) ON DELETE CASCADE,
 --     status TEXT NOT NULL,
 --     retry_count INT NOT NULL,
---     next_attempt_at TIMESTAMPTZ,
---     last_attempt_at TIMESTAMPTZ,
+--     next_attempt_at TIMESTAMP,
+--     last_attempt_at TIMESTAMP,
 --     last_response_code INT,
 --     last_response_body TEXT,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_webhook_delivery_event_id ON tbl_webhook_delivery (event_id);
@@ -198,14 +198,14 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     created_by UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
 --     title TEXT NOT NULL,
 --     description TEXT NOT NULL,
---     start_timestamp TIMESTAMPTZ NOT NULL,
---     end_timestamp TIMESTAMPTZ NOT NULL,
+--     start_timestamp TIMESTAMP NOT NULL,
+--     end_timestamp TIMESTAMP NOT NULL,
 --     all_day BOOLEAN NOT NULL,
 --     status TEXT NOT NULL, -- e.g., 'tentative', 'confirmed', 'cancelled'
 --     location TEXT NOT NULL,
 --     meeting_id TEXT, -- e.g., Zoom or Google Meet ID
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_calendar_event_created_by ON tbl_calendar_event (created_by);
@@ -219,8 +219,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     user_id UUID REFERENCES tbl_user(id) ON DELETE CASCADE,
 --     email TEXT,
 --     status TEXT NOT NULL, -- e.g., 'accepted', 'declined', 'tentative'
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL,
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL,
 --     UNIQUE (calendar_event_id, user_id)
 -- );
 
@@ -234,8 +234,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     name TEXT NOT NULL,
 --     type TEXT NOT NULL, -- e.g., 'private', 'group', 'meeting'
 --     created_by UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_chat_room_created_by ON tbl_chat_room (created_by);
@@ -246,8 +246,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     chat_room_id UUID NOT NULL REFERENCES tbl_chat_room(id) ON DELETE CASCADE,
 --     user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
 --     role TEXT NOT NULL, -- e.g., 'admin', 'member'
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL,
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL,
 --     UNIQUE (chat_room_id, user_id)
 -- );
 
@@ -260,9 +260,9 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     chat_room_id UUID NOT NULL REFERENCES tbl_chat_room(id) ON DELETE CASCADE,
 --     author_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
 --     content TEXT NOT NULL,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL,
---     deleted_at TIMESTAMPTZ
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL,
+--     deleted_at TIMESTAMP
 -- );
 
 -- CREATE INDEX idx_chat_room_message_chat_room_id ON tbl_chat_room_message (chat_room_id);
@@ -277,8 +277,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     calendar_event_id UUID REFERENCES tbl_calendar_event(id) ON DELETE SET NULL,
 --     title TEXT NOT NULL,
 --     description TEXT NOT NULL,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_meeting_owner_organisation_id ON tbl_meeting (owner_organisation_id);
@@ -292,8 +292,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     meeting_id UUID NOT NULL REFERENCES tbl_meeting(id) ON DELETE CASCADE,
 --     user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
 --     role TEXT NOT NULL, -- e.g., 'host', 'co-host', 'participant'
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL,
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL,
 --     UNIQUE (meeting_id, user_id)
 -- );
 
@@ -309,8 +309,8 @@ CREATE INDEX idx_group_invite_created_at ON tbl_group_invite (created_at);
 --     message TEXT NOT NULL,
 --     is_read BOOLEAN NOT NULL,
 --     action_url TEXT NOT NULL,
---     created_at TIMESTAMPTZ NOT NULL,
---     updated_at TIMESTAMPTZ NOT NULL
+--     created_at TIMESTAMP NOT NULL,
+--     updated_at TIMESTAMP NOT NULL
 -- );
 
 -- CREATE INDEX idx_notification_owner_user_id ON tbl_notification (owner_user_id);
@@ -325,30 +325,11 @@ CREATE TABLE tbl_oauth_client (
     redirect_uris TEXT[] NOT NULL,
     is_public BOOLEAN NOT NULL,
     scopes TEXT[] NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_oauth_client_created_at ON tbl_oauth_client (created_at);
-
-CREATE TABLE tbl_oauth_access_token (
-    id TEXT PRIMARY KEY,
-    token TEXT NOT NULL,
-    client_id UUID NOT NULL REFERENCES tbl_oauth_client(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES tbl_user(id) ON DELETE CASCADE,
-    scopes TEXT[] NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    revoked_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    UNIQUE (token)
-);
-
-CREATE INDEX idx_oauth_access_token_client_id ON tbl_oauth_access_token (client_id);
-CREATE INDEX idx_oauth_access_token_user_id ON tbl_oauth_access_token (user_id);
-CREATE INDEX idx_oauth_access_token_expires_at ON tbl_oauth_access_token (expires_at);
-CREATE INDEX idx_oauth_access_token_revoked_at ON tbl_oauth_access_token (revoked_at);
-CREATE INDEX idx_oauth_access_token_created_at ON tbl_oauth_access_token (created_at);
 
 CREATE TABLE tbl_oauth_auth_code (
     id TEXT PRIMARY KEY,
@@ -359,10 +340,10 @@ CREATE TABLE tbl_oauth_auth_code (
     code_challenge TEXT,
     code_challenge_method TEXT,
     redirect_uri TEXT NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     UNIQUE (token)
 );
 
@@ -371,13 +352,45 @@ CREATE INDEX idx_oauth_auth_code_user_id ON tbl_oauth_auth_code (user_id);
 CREATE INDEX idx_oauth_auth_code_expires_at ON tbl_oauth_auth_code (expires_at);
 CREATE INDEX idx_oauth_auth_code_created_at ON tbl_oauth_auth_code (created_at);
 
+CREATE TABLE tbl_oauth_authorized_access (
+    id UUID PRIMARY KEY,
+    client_id UUID NOT NULL REFERENCES tbl_oauth_client(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
+    scopes TEXT[] NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_oauth_authorized_access_client_id ON tbl_oauth_authorized_access (client_id);
+CREATE INDEX idx_oauth_authorized_access_user_id ON tbl_oauth_authorized_access (user_id);
+CREATE INDEX idx_oauth_authorized_access_created_at ON tbl_oauth_authorized_access (created_at);
+
+CREATE TABLE tbl_oauth_access_token (
+    id TEXT PRIMARY KEY,
+    token TEXT NOT NULL,
+    client_id UUID NOT NULL REFERENCES tbl_oauth_client(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES tbl_user(id) ON DELETE CASCADE,
+    scopes TEXT[] NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    UNIQUE (token)
+);
+
+CREATE INDEX idx_oauth_access_token_client_id ON tbl_oauth_access_token (client_id);
+CREATE INDEX idx_oauth_access_token_user_id ON tbl_oauth_access_token (user_id);
+CREATE INDEX idx_oauth_access_token_expires_at ON tbl_oauth_access_token (expires_at);
+CREATE INDEX idx_oauth_access_token_revoked_at ON tbl_oauth_access_token (revoked_at);
+CREATE INDEX idx_oauth_access_token_created_at ON tbl_oauth_access_token (created_at);
+
 CREATE TABLE tbl_oauth_refresh_token_chain (
     id UUID PRIMARY KEY,
     client_id UUID NOT NULL REFERENCES tbl_oauth_client(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES tbl_user(id) ON DELETE CASCADE,
     scopes TEXT[] NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_oauth_refresh_token_chain_client_id ON tbl_oauth_refresh_token_chain (client_id);
@@ -388,10 +401,10 @@ CREATE TABLE tbl_oauth_refresh_token (
     id TEXT PRIMARY KEY,
     token TEXT NOT NULL,
     chain_id UUID NOT NULL REFERENCES tbl_oauth_refresh_token_chain(id) ON DELETE CASCADE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     UNIQUE (token),
     UNIQUE (chain_id, used_at)
 );

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hp/internal/util"
 	"strings"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/util"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -316,6 +317,15 @@ type OAuthClient struct {
 	UpdatedAt    time.Time
 }
 
+type OAuthAuthorizedAccess struct {
+	ID        uuid.UUID
+	ClientID  uuid.UUID
+	UserID    uuid.UUID
+	Scopes    []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type OAuthAuthorizationCode struct {
 	ID                  uuid.UUID
 	Token               string
@@ -387,7 +397,39 @@ var (
 	ErrSessionNotFound                = errors.New("session not found")
 	ErrOrganisationNotFound           = errors.New("organisation not found")
 	ErrDriveNotFound                  = errors.New("drive not found")
+	ErrOAuthAuthorizedAccessNotFound  = errors.New("oAuth authorized access not found")
 )
+
+type ListUsersParams struct {
+	Limit  int
+	Offset int
+}
+
+// ListUsers lists users with pagination.
+// Does not include password hashes for security reasons.
+func (db *Database) ListUsers(ctx context.Context, params ListUsersParams) ([]User, error) {
+	var users []User
+
+	rows, err := db.Pool.Query(ctx, `SELECT id, name, email, is_email_verified, is_bot, created_at, updated_at, deleted_at FROM tbl_user ORDER BY created_at DESC LIMIT $1 OFFSET $2`, params.Limit, params.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("database: failed to list users: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.ID, &user.Name, &user.Email, &user.IsEmailVerified, &user.IsBot, &user.CreatedAt, &user.UpdatedAt, &user.DeletedAt); err != nil {
+			return nil, fmt.Errorf("database: failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("database: failed to iterate users: %w", err)
+	}
+
+	return users, nil
+}
 
 type CreateUserParams struct {
 	Name            string
@@ -406,8 +448,8 @@ func (db *Database) CreateUser(ctx context.Context, params CreateUserParams) (Us
 		PasswordHash:    params.PasswordHash,
 		IsEmailVerified: params.IsEmailVerified,
 		IsBot:           params.IsBot,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+		CreatedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
 		DeletedAt:       util.None[time.Time](),
 	}
 
@@ -2125,8 +2167,8 @@ func (db *Database) CreateOAuthClient(ctx context.Context, params CreateOAuthCli
 		RedirectURIs: params.RedirectURIs,
 		IsPublic:     params.IsPublic,
 		Scopes:       params.Scopes,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 
 	if _, err := db.Pool.Exec(ctx, `INSERT INTO tbl_oauth_client (id, name, secret, redirect_uris, is_public, scopes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -2251,10 +2293,10 @@ func (db *Database) CreateOAuthAccessToken(ctx context.Context, params CreateOAu
 		ClientID:  params.ClientID,
 		UserID:    params.UserID,
 		Scopes:    params.Scopes,
-		ExpiresAt: params.ExpiresAt,
+		ExpiresAt: params.ExpiresAt.UTC(),
 		RevokedAt: util.None[time.Time](),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 
 	if _, err := db.Pool.Exec(ctx, `INSERT INTO tbl_oauth_access_token (id, token, client_id, user_id, scopes, expires_at, revoked_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, token.ID, token.Token, token.ClientID, token.UserID, token.Scopes, token.ExpiresAt, token.RevokedAt, token.CreatedAt, token.UpdatedAt); err != nil {
@@ -2330,6 +2372,98 @@ func (db *Database) GetOAuthAccessToken(ctx context.Context, params GetOAuthAcce
 // 	return nil
 // }
 
+type CreateOAuthAuthorizedAccessParams struct {
+	ClientID uuid.UUID
+	UserID   uuid.UUID
+	Scopes   []string
+}
+
+func (db *Database) CreateOAuthAuthorizedAccess(ctx context.Context, params CreateOAuthAuthorizedAccessParams) (OAuthAuthorizedAccess, error) {
+	authorizedAccess := OAuthAuthorizedAccess{
+		ID:        uuid.New(),
+		ClientID:  params.ClientID,
+		UserID:    params.UserID,
+		Scopes:    params.Scopes,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	if _, err := db.Pool.Exec(ctx, `INSERT INTO tbl_oauth_authorized_access (id, client_id, user_id, scopes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+		authorizedAccess.ID, authorizedAccess.ClientID, authorizedAccess.UserID, authorizedAccess.Scopes, authorizedAccess.CreatedAt, authorizedAccess.UpdatedAt); err != nil {
+		return authorizedAccess, fmt.Errorf("database: failed to insert OAuth authorized access: %w", err)
+	}
+	return authorizedAccess, nil
+}
+
+func (db *Database) GetOAuthAuthorizedAccessByID(ctx context.Context, id uuid.UUID) (OAuthAuthorizedAccess, error) {
+	return db.GetOAuthAuthorizedAccess(ctx, GetOAuthAuthorizedAccessParams{ID: util.Some(id)})
+}
+
+type GetOAuthAuthorizedAccessParams struct {
+	ID       util.Optional[uuid.UUID]
+	ClientID util.Optional[uuid.UUID]
+	UserID   util.Optional[uuid.UUID]
+}
+
+func (db *Database) GetOAuthAuthorizedAccess(ctx context.Context, params GetOAuthAuthorizedAccessParams) (OAuthAuthorizedAccess, error) {
+	var authorizedAccess OAuthAuthorizedAccess
+
+	var query strings.Builder
+	query.WriteString(`SELECT id, client_id, user_id, scopes, created_at, updated_at FROM tbl_oauth_authorized_access WHERE 1=1`)
+	var args []any
+	argNum := 1
+
+	if params.ID.IsSet {
+		query.WriteString(fmt.Sprintf(" AND id = $%d", argNum))
+		args = append(args, params.ID.Val)
+		argNum++
+	}
+	if params.ClientID.IsSet {
+		query.WriteString(fmt.Sprintf(" AND client_id = $%d", argNum))
+		args = append(args, params.ClientID.Val)
+		argNum++
+	}
+	if params.UserID.IsSet {
+		query.WriteString(fmt.Sprintf(" AND user_id = $%d", argNum))
+		args = append(args, params.UserID.Val)
+		argNum++
+	}
+
+	err := db.Pool.QueryRow(ctx, query.String(), args...).Scan(
+		&authorizedAccess.ID, &authorizedAccess.ClientID, &authorizedAccess.UserID, &authorizedAccess.Scopes, &authorizedAccess.CreatedAt, &authorizedAccess.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return authorizedAccess, ErrOAuthAuthorizedAccessNotFound
+		}
+		return authorizedAccess, fmt.Errorf("database: failed to scan OAuth authorized access: %w", err)
+	}
+	return authorizedAccess, nil
+}
+
+type UpdateOAuthAuthorizedAccessParams struct {
+	Scopes util.Optional[[]string]
+}
+
+func (db *Database) UpdateOAuthAuthorizedAccessByID(ctx context.Context, accessID uuid.UUID, params UpdateOAuthAuthorizedAccessParams) error {
+	var query strings.Builder
+	query.WriteString(`UPDATE tbl_oauth_authorized_access SET `)
+	args := []any{}
+	argNum := 1
+
+	if params.Scopes.IsSet {
+		query.WriteString(fmt.Sprintf("scopes = $%d, ", argNum))
+		args = append(args, params.Scopes.Val)
+		argNum++
+	}
+	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
+	args = append(args, time.Now().UTC(), accessID)
+
+	if _, err := db.Pool.Exec(ctx, query.String(), args...); err != nil {
+		return fmt.Errorf("database: failed to update OAuth authorized access (id=%s): %w", accessID, err)
+	}
+	return nil
+}
+
 type CreateOAuthAuthorizationCodeParams struct {
 	ClientID            uuid.UUID
 	Token               string
@@ -2351,10 +2485,10 @@ func (db *Database) CreateOAuthAuthorizationCode(ctx context.Context, params Cre
 		CodeChallenge:       params.CodeChallenge,
 		CodeChallengeMethod: params.CodeChallengeMethod,
 		RedirectURI:         params.RedirectURI,
-		ExpiresAt:           params.ExpiresAt,
+		ExpiresAt:           params.ExpiresAt.UTC(),
 		UsedAt:              util.None[time.Time](),
-		CreatedAt:           time.Now(),
-		UpdatedAt:           time.Now(),
+		CreatedAt:           time.Now().UTC(),
+		UpdatedAt:           time.Now().UTC(),
 	}
 
 	if _, err := db.Pool.Exec(ctx, `INSERT INTO tbl_oauth_auth_code (id, token, client_id, user_id, scopes, code_challenge, code_challenge_method, redirect_uri, expires_at, used_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
@@ -2418,11 +2552,11 @@ func (db *Database) UpdateOAuthAuthorizationCode(ctx context.Context, codeID uui
 
 	if params.UsedAt.IsSet {
 		query.WriteString(fmt.Sprintf("used_at = $%d, ", argNum))
-		args = append(args, params.UsedAt.Val)
+		args = append(args, params.UsedAt.Val.UTC())
 		argNum++
 	}
 	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
-	args = append(args, time.Now(), codeID)
+	args = append(args, time.Now().UTC(), codeID)
 
 	if _, err := db.Pool.Exec(ctx, query.String(), args...); err != nil {
 		return fmt.Errorf("database: failed to update OAuth authorization code (id=%s): %w", codeID, err)
@@ -2442,8 +2576,8 @@ func (db *Database) CreateOAuthRefreshTokenChain(ctx context.Context, params Cre
 		ClientID:  params.ClientID,
 		UserID:    params.UserID,
 		Scopes:    params.Scopes,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 
 	if _, err := db.Pool.Exec(ctx, `INSERT INTO tbl_oauth_refresh_token_chain (id, client_id, user_id, scopes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -2480,8 +2614,11 @@ func (db *Database) CreateOAuthRefreshToken(ctx context.Context, params CreateOA
 		ChainID:   params.ChainID,
 		ExpiresAt: params.ExpiresAt,
 		UsedAt:    params.UsedAt,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if token.UsedAt.IsSet {
+		token.UsedAt.Val = token.UsedAt.Val.UTC()
 	}
 
 	if _, err := db.Pool.Exec(ctx, `INSERT INTO tbl_oauth_refresh_token (id, token, chain_id, expires_at, used_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -2545,12 +2682,12 @@ func (db *Database) UpdateOAuthRefreshToken(ctx context.Context, tokenID uuid.UU
 
 	if params.UsedAt.IsSet {
 		query.WriteString(fmt.Sprintf("used_at = $%d, ", argNum))
-		args = append(args, params.UsedAt.Val)
+		args = append(args, params.UsedAt.Val.UTC())
 		argNum++
 	}
 
 	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
-	args = append(args, time.Now(), tokenID)
+	args = append(args, time.Now().UTC(), tokenID)
 
 	if _, err := db.Pool.Exec(ctx, query.String(), args...); err != nil {
 		return fmt.Errorf("database: failed to update OAuth refresh token (id=%s): %w", tokenID, err)
@@ -2577,10 +2714,13 @@ func (db *Database) CreateSession(ctx context.Context, params CreateSessionParam
 		UserAgent: params.UserAgent,
 		IPAddress: params.IPAddress,
 		Data:      params.Data,
-		ExpiresAt: params.ExpiresAt,
+		ExpiresAt: params.ExpiresAt.UTC(),
 		RevokedAt: params.RevokedAt,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if session.RevokedAt.IsSet {
+		session.RevokedAt.Val = session.RevokedAt.Val.UTC()
 	}
 
 	if _, err := db.Pool.Exec(ctx, `INSERT INTO tbl_session (id, user_id, token, user_agent, ip_address, data, expires_at, created_at, updated_at, revoked_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -2635,7 +2775,7 @@ func (db *Database) GetSession(ctx context.Context, params GetSessionParams) (Se
 
 type UpdateSessionParams struct {
 	Token  util.Optional[string]
-	UserID util.Optional[uuid.UUID]
+	UserID util.Optional[util.Optional[uuid.UUID]]
 	Data   util.Optional[[]byte]
 	// RevokedAt util.Optional[time.Time]
 }
@@ -2665,7 +2805,7 @@ func (db *Database) UpdateSessionByID(ctx context.Context, id uuid.UUID, params 
 	}
 
 	query.WriteString(fmt.Sprintf("updated_at = $%d WHERE id = $%d", argNum, argNum+1))
-	args = append(args, time.Now(), id)
+	args = append(args, time.Now().UTC(), id)
 
 	if _, err := db.Pool.Exec(ctx, query.String(), args...); err != nil {
 		return fmt.Errorf("database: failed to update session (id=%s): %w", id, err)

@@ -1,0 +1,44 @@
+package views
+
+import "github.com/freekieb7/askfrank/internal/web/ui/views/component"
+
+type User struct {
+	ID    string
+	Name  string
+	Email string
+}
+
+type UsersPageProps struct {
+	AppLayoutProps component.AppLayoutProps
+	Users          []User
+}
+
+templ UsersPage(props UsersPageProps) {
+	@component.AppLayout(props.AppLayoutProps) {
+		<h1>Users Page</h1>
+		@component.Table(component.TableProps{
+			Columns: []component.TableColumn{
+				{Header: "ID", Field: "ID"},
+				{Header: "Name", Field: "Name"},
+				{Header: "Email", Field: "Email"},
+			},
+			Data: func() []component.TableRow {
+				rows := []component.TableRow{}
+				for _, user := range props.Users {
+					row := component.TableRow{
+						ID: user.ID,
+						Cells: []component.TableCell{
+							{Value: user.ID, Tooltip: ""},
+							{Value: user.Name, Tooltip: ""},
+							{Value: user.Email, Tooltip: ""},
+						},
+						DeleteButtonID: "",
+					}
+					rows = append(rows, row)
+				}
+				return rows
+			}(),
+			ShowActions: false,
+		})
+	}
+}

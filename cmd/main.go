@@ -3,28 +3,27 @@ package main
 import (
 	"context"
 	"fmt"
-	"hp/internal/audit"
-	"hp/internal/auth"
-	"hp/internal/calendar"
-	"hp/internal/config"
-	"hp/internal/daemon"
-	"hp/internal/database"
-	"hp/internal/drive"
-	"hp/internal/i18n"
-	"hp/internal/notifications"
-	"hp/internal/oauth"
-	"hp/internal/session"
-	"hp/internal/user"
-	"hp/internal/web"
-	"hp/internal/web/api"
-	"hp/internal/web/page"
-	"hp/internal/webhook"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/audit"
+	"github.com/freekieb7/askfrank/internal/auth"
+	"github.com/freekieb7/askfrank/internal/calendar"
+	"github.com/freekieb7/askfrank/internal/config"
+	"github.com/freekieb7/askfrank/internal/daemon"
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/drive"
+	"github.com/freekieb7/askfrank/internal/http"
+	"github.com/freekieb7/askfrank/internal/i18n"
+	"github.com/freekieb7/askfrank/internal/notifications"
+	"github.com/freekieb7/askfrank/internal/oauth"
+	"github.com/freekieb7/askfrank/internal/session"
+	"github.com/freekieb7/askfrank/internal/user"
+	"github.com/freekieb7/askfrank/internal/web"
+	"github.com/freekieb7/askfrank/internal/webhook"
 )
 
 func main() {
@@ -91,11 +90,11 @@ func run(ctx context.Context) error {
 	// signalingServer := rtc.NewSignalingServer(logger)
 
 	// Set up Fiber app
-	router := web.NewRouter()
+	router := http.NewRouter()
 
-	pageHandler := page.NewPageHandler(logger, &translator, &sessionStore, &userManager, &webhookManager, &authenticator, &notifier, &driveManager, &oauthManager, &planner, &auditor)
-	apiHandler := api.NewAPIHandler(logger, &db, &userManager, &oauthManager)
-	oauthHandler := api.NewOAuthHandler(logger, &db, &sessionStore, &oauthManager)
+	pageHandler := web.NewPageHandler(logger, &translator, &sessionStore, &userManager, &webhookManager, &authenticator, &notifier, &driveManager, &oauthManager, &planner, &auditor)
+	apiHandler := web.NewAPIHandler(logger, &db, &userManager, &oauthManager)
+	oauthHandler := web.NewOAuthHandler(logger, &db, &translator, &sessionStore, &oauthManager)
 	// meetingHandler := web.NewMeetingHandler(logger, signalingServer, &sessionStore)
 	// chatHandler := web.NewChatHandler(logger)
 
@@ -110,25 +109,25 @@ func run(ctx context.Context) error {
 	// app.Use(middleware.CORS())
 
 	// Routes
-	router.Static("/static", "./internal/web/page/static")
+	router.Static("/static", "./internal/web/ui/static")
 	router.GET("/", pageHandler.ShowHomePage)
 
-	router.Group("", func(group *web.Router) {
+	router.Group("", func(group *http.Router) {
 		// Public routes
 		group.GET("/docs", pageHandler.ShowDocsPage)
 
-		group.Group("/login", func(group *web.Router) {
+		group.Group("/login", func(group *http.Router) {
 			group.GET("", pageHandler.ShowLoginPage)
 			group.POST("", pageHandler.Login)
 		})
 
-		group.Group("/register", func(group *web.Router) {
+		group.Group("/register", func(group *http.Router) {
 			group.GET("", pageHandler.ShowRegisterPage)
 			group.POST("", pageHandler.Register)
 		})
 
 		// Protected routes
-		group.Group("", func(group *web.Router) {
+		group.Group("", func(group *http.Router) {
 			group.GET("/dashboard", pageHandler.ShowDashboardPage)
 			group.POST("/logout", pageHandler.Logout)
 
@@ -155,9 +154,15 @@ func run(ctx context.Context) error {
 			// calendarGroup.POST("/events/:id/invite", pageHandler.InviteToCalendarEvent)
 			// })
 
-			// Developer routes
-			group.Group("/developers", func(group *web.Router) {
-				group.Group("/clients", func(group *web.Router) {
+			// Admin routes
+			group.Group("/admin", func(group *http.Router) {
+				group.Group("/users", func(userGroup *http.Router) {
+					userGroup.GET("", pageHandler.ShowUsersPage)
+					// userGroup.POST("/create-user", pageHandler.CreateUser)
+					// userGroup.POST("/delete-user", pageHandler.DeleteUser)
+				})
+
+				group.Group("/clients", func(group *http.Router) {
 					group.GET("", pageHandler.ShowClientsPage)
 					group.POST("/create-client", pageHandler.CreateClient)
 					group.POST("/delete-client", pageHandler.DeleteClient)
@@ -182,9 +187,9 @@ func run(ctx context.Context) error {
 			// meetingsGroup.GET("", pageHandler.ShowMeetingsPage)
 			// meetingsGroup.GET("/{meeting_id}", pageHandler.ShowMeetingPage)
 			// })
-		}, page.AuthenticatedMiddleware(&sessionStore))
+		}, web.SignedInMiddleware(&sessionStore))
 
-	}, page.SessionMiddleware(&cfg, logger, &sessionStore), page.CSRFMiddleware(logger, &sessionStore))
+	}, web.SessionMiddleware(&cfg, logger, &sessionStore), web.CSRFMiddleware(logger, &sessionStore))
 
 	// WebSocket routes (need authentication but not CSRF protection)
 	// router.Group("/ws", func(wsGroup *web.Router) {
@@ -193,10 +198,10 @@ func run(ctx context.Context) error {
 	// }, web.SessionMiddleware(&sessionStore), web.AuthenticatedSessionMiddleware(&sessionStore))
 
 	// API routes (for testing and integration)
-	router.Group("/api", func(apiGroup *web.Router) {
+	router.Group("/api", func(apiGroup *http.Router) {
 		// Public API routes
-		apiGroup.GET("/health", apiHandler.Healthy, api.AuthenticatedMiddleware(&db))
-		apiGroup.GET("/clients", apiHandler.ListClients, api.AuthenticatedMiddleware(&db), api.AuthorizedMiddleware(logger, &db, []oauth.Scope{oauth.ScopeClientsRead}))
+		apiGroup.GET("/health", apiHandler.Healthy, web.AuthenticatedMiddleware(&db))
+		apiGroup.GET("/clients", apiHandler.ListClients, web.AuthenticatedMiddleware(&db), web.AuthorizedMiddleware(logger, &db, []oauth.Scope{oauth.ScopeClientsRead}))
 
 		// 	// Protected API routes (require session authentication)
 		// 	apiGroup.Group("", func(protectedApiGroup *web.Router) {
@@ -211,7 +216,7 @@ func run(ctx context.Context) error {
 		// 		protectedApiGroup.PUT("/calendar/events/:id", apiHandler.UpdateCalendarEvent)
 		// 		protectedApiGroup.DELETE("/calendar/events/:id", apiHandler.DeleteCalendarEvent)
 		// 	}, web.AuthenticatedSessionMiddleware(&sessionStore))
-	}, api.ContentNegotiationMiddleware())
+	}, web.ContentNegotiationMiddleware())
 
 	// // Static file serving with compression and caching
 	// app.Static("/static", "./internal/web/static", fiber.Static{
@@ -221,9 +226,9 @@ func run(ctx context.Context) error {
 	// 	MaxAge:    3600, // 1 hour cache
 	// })
 
-	router.Group("/oauth", func(group *web.Router) {
-		group.GET("/authorize", oauthHandler.Authorize, page.SessionMiddleware(&cfg, logger, &sessionStore)) // OAuth2 authorization endpoint
-		group.POST("/token", oauthHandler.Token, api.ContentNegotiationMiddleware())                         // OAuth2 token endpoint
+	router.Group("/oauth", func(group *http.Router) {
+		group.GET("/authorize", oauthHandler.Authorize, web.SessionMiddleware(&cfg, logger, &sessionStore)) // OAuth2 authorization endpoint
+		group.POST("/token", oauthHandler.Token, web.ContentNegotiationMiddleware())                        // OAuth2 token endpoint
 	})
 	// app.Get("/api/health", apiHandler.Healthy)
 
@@ -273,7 +278,7 @@ func run(ctx context.Context) error {
 	// // GET /drive/v3/apps/{appId} — Retrieve metadata for a Drive app.
 
 	// Start the server
-	server := web.NewServer(logger, router)
+	server := http.NewServer(logger, router)
 	go func() {
 		logger.Info("Starting HTTP server...", "addr", cfg.Server.Host+":"+cfg.Server.Port)
 		if err := server.ListenAndServe(cfg.Server.Host + ":" + cfg.Server.Port); err != nil {

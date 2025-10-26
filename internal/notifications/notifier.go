@@ -2,9 +2,10 @@ package notifications
 
 import (
 	"context"
-	"hp/internal/database"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/database"
 
 	"github.com/google/uuid"
 )

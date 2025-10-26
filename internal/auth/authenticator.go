@@ -3,12 +3,13 @@ package auth
 import (
 	"context"
 	"fmt"
-	"hp/internal/audit"
-	"hp/internal/database"
-	"hp/internal/notifications"
-	"hp/internal/webhook"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/audit"
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/notifications"
+	"github.com/freekieb7/askfrank/internal/webhook"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -16,7 +17,7 @@ import (
 
 var (
 	ErrUserNotFound       = fmt.Errorf("user not found")
-	ErrInvalidPassword    = fmt.Errorf("invalid password")
+	ErrInvalidCredentials = fmt.Errorf("invalid credentials")
 	ErrEmailAlreadyInUse  = fmt.Errorf("email already in use")
 	ErrFailedToCreateUser = fmt.Errorf("failed to create user")
 )
@@ -39,24 +40,19 @@ type LoginParam struct {
 }
 
 func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID, error) {
-	var userID uuid.UUID
-
 	user, err := a.db.GetUserByEmail(ctx, param.Email)
 	if err != nil {
 		if err == database.ErrUserNotFound {
-			return userID, ErrUserNotFound
+			return uuid.Nil, ErrInvalidCredentials
 		}
 
-		return userID, fmt.Errorf("failed to get user by email: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
 
 	// Check password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(param.Password)); err != nil {
-		return userID, ErrInvalidPassword
+		return uuid.Nil, ErrInvalidCredentials
 	}
-
-	// Successful authentication
-	userID = user.ID
 
 	// Audit log
 	if err = a.auditor.LogEvent(ctx, audit.LogEventParam{
@@ -66,7 +62,7 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 			"user_id": user.ID,
 		},
 	}); err != nil {
-		return userID, fmt.Errorf("failed to log audit event: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to log audit event: %w", err)
 	}
 
 	// Webhook event
@@ -79,7 +75,7 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 			"timestamp": user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		},
 	}); err != nil {
-		return userID, fmt.Errorf("failed to create webhook event: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to create webhook event: %w", err)
 	}
 
 	// Notification
@@ -89,10 +85,10 @@ func (a *Authenticator) Login(ctx context.Context, param LoginParam) (uuid.UUID,
 		Message: "You have successfully logged in to your account.",
 		Type:    notifications.NotificationTypeInfo,
 	}); err != nil {
-		return userID, fmt.Errorf("failed to create notification: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to create notification: %w", err)
 	}
 
-	return userID, nil
+	return user.ID, nil
 }
 
 func (a *Authenticator) Logout(ctx context.Context, userID uuid.UUID) error {

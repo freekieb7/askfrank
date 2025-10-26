@@ -1,0 +1,16 @@
+package views
+
+import "github.com/freekieb7/askfrank/internal/web/ui/views/component"
+
+type DashboardPageProps struct {
+	component.AppLayoutProps
+}
+
+templ DashboardPage(props DashboardPageProps) {
+	@component.AppLayout(props.AppLayoutProps) {
+		<div>
+			<h1 class="page-title">Dashboard</h1>
+			<p class="page-subtitle">Welcome back, Dr. Smith. Here's what's happening today.</p>
+		</div>
+	}
+}

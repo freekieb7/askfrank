@@ -3,12 +3,13 @@ package drive
 import (
 	"context"
 	"fmt"
-	"hp/internal/audit"
-	"hp/internal/database"
-	"hp/internal/notifications"
-	"hp/internal/util"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/audit"
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/notifications"
+	"github.com/freekieb7/askfrank/internal/util"
 
 	"github.com/google/uuid"
 )

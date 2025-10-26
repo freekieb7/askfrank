@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hp/internal/database"
-	"hp/internal/i18n"
-	"hp/internal/util"
-	"net/http"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/http"
+	"github.com/freekieb7/askfrank/internal/i18n"
+	"github.com/freekieb7/askfrank/internal/util"
 
 	"github.com/google/uuid"
 )
@@ -49,14 +50,20 @@ type Session struct {
 	ExpiresAt time.Time                `json:"expires_at"`
 }
 
-type SessionData struct {
-	Language   i18n.Language `json:"language"`
-	CsrfToken  string        `json:"csrf_token"`
-	RedirectTo string        `json:"redirect_to"`
+func (s *Session) Clear() {
+	s.UserID = util.None[uuid.UUID]()
+	s.Data = SessionData{
+		Language: i18n.EN,
+	}
 }
 
-func (s *Store) Get(ctx context.Context, r *http.Request) (Session, error) {
-	sessionToken, err := r.Cookie(s.Config.CookieName)
+type SessionData struct {
+	Language  i18n.Language `json:"language"`
+	CsrfToken string        `json:"csrf_token"`
+}
+
+func (s *Store) Get(ctx context.Context, req *http.Request) (Session, error) {
+	sessionToken, err := req.Cookie(s.Config.CookieName)
 	if err != nil {
 		return Session{}, fmt.Errorf("session store: failed to get session cookie: %w", err)
 	}
@@ -88,7 +95,7 @@ func (s *Store) Get(ctx context.Context, r *http.Request) (Session, error) {
 
 // GetOrCreate retrieves an existing session or creates a new one if it doesn't exist
 // It automatically handles cookie setting for new sessions
-func (s *Store) Create(ctx context.Context, w http.ResponseWriter, r *http.Request) (Session, error) {
+func (s *Store) Create(ctx context.Context, req *http.Request, res *http.Response) (Session, error) {
 	token, err := util.GenerateRandomString(32)
 	if err != nil {
 		return Session{}, fmt.Errorf("session store: failed to generate session token: %w", err)
@@ -110,8 +117,8 @@ func (s *Store) Create(ctx context.Context, w http.ResponseWriter, r *http.Reque
 		ID:        uuid.New(),
 		UserID:    util.None[uuid.UUID](),
 		Token:     token,
-		UserAgent: r.UserAgent(),
-		IPAddress: r.RemoteAddr,
+		UserAgent: req.UserAgent(),
+		IPAddress: req.RemoteAddr(),
 		Data:      dataEncoded,
 		ExpiresAt: time.Now().Add(s.Config.ExpiresIn),
 	})
@@ -130,7 +137,7 @@ func (s *Store) Create(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	}
 
 	// Set-Cookie
-	http.SetCookie(w, &http.Cookie{
+	res.SetCookie(http.Cookie{
 		Name:     s.Config.CookieName,
 		Value:    sess.Token,
 		Path:     s.Config.Path,
@@ -151,7 +158,7 @@ func (s *Store) Update(ctx context.Context, sess Session) error {
 		return fmt.Errorf("session store: failed to marshal session data: %w", err)
 	}
 	if err := s.Database.UpdateSessionByID(ctx, sess.ID, database.UpdateSessionParams{
-		UserID: sess.UserID,
+		UserID: util.Some(sess.UserID),
 		Data:   util.Some(data),
 	}); err != nil {
 		return fmt.Errorf("session store: failed to update session: %w", err)
@@ -159,16 +166,23 @@ func (s *Store) Update(ctx context.Context, sess Session) error {
 	return nil
 }
 
-func (s *Store) Regenerate(ctx context.Context, w http.ResponseWriter, r *http.Request, sess Session) (Session, error) {
+func (s *Store) Regenerate(ctx context.Context, res *http.Response, sess Session) (Session, error) {
 	// Generate new session token
 	newToken, err := util.GenerateRandomString(32)
 	if err != nil {
 		return Session{}, fmt.Errorf("session store: failed to generate new token: %w", err)
 	}
 
+	dataEncoded, err := json.Marshal(sess.Data)
+	if err != nil {
+		return Session{}, fmt.Errorf("session store: failed to marshal session data: %w", err)
+	}
+
 	// Update session with new token
 	if err := s.Database.UpdateSessionByID(ctx, sess.ID, database.UpdateSessionParams{
-		Token: util.Some(newToken),
+		Token:  util.Some(newToken),
+		UserID: util.Some(sess.UserID),
+		Data:   util.Some(dataEncoded),
 	}); err != nil {
 		return Session{}, fmt.Errorf("session store: failed to regenerate session: %w", err)
 	}
@@ -177,7 +191,7 @@ func (s *Store) Regenerate(ctx context.Context, w http.ResponseWriter, r *http.R
 	sess.Token = newToken
 
 	// Set new session cookie
-	http.SetCookie(w, &http.Cookie{
+	res.SetCookie(http.Cookie{
 		Name:     s.Config.CookieName,
 		Value:    newToken,
 		Path:     s.Config.Path,

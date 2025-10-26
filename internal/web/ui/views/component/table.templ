@@ -1,0 +1,58 @@
+package component
+
+type TableColumn struct {
+	Header string
+	Field  string
+}
+
+type TableRow struct {
+	ID             string
+	Cells          []TableCell
+	DeleteButtonID string
+}
+
+type TableCell struct {
+	Value   string
+	Tooltip string
+}
+
+type TableProps struct {
+	Columns     []TableColumn
+	Data        []TableRow
+	ShowActions bool
+}
+
+templ Table(props TableProps) {
+	if len(props.Data) == 0 {
+		<p>No data available.</p>
+	} else {
+		<table>
+			<thead>
+				<tr>
+					for _, col := range props.Columns {
+						<th class="p-2 text-left">{ col.Header }</th>
+					}
+					if props.ShowActions {
+						<th class="p-2 text-left"></th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range props.Data {
+					<tr key={ row.ID }>
+						for _, cell := range row.Cells {
+							<td class="p-2 text-left" title={ cell.Tooltip }>{ cell.Value }</td>
+						}
+						if props.ShowActions {
+							<td class="p-2 text-left">
+								if row.DeleteButtonID != "" {
+									<i class="fas fa-trash cursor-pointer text-red-600 hover:text-red-800" id={ row.DeleteButtonID }></i>
+								}
+							</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}

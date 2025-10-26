@@ -3,12 +3,13 @@ package oauth
 import (
 	"context"
 	"errors"
-	"hp/internal/audit"
-	"hp/internal/database"
-	"hp/internal/util"
 	"log/slog"
 	"slices"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/audit"
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/util"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +22,10 @@ const (
 	ScopeEmail         Scope = "email"
 	ScopeOfflineAccess Scope = "offline_access"
 	ScopeClientsRead   Scope = "clients.read"
+)
+
+var (
+	ErrUnknownScope = errors.New("unknown_scope")
 )
 
 func ScopeParse(s string) (Scope, error) {
@@ -36,7 +41,7 @@ func ScopeParse(s string) (Scope, error) {
 	case string(ScopeClientsRead):
 		return ScopeClientsRead, nil
 	default:
-		return Scope(s), errors.New("unknown scope")
+		return Scope(s), ErrUnknownScope
 	}
 }
 

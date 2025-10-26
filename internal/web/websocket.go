@@ -1,11 +1,12 @@
 package web
 
 import (
-	"hp/internal/config"
-	"hp/internal/rtc"
-	"hp/internal/session"
 	"log/slog"
 	"net/http"
+
+	"github.com/freekieb7/askfrank/internal/config"
+	"github.com/freekieb7/askfrank/internal/rtc"
+	"github.com/freekieb7/askfrank/internal/session"
 
 	"github.com/gorilla/websocket"
 )

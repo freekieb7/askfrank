@@ -1,0 +1,137 @@
+package views
+
+import "github.com/freekieb7/askfrank/internal/web/ui/views/component"
+
+type LoginPageProps struct {
+	component.LayoutProps
+	ReturnTo string
+}
+
+templ LoginPage(props LoginPageProps) {
+	@component.Layout(props.LayoutProps) {
+		<div class="max-w-md mx-auto mt-10 p-6 border rounded-lg shadow-lg">
+			<h1 class="mb-4">Sign In</h1>
+			<form id="login-form">
+				<div id="error-message" class="error-message hidden">
+					<p id="error-text"></p>
+				</div>
+				<div id="success-message" class="success-message hidden">
+					<p id="success-text"></p>
+				</div>
+				if props.ReturnTo != "" {
+					<input type="hidden" name="return_to" value={ props.ReturnTo }/>
+				}
+				<div class="mb-2">
+					<label for="email" class="block">Email:</label>
+					<div class="mt">
+						<input type="text" id="email" name="email" class="block w-full rounded-md border border-gray-200" required/>
+					</div>
+				</div>
+				<div class="mb-2">
+					<label for="password" class="block">Password:</label>
+					<input type="password" id="password" name="password" class="block w-full rounded-md border border-gray-200" required/>
+				</div>
+				<div class="mb-2">
+					<label for="remember_me" class="flex items-center">
+						<input type="checkbox" id="remember_me" name="remember_me"/>
+						<span class="ml-2">Remember Me</span>
+					</label>
+				</div>
+				@component.PrimaryButton(component.ButtonProps{
+					Type:  "submit",
+					ID:    "submit-button",
+					Label: "Login",
+				})
+			</form>
+			<p>Don't have an account? <a href="/register">Register</a></p>
+		</div>
+		<script>
+			class LoginError extends Error {
+				constructor(consoleMessage, userMessage) {
+					super(consoleMessage);
+					this.name = 'LoginError';
+					this.userMessage = userMessage;
+					this.consoleMessage = consoleMessage;
+				}
+			}
+			
+            document.addEventListener('DOMContentLoaded', function() {
+                const loginForm = document.getElementById('login-form');
+                const errorDiv = document.getElementById('error-message');
+				const successDiv = document.getElementById('success-message');
+				const errorText = document.getElementById('error-text');
+				const successText = document.getElementById('success-text');
+                const submitButton = document.getElementById('submit-button');
+
+                loginForm.addEventListener('submit', async function(event) {
+                    event.preventDefault();
+
+                    // Hide previous messages
+					errorDiv.classList.add('hidden');
+					successDiv.classList.add('hidden');
+					
+					// Disable submit button and show loading state
+					submitButton.disabled = true;
+
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                    const formData = new FormData(this);
+
+					try {
+						const response = await fetch('/login', {
+							method: 'POST',
+							headers: {
+								'X-CSRF-Token': csrfToken,
+								'Content-Type': 'application/json',
+								'Accept': 'application/json',
+							},
+							body: JSON.stringify({
+								"email": formData.get('email'),
+								"password": formData.get('password'),
+								"remember_me": formData.get('remember_me') === 'on',
+								"return_to": formData.get('return_to'),
+							}),
+						});
+
+						if (!response.ok) {
+							// Handle error response
+							const result = await response.json();
+							
+							if (!result.message) {
+								throw new Error('Invalid server response');
+							}
+						
+							throw new LoginError(`HTTP ${response.status}: ${result.message}`, result.message);
+						}
+
+						// On success, redirect to dashboard or specified page
+						const redirectUrl = response.headers.get('X-Redirect-To');
+						if (redirectUrl) {
+							window.location.href = redirectUrl;
+							return;
+						}
+
+						throw new Error('Expected redirect after successful login, but none occurred.');
+					} catch (error) {
+						let consoleMessage, userMessage;
+
+						if (error instanceof LoginError) {
+							consoleMessage = error.systemMessage || error.message;
+							userMessage = error.userMessage || 'Login failed. Please try again.';
+						} else {
+							consoleMessage = error.message || 'An unexpected error occurred';
+							userMessage = 'An unexpected error occurred. Please try again.';
+						}
+
+						// Handle network or other errors
+						console.error(`Login error: ${consoleMessage}`);
+						errorText.textContent = userMessage;
+						errorDiv.classList.remove('hidden');
+						
+						// Re-enable submit button
+						submitButton.disabled = false;
+					}
+                });
+            });
+		</script>
+	}
+}

@@ -2,10 +2,11 @@ package audit
 
 import (
 	"context"
-	"hp/internal/database"
-	"hp/internal/util"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/util"
 
 	"github.com/google/uuid"
 )

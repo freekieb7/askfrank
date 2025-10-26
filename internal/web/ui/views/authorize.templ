@@ -1,0 +1,22 @@
+package views
+
+import "github.com/freekieb7/askfrank/internal/web/ui/views/component"
+
+type AuthorizePageProps struct {
+	component.LayoutProps
+}
+
+templ AuthorizePage(props AuthorizePageProps) {
+	@component.Layout(props.LayoutProps) {
+		<div>
+			<h1 class="page-title">Authorize Application</h1>
+			<p class="page-subtitle">Dr. Smith, do you authorize "HealthTracker App" to access your health data?</p>
+			<form id="authorize-form" class="mt-6">
+				<div class="flex space-x-4">
+					<button type="submit" id="button-authorize" class="px-4 py-2 rounded-md text-white bg-blue-500 hover:bg-blue-600">Authorize</button>
+					<button type="button" id="button-deny" class="px-4 py-2 rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300">Deny</button>
+				</div>
+			</form>
+		</div>
+	}
+}

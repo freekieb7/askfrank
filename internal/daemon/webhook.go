@@ -2,9 +2,10 @@ package daemon
 
 import (
 	"context"
-	"hp/internal/database"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/database"
 )
 
 var (

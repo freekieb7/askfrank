@@ -3,10 +3,11 @@ package webhook
 import (
 	"context"
 	"fmt"
-	"hp/internal/database"
-	"hp/internal/util"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/util"
 
 	"github.com/google/uuid"
 )

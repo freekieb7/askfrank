@@ -58,12 +58,12 @@ gen-templates:
 # Tailwind
 .PHONY: gen-css
 gen-css:
-	npx @tailwindcss/cli -i ./internal/web/page/static/css/components.css -o ./internal/web/page/static/css/stylesheet.css --minify --optimize
+	npx @tailwindcss/cli -i ./internal/web/ui/static/css/components.css -o ./internal/web/ui/static/css/stylesheet.css --minify --optimize
 
 .PHONY: gen-css-dev
 gen-css-dev:
-	npx @tailwindcss/cli -i ./internal/web/page/static/css/components.css -o ./internal/web/page/static/css/stylesheet.css --watch
+	npx @tailwindcss/cli -i ./internal/web/ui/static/css/components.css -o ./internal/web/ui/static/css/stylesheet.css --watch
 
 .PHONY: gen-docs
 gen-docs:
-	npx @redocly/cli build-docs ./docs/openapi.yaml -o ./internal/web/page/static/html/docs.html
+	npx @redocly/cli build-docs ./docs/openapi.yaml -o ./internal/web/ui/static/html/docs.html

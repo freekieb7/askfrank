@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"hp/internal/config"
-	"hp/internal/database/migrations"
 	"os"
 	"strconv"
+
+	"github.com/freekieb7/askfrank/internal/config"
+	"github.com/freekieb7/askfrank/internal/database/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

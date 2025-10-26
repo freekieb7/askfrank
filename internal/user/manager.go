@@ -3,12 +3,13 @@ package user
 import (
 	"context"
 	"fmt"
-	"hp/internal/audit"
-	"hp/internal/database"
-	"hp/internal/notifications"
-	"hp/internal/webhook"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/audit"
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/notifications"
+	"github.com/freekieb7/askfrank/internal/webhook"
 
 	"github.com/google/uuid"
 )
@@ -31,6 +32,29 @@ type User struct {
 	Email     string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+func (m *Manager) ListUsers(ctx context.Context) ([]User, error) {
+	dbUsers, err := m.db.ListUsers(ctx, database.ListUsersParams{
+		Limit:  100,
+		Offset: 0,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list users: %w", err)
+	}
+
+	users := make([]User, len(dbUsers))
+	for i, dbUser := range dbUsers {
+		users[i] = User{
+			ID:        dbUser.ID,
+			Name:      dbUser.Name,
+			Email:     dbUser.Email,
+			CreatedAt: dbUser.CreatedAt,
+			UpdatedAt: dbUser.UpdatedAt,
+		}
+	}
+
+	return users, nil
 }
 
 func (m *Manager) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {

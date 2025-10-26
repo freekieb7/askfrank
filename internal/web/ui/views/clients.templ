@@ -1,0 +1,313 @@
+package views
+
+import (
+	"github.com/freekieb7/askfrank/internal/web/ui/views/component"
+	"strings"
+	"time"
+)
+
+type Client struct {
+	ID           string
+	Name         string
+	Description  string
+	RedirectURIs []string
+	IsPublic     bool
+	Secret       string
+	Scopes       []string
+	ModifiedAt   time.Time
+}
+
+type Scope struct {
+	Name        string
+	Description string
+}
+
+type ClientsPageProps struct {
+	component.AppLayoutProps
+	Clients []Client
+	Scopes  []Scope
+}
+
+templ ClientsPage(props ClientsPageProps) {
+	@component.AppLayout(props.AppLayoutProps) {
+		<div class="p-2">
+			<h1 class="page-title">Developer Portal</h1>
+			<p class="page-subtitle">Manage your OAuth Clients and API access</p>
+			<div id="table-clients" class="border border-gray-200 rounded-md bg-white">
+				<!-- Table Header -->
+				<div class="flex justify-between items-center p-2">
+					<button type="button" class="rounded-full bg-primary-500 hover:bg-primary-600 text-white w-10 h-10 flex items-center justify-center transition-colors" id="button-create-client">
+						<i class="fas fa-plus w-4 h-4"></i>
+					</button>
+				</div>
+				<!-- Clients Table -->
+				if len(props.Clients) == 0 {
+					<div class="p-4 text-center text-gray-500">
+						No OAuth clients found. Click the + button to create your first client.
+					</div>
+				} else {
+					@component.Table(component.TableProps{
+						Columns: []component.TableColumn{
+							{Header: "Name", Field: "name"},
+							{Header: "Description", Field: "description"},
+							{Header: "Client ID", Field: "id"},
+							{Header: "Client Secret", Field: "secret"},
+							{Header: "Scopes", Field: "scopes"},
+							{Header: "Type", Field: "type"},
+							{Header: "Redirect URIs", Field: "redirect_uris"},
+							{Header: "Modified at", Field: "modified_at"},
+						},
+						Data: func() []component.TableRow {
+							rows := make([]component.TableRow, len(props.Clients))
+							for idx, client := range props.Clients {
+								clientType := "Confidential"
+								if client.IsPublic {
+									clientType = "Public"
+								}
+								rows[idx] = component.TableRow{
+									ID: client.ID,
+									Cells: []component.TableCell{
+										{Value: client.Name, Tooltip: ""},
+										{Value: client.Description, Tooltip: ""},
+										{Value: client.ID, Tooltip: ""},
+										{Value: client.Secret, Tooltip: ""},
+										{Value: strings.Join(client.Scopes, ", "), Tooltip: ""},
+										{Value: clientType, Tooltip: ""},
+										{Value: strings.Join(client.RedirectURIs, ", "), Tooltip: ""},
+										{Value: client.ModifiedAt.Format("2006-01-02 15:04:05"), Tooltip: ""},
+									},
+									DeleteButtonID: "button-delete-client",
+								}
+							}
+							return rows
+						}(),
+						ShowActions: true,
+					})
+				}
+			</div>
+		</div>
+		<!-- Create Client Modal Overlay -->
+		<div id="modal-create-client" class="hidden fixed inset-0 bg-gray-500/50 overflow-y-auto h-full w-full z-50">
+			<div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+				<h2 class="mb-2 font-semibold">Create New OAuth Client</h2>
+				<form id="create-client-form">
+					<div class="mb-2">
+						<label for="client-name" class="block">Client Name:</label>
+						<div class="mt">
+							<input type="text" id="client-name" name="client-name" class="block w-full rounded-md border border-gray-200" required/>
+						</div>
+					</div>
+					<div class="mb-2">
+						<label for="client-description" class="block">Description:</label>
+						<div class="mt">
+							<input type="text" id="client-description" name="client-description" class="block w-full rounded-md border border-gray-200"/>
+						</div>
+					</div>
+					<div class="mb-2">
+						<label for="redirect-uris" class="block">Redirect URIs (comma separated):</label>
+						<div class="mt">
+							<input type="text" id="redirect-uris" name="redirect-uris" class="block w-full rounded-md border border-gray-200"/>
+						</div>
+					</div>
+					<div class="mb-2">
+						<label class="flex items-center" for="is-public">
+							<input type="checkbox" id="is-public" name="is-public"/>
+							<span class="ml-2">Is Public Client</span>
+						</label>
+					</div>
+					<!-- Scopes Selection -->
+					<details class="group mt-2">
+						<summary class="p-2 flex items-center rounded-md bg-gray-100 hover:bg-gray-200 cursor-pointer">
+							<span>Scopes</span>
+							<i class="fas fa-chevron-down ml-2 group-open:rotate-180"></i>
+						</summary>
+						<div class="mt-1 space-y-1">
+							for _, scope := range props.Scopes {
+								<div class="p-2" key={ scope.Name }>
+									<label class="flex" for={ "scope-" + scope.Name }>
+										<input type="checkbox" id={ "scope-" + scope.Name } name="scopes" value={ scope.Name }/>
+										<div class="ml-2 select-none">
+											<p class="font-semibold">{ scope.Name }</p>
+											<p class="text-gray-500 text-sm">{ scope.Description }</p>
+										</div>
+									</label>
+								</div>
+							}
+						</div>
+					</details>
+					<div class="mt-4 flex justify-end space-x-2">
+						@component.SecondaryButton(component.ButtonProps{
+							Type:  "button",
+							ID:    "button-cancel-create-client-modal",
+							Label: "Cancel",
+						})
+						@component.PrimaryButton(component.ButtonProps{
+							Type:  "submit",
+							ID:    "button-submit-create-client-modal",
+							Label: "Create",
+						})
+					</div>
+				</form>
+			</div>
+		</div>
+		<!-- Delete Client Confirmation Modal -->
+		<div id="modal-delete-client" class="hidden fixed inset-0 bg-gray-500/50 overflow-y-auto h-full w-full z-50">
+			<div class="relative top-40 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+				<h2 class="font-semibold">Confirm Delete OAuth Client</h2>
+				<p class="mt-2">Are you sure you want to delete the OAuth client "<span id="delete-client-name" class="font-semibold"></span>"?</p>
+				<form id="delete-client-form">
+					<div class="mt-4 flex justify-end space-x-2">
+						<button type="button" id="button-cancel-delete-client-modal" class="p-2 rounded-md hover:bg-gray-100">Cancel</button>
+						<button type="submit" id="button-confirm-delete-client-modal" class="p-2 rounded-md text-white bg-red-500 hover:bg-red-600">Delete</button>
+					</div>
+				</form>
+			</div>
+		</div>
+		<script>
+			document.addEventListener('DOMContentLoaded', function() {
+				const btnCreateClient = document.getElementById('button-create-client');
+				const modalCreateClient = document.getElementById('modal-create-client');
+				const btnCancelCreateClientModal = document.getElementById('button-cancel-create-client-modal');
+				const createClientForm = document.getElementById('create-client-form');
+
+				// Function to close modal
+				function closeCreateClientModal() {
+					modalCreateClient.classList.add('hidden');
+				}
+
+				// Event listeners
+				btnCreateClient.addEventListener('click', function() {
+					modalCreateClient.classList.remove('hidden');
+				});
+
+				btnCancelCreateClientModal.addEventListener('click', closeCreateClientModal);
+
+				// Close modal when clicking outside of it
+				modalCreateClient.addEventListener('click', function(event) {
+					if (event.target === modalCreateClient) {
+						closeCreateClientModal();
+					}
+				});
+
+				// Close modal with Escape key
+				document.addEventListener('keydown', function(event) {
+					if (event.key === 'Escape' && !modalCreateClient.classList.contains('hidden')) {
+						closeCreateClientModal();
+					}
+				});
+
+				createClientForm.addEventListener('submit', async function(event) {
+					event.preventDefault();
+
+					// Gather form data
+					const name = document.getElementById('client-name').value;
+					const description = document.getElementById('client-description').value;
+					const redirectURIs = document.getElementById('redirect-uris').value.split(',').map(uri => uri.trim());
+					const isPublic = document.getElementById('is-public').checked;
+					const scopes = Array.from(document.querySelectorAll('input[name="scopes"]:checked')).map(cb => cb.value);
+
+					// Send data to server to create new client
+					try {
+						const response = await fetch('/admin/clients/create-client', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+							},
+							body: JSON.stringify({
+								name: name,
+								description: description,
+								redirect_uris: redirectURIs,
+								is_public: isPublic,
+								scopes: scopes
+							})
+						});
+
+						if (!response.ok) {
+							const errorData = await response.json();
+							throw new Error(errorData.message || 'Failed to create OAuth client');
+						}
+
+						// On success, close modal and refresh page or update client list dynamically
+						modalCreateClient.classList.add('hidden');
+						window.location.reload();
+					} catch (error) {
+						console.error('Error:', error);
+					}
+				});
+
+				// const btnDeleteClient = document.getElementById('button-delete-client');
+				const modalDeleteClient = document.getElementById('modal-delete-client');
+				const btnCancelDeleteClientModal = document.getElementById('button-cancel-delete-client-modal');
+				const btnConfirmDeleteClientModal = document.getElementById('button-confirm-delete-client-modal');
+				const deleteClientNameSpan = document.getElementById('delete-client-name');
+				const deleteClientForm = document.getElementById('delete-client-form');
+
+				// Function to close modal
+				function closeDeleteClientModal() {
+					modalDeleteClient.classList.add('hidden');
+				}
+
+				// Event listeners
+				document.querySelectorAll('#button-delete-client').forEach(function(btnDeleteClient) {
+					btnDeleteClient.addEventListener('click', function() {
+						const clientId = btnDeleteClient.closest('tr').key;
+						const clientName = btnDeleteClient.closest('tr').querySelector('td').innerText;
+						deleteClientNameSpan.innerText = clientName;
+
+						// Store client ID on confirm button for later use
+						btnConfirmDeleteClientModal.setAttribute('data-id', clientId);
+
+						modalDeleteClient.classList.remove('hidden');
+					});
+				});
+				
+				btnCancelDeleteClientModal.addEventListener('click', closeDeleteClientModal);
+
+				// Close modal when clicking outside of it
+				modalDeleteClient.addEventListener('click', function(event) {
+					if (event.target === modalDeleteClient) {
+						closeDeleteClientModal();
+					}
+				});
+
+				// Close modal with Escape key
+				document.addEventListener('keydown', function(event) {
+					if (event.key === 'Escape' && !modalDeleteClient.classList.contains('hidden')) {
+						closeDeleteClientModal();
+					}
+				});
+
+				deleteClientForm.addEventListener('submit', async function(event) {
+					event.preventDefault();
+
+					const clientId = btnConfirmDeleteClientModal.getAttribute('data-id');
+					// Send request to server to delete client
+					try {
+						const response = await fetch('/admin/clients/delete-client', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+							},
+							body: JSON.stringify({
+								client_id: clientId
+							})
+						});
+
+						if (!response.ok) {
+							const errorData = await response.json();
+							throw new Error(errorData.message || 'Failed to delete OAuth client');
+						}
+
+						// On success, close modal and refresh page or update client list dynamically
+						closeDeleteClientModal();
+						window.location.reload();
+					} catch (error) {
+						console.error('Error:', error);
+					}
+				});
+			});
+		</script>
+	}
+}

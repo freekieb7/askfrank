@@ -3,11 +3,12 @@ package calendar
 import (
 	"context"
 	"fmt"
-	"hp/internal/audit"
-	"hp/internal/database"
-	"hp/internal/notifications"
 	"log/slog"
 	"time"
+
+	"github.com/freekieb7/askfrank/internal/audit"
+	"github.com/freekieb7/askfrank/internal/database"
+	"github.com/freekieb7/askfrank/internal/notifications"
 
 	"github.com/google/uuid"
 )

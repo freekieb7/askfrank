@@ -1,4 +1,4 @@
-module hp
+module github.com/freekieb7/askfrank
 
 go 1.25.1
 
